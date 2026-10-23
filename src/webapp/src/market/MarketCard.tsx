@@ -9,6 +9,7 @@ import {
   fmtChangePct,
   fmtPrice,
   providerName,
+  RATINGS,
   ratingColor,
   ratingLabel,
   timeAgo,
@@ -40,6 +41,45 @@ function SourceBadge({ a }: { a: MarketAnalysis }) {
         className={"h-1.5 w-1.5 shrink-0 rounded-full " + (a.cached ? "bg-fg-faint" : "bg-accent")}
       />
       <span className="truncate text-fg-faint text-[10.5px]">{providerName(a.provider)}</span>
+    </span>
+  );
+}
+
+function SweepBadge({ kind }: { kind: "high" | "low" | "both" }) {
+  const color =
+    kind === "high" ? RATINGS.sell.color : kind === "low" ? RATINGS.buy.color : RATINGS.neutral.color;
+  const label = kind === "high" ? "4H high" : kind === "low" ? "4H low" : "4H both";
+  const title =
+    kind === "high"
+      ? "4H candle swept the prior 5 highs and closed back below"
+      : kind === "low"
+        ? "4H candle swept the prior 5 lows and closed back above"
+        : "4H candle swept both the prior highs and lows and closed back inside";
+  return (
+    <span
+      className="shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide"
+      style={{ color, borderColor: color }}
+      title={title}
+    >
+      {label}
+    </span>
+  );
+}
+
+function EngulfBadge({ kind }: { kind: "bullish" | "bearish" }) {
+  const bull = kind === "bullish";
+  const color = bull ? RATINGS.buy.color : RATINGS.sell.color;
+  return (
+    <span
+      className="shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide"
+      style={{ color, borderColor: color }}
+      title={
+        bull
+          ? "Bullish engulfing on the last closed bar"
+          : "Bearish engulfing on the last closed bar"
+      }
+    >
+      {bull ? "Bull engulf" : "Bear engulf"}
     </span>
   );
 }
@@ -157,9 +197,13 @@ function MarketCardInner({ analysis, strongRatio, refreshing, canWrite, onOpen, 
         <SubSummary title="Moving avgs" section={a.movingAverages} />
       </div>
 
-      <div className="pointer-events-none relative mt-auto flex items-center justify-between gap-2 border-t border-hairline pt-2">
+      <div className="pointer-events-none relative mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-hairline pt-2">
         <SourceBadge a={a} />
-        <span className="shrink-0 text-[10.5px] text-fg-faint">{timeAgo(a.updatedAt)}</span>
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-1">
+          {a.engulfing && <EngulfBadge kind={a.engulfing} />}
+          {a.sweep4h && <SweepBadge kind={a.sweep4h} />}
+          <span className="shrink-0 text-[10.5px] text-fg-faint">{timeAgo(a.updatedAt)}</span>
+        </span>
       </div>
     </Card>
   );

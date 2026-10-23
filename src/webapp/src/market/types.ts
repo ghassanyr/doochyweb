@@ -56,12 +56,14 @@ export interface MarketAnalysis {
   movingAverages: Section;
   sparkline: number[];
   series: { t: number; c: number }[];
+  engulfing: "bullish" | "bearish" | null;
   updatedAt: number;
   provider: string;
   cached: boolean;
   warnings: ProviderWarning[];
   meta: { note?: string };
   timeframeRatings?: Record<string, TimeframeRating>;
+  sweep4h: "high" | "low" | "both" | null;
 }
 
 export interface MarketAnalysisError {

@@ -99,8 +99,10 @@ export interface OrderRow {
 }
 
 export interface ConnectInput {
-  clientId: string;
-  clientSecret: string;
+  /** Omit to reuse the stored value. The OpenAPI app rarely changes. */
+  clientId?: string;
+  /** Omit to reuse the stored value. */
+  clientSecret?: string;
   accessToken: string;
   refreshToken: string;
 }
@@ -203,7 +205,10 @@ export const api = {
     request<{ token: string }>("/api/auth/login", { method: "POST", body: { username, password } }),
 
   me: (token?: string) =>
-    request<{ hasCredentials: boolean; accounts: AccountView[] }>("/api/me", { token }),
+    request<{ hasCredentials: boolean; clientIdMasked: string | null; accounts: AccountView[] }>(
+      "/api/me",
+      { token }
+    ),
 
   connect: (creds: ConnectInput, token?: string) =>
     request<{ accounts: AccountView[] }>("/api/connect", { method: "POST", body: creds, token }),

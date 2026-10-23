@@ -2,6 +2,7 @@ import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import path from "node:path";
 import fs from "node:fs";
+import { maskClientId, resolveConnectInput } from "./credentials";
 import { connectDb, loadCredentials, saveCredentials, User } from "./db";
 import { signToken, authRequired, AuthedRequest, hashPassword, verifyPassword, findUserByUsername } from "./auth";
 import { userSockets } from "./ctrader/connection";
@@ -63,7 +64,13 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
     // need a per-account broker round-trip), so /api/me returns the same shape
     // as /api/accounts rather than the raw stored rows.
     const accounts = creds ? await listAccounts(req.userId!) : [];
-    res.json({ hasCredentials: !!creds, accounts });
+    res.json({
+      hasCredentials: !!creds,
+      // Enough for Settings to say which OpenAPI app is connected without ever
+      // sending the secret, or even the whole client id, to the browser.
+      clientIdMasked: creds ? maskClientId(creds.clientId) : null,
+      accounts,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? "failed" });
   }
@@ -92,20 +99,18 @@ app.put("/api/credentials", authRequired, async (req: AuthedRequest, res: Respon
 
 app.post("/api/connect", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
-    const { clientId, clientSecret, accessToken, refreshToken } = req.body ?? {};
-    if (!clientId || !clientSecret || !accessToken || !refreshToken) {
-      res.status(400).json({ error: "all four credential fields are required" });
+    const existing = await loadCredentials(req.userId!);
+    const resolved = resolveConnectInput(req.body, existing);
+    if (!resolved.ok) {
+      res.status(400).json({ error: resolved.error });
       return;
     }
-    const { accounts, tokens } = await discoverAccounts({
-      clientId: String(clientId),
-      clientSecret: String(clientSecret),
-      accessToken: String(accessToken),
-      refreshToken: String(refreshToken),
-    });
+    const { clientId, clientSecret, accessToken, refreshToken } = resolved.value;
+
+    const { accounts, tokens } = await discoverAccounts({ clientId, clientSecret, accessToken, refreshToken });
     await saveCredentials(req.userId!, {
-      clientId: String(clientId),
-      clientSecret: String(clientSecret),
+      clientId,
+      clientSecret,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       accounts,

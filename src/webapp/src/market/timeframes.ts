@@ -15,4 +15,4 @@ export const timeframes = [
   { id: "1M", label: "1 month" },
 ];
 
-export const DEFAULT_TIMEFRAME = "1d";
+export const DEFAULT_TIMEFRAME = "4h";

@@ -4,18 +4,27 @@ import { ApiError, ConnectInput } from "./api";
 import { Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
 
-const HELPER_TEXT = `Paste the four values from your cTrader OpenAPI app:
+const HELPER_TEXT = `Paste the values from your cTrader OpenAPI app.
 Client ID and Client Secret: openapi.ctrader.com/apps → your app → "Credentials"
 Access and Refresh tokens: openapi.ctrader.com/apps → your app → sandbox → set scope to
 Account info and trading and generate tokens`;
 
+const TOKEN_HELPER_TEXT = `Generate new access and refresh tokens at
+openapi.ctrader.com/apps → your app → sandbox, with the scope set to
+Account info and trading. The saved app credentials are reused.`;
+
 export default function ConnectPanel({
   onConnected,
   onCancel,
+  storedClientId,
 }: {
   onConnected: (creds: ConnectInput) => Promise<void>;
   onCancel?: () => void;
+  /** Masked id of the already-saved app. When set, the client id and secret
+   *  are optional: only new tokens are needed. */
+  storedClientId?: string | null;
 }) {
+  const hasStored = Boolean(storedClientId);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [accessToken, setAccessToken] = useState("");
@@ -23,13 +32,22 @@ export default function ConnectPanel({
   const [showSecret, setShowSecret] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAppFields, setShowAppFields] = useState(false);
 
-  const ready = clientId && clientSecret && accessToken && refreshToken;
+  const appReady = hasStored || (clientId && clientSecret);
+  const ready = appReady && accessToken && refreshToken;
 
   async function doConnect() {
     setError(null);
     try {
-      await onConnected({ clientId, clientSecret, accessToken, refreshToken });
+      // Omit the app fields when they are unchanged, so the server reuses the
+      // stored pair rather than being handed an empty one.
+      const payload: ConnectInput = { accessToken, refreshToken };
+      if (!hasStored || showAppFields) {
+        payload.clientId = clientId.trim();
+        payload.clientSecret = clientSecret.trim();
+      }
+      await onConnected(payload);
     } catch (err: any) {
       setError(err instanceof ApiError ? err.message : "Connect failed");
     }
@@ -53,10 +71,41 @@ export default function ConnectPanel({
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
             <Plug className="h-5 w-5" />
           </div>
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight">Connect cTrader</h1>
-          <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-fg-faint">{HELPER_TEXT}</p>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight">
+            {hasStored ? "Refresh cTrader tokens" : "Connect cTrader"}
+          </h1>
+          <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-fg-faint">
+            {hasStored && !showAppFields ? TOKEN_HELPER_TEXT : HELPER_TEXT}
+          </p>
 
           <div className="mt-5 space-y-4">
+            {hasStored && (
+              <div className="rounded-lg border border-hairline bg-soft px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-fg-muted">App credentials</p>
+                    <p className="truncate font-mono text-xs text-fg-faint">
+                      {showAppFields ? "Enter the new app details below" : `Saved: ${storedClientId}`}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setShowAppFields((v) => !v);
+                      setClientId("");
+                      setClientSecret("");
+                    }}
+                  >
+                    {showAppFields ? "Keep saved" : "Change"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {(!hasStored || showAppFields) && (
+              <>
             <div>
               <label htmlFor="clientId" className="mb-2 block text-sm font-medium text-fg-muted">
                 Client ID
@@ -87,6 +136,8 @@ export default function ConnectPanel({
                 </button>
               </div>
             </div>
+              </>
+            )}
 
             <div>
               <label htmlFor="accessToken" className="mb-2 block text-sm font-medium text-fg-muted">
@@ -123,7 +174,7 @@ export default function ConnectPanel({
 
             <div className="flex gap-2 pt-1">
               <Button type="button" variant="primary" size="lg" className="flex-1" disabled={!ready} onClickAsync={doConnect}>
-                <Plug className="h-4 w-4" /> Connect
+                <Plug className="h-4 w-4" /> {hasStored ? "Save tokens" : "Connect"}
               </Button>
               {onCancel && (
                 <Button type="button" variant="secondary" size="lg" onClick={onCancel}>

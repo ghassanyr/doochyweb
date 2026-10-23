@@ -34,7 +34,7 @@ export const TIMEFRAMES: Timeframe[] = [
   { id: "1M",  label: "1 month", ms: 30 * 24 * 60 * 60 * 1000, ttl: 3600, ctrader: MN1, ctraderMaxRange: FIVE_YEARS, binance: null, aggregate: "1d", bucket: "month" },
 ];
 
-export const DEFAULT_TIMEFRAME = "1d";
+export const DEFAULT_TIMEFRAME = "4h";
 
 export function getTimeframe(id: string): Timeframe {
   return (

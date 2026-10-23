@@ -10,6 +10,7 @@
 import { Router } from "express";
 
 import { analyze, setStrongRatio } from "./analysis";
+import { detectSweep, type Sweep } from "./patterns";
 import { authRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
 import { clearCache, cTraderCatalog, getCandles } from "./providers/index";
@@ -253,6 +254,29 @@ marketRouter.get("/analysis/:symbol", async (req, res) => {
   res.json(result);
 });
 
+/**
+ * 4H sweep, regardless of the tab the card is showing.
+ *
+ * When the tab is already 4H the bars in hand are the series. Otherwise this is
+ * a second read, which is a cache hit once the series has been stored. A miss
+ * or a broker error must not blank the card: the sweep is a badge, not the
+ * analysis.
+ */
+async function sweep4h(
+  meta: SymbolMeta,
+  timeframe: string,
+  bars: Parameters<typeof detectSweep>[0],
+  settings: AnalysisSettings,
+  force: boolean
+): Promise<Sweep | null> {
+  try {
+    const series = timeframe === "4h" ? bars : (await getCandles(meta, "4h", settings, { force })).bars;
+    return detectSweep(series);
+  } catch {
+    return null;
+  }
+}
+
 async function analyzeSymbol(
   symbol: string,
   timeframe: string,
@@ -275,6 +299,7 @@ async function analyzeSymbol(
       cached,
       warnings,
       meta: { note: meta.note },
+      sweep4h: await sweep4h(meta, timeframe, bars, settings, force),
     };
   } catch (err) {
     return {

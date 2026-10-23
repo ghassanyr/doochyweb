@@ -98,6 +98,8 @@ export interface Analysis {
   movingAverages: Section;
   sparkline: number[];
   series: { t: number; c: number }[];
+  /** Body engulfing on the last closed bar, from M15 up. Null otherwise. */
+  engulfing: "bullish" | "bearish" | null;
   updatedAt: number;
 }
 
@@ -109,6 +111,8 @@ export interface AnalysisResponse extends Analysis {
   warnings: ProviderWarning[];
   meta: { note?: string };
   timeframeRatings?: Record<string, TimeframeRating>;
+  /** 4H sweep of the prior 5 closed bars. Independent of the selected timeframe. */
+  sweep4h: "high" | "low" | "both" | null;
 }
 
 /** The failure shape, so the UI can render a per-card error. */

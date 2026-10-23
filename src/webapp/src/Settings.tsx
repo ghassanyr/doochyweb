@@ -27,10 +27,26 @@ export default function SettingsPage({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showConnect, setShowConnect] = useState(false);
+  const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
 
   useEffect(() => {
     setPrefs(prefsFrom(accounts));
   }, [accounts]);
+
+  // Which OpenAPI app is connected, so the credentials form can say so instead
+  // of asking for the client id and secret all over again.
+  useEffect(() => {
+    let alive = true;
+    api
+      .me()
+      .then((r) => {
+        if (alive) setClientIdMasked(r.clientIdMasked ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function dirtyPairs(): { ctid: number; nickname: string; color: string | null }[] {
     return accounts
@@ -64,6 +80,7 @@ export default function SettingsPage({
   if (showConnect) {
     return (
       <ConnectPanel
+        storedClientId={clientIdMasked}
         onConnected={async (creds) => {
           await onConnected(creds);
           const { accounts: fresh } = await api.accounts();
@@ -205,10 +222,13 @@ export default function SettingsPage({
               <p className="text-sm text-fg-muted">
                 Manage the cTrader OpenAPI credentials used to fetch balances, positions and orders.
               </p>
+              {clientIdMasked && (
+                <p className="mt-1 font-mono text-xs text-fg-faint">App {clientIdMasked}</p>
+              )}
             </div>
             <div className="mt-3">
               <Button variant="secondary" icon={<KeyRound className="h-4 w-4" />} onClick={() => setShowConnect(true)}>
-                Update credentials
+                {clientIdMasked ? "Refresh tokens" : "Update credentials"}
               </Button>
             </div>
             {/* <p className="mt-3 text-xs leading-relaxed text-fg-faint">

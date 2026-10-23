@@ -8,10 +8,12 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { analyze, RATINGS } from "../src/server/market/analysis";
+import { detectEngulfing, detectSweep } from "../src/server/market/patterns";
 import * as ti from "../src/server/market/indicators";
 import { buildCatalog, resolveAgainstBroker, toSymbolMeta, searchCatalog } from "../src/server/market/symbols";
 import { deriveCryptoPairs, cryptoCatalogEntries, type RawPair } from "../src/server/market/crypto";
 import { providerOrder } from "../src/server/market/providers/index";
+import { maskClientId, resolveConnectInput } from "../src/server/credentials";
 import { aggregate } from "../src/server/market/providers/binance";
 import { getTimeframe, TIMEFRAMES } from "../src/server/market/timeframes";
 import { noSourceError } from "../src/server/market/providers/index";
@@ -108,10 +110,117 @@ describe("analysis", () => {
     assert.ok(RATINGS.includes(result.summary.rating), `bad rating ${result.summary.rating}`);
     assert.ok(result.summary.score >= -1 && result.summary.score <= 1);
     assert.equal(result.summary.buy + result.summary.sell + result.summary.neutral, 24);
+    assert.ok(result.engulfing === null || result.engulfing === "bullish" || result.engulfing === "bearish");
   });
 
   test("rejects too little data", () => {
     assert.throws(() => analyze(makeCandles(10), { symbol: "X" }, "1d"));
+  });
+});
+
+describe("engulfing candle", () => {
+  const bar = (open: number, close: number, wick = 1): Candle => ({
+    time: 0,
+    open,
+    close,
+    high: Math.max(open, close) + wick,
+    low: Math.min(open, close) - wick,
+    volume: 1,
+  });
+  // Index -1 is the forming bar and must never decide the pattern.
+  const series = (prior: Candle, closed: Candle, forming: Candle = bar(1, 1)): Candle[] => [
+    bar(50, 50),
+    prior,
+    closed,
+    forming,
+  ];
+
+  test("bullish: green body covers the prior red body", () => {
+    const candles = series(bar(10, 8), bar(7, 11));
+    assert.equal(detectEngulfing(candles, "15m"), "bullish");
+    assert.equal(detectEngulfing(candles, "1d"), "bullish");
+  });
+
+  test("bearish: red body covers the prior green body", () => {
+    assert.equal(detectEngulfing(series(bar(8, 10), bar(11, 7)), "1h"), "bearish");
+  });
+
+  test("a longer wick is not enough when the body does not cover", () => {
+    // Prior body 8-10. Current range engulfs it via wicks, but the body (9-9.5) does not.
+    const prior = bar(8, 10, 0);
+    const current: Candle = { time: 0, open: 9, close: 9.5, high: 12, low: 6, volume: 1 };
+    assert.equal(detectEngulfing(series(prior, current), "15m"), null);
+  });
+
+  test("a doji on either bar is not a match", () => {
+    assert.equal(detectEngulfing(series(bar(10, 10), bar(9, 11)), "15m"), null);
+    assert.equal(detectEngulfing(series(bar(10, 8), bar(9, 9)), "15m"), null);
+  });
+
+  test("a pattern only on the forming bar is ignored", () => {
+    const clean = series(bar(10, 10.5), bar(10.4, 10.2), bar(9, 12));
+    assert.equal(detectEngulfing(clean, "1d"), null);
+  });
+
+  test("below M15 is always null", () => {
+    const candles = series(bar(10, 8), bar(7, 11));
+    for (const id of ["1m", "3m", "5m"]) {
+      assert.equal(detectEngulfing(candles, id), null, id);
+    }
+  });
+
+  test("equal body edges still count as a cover", () => {
+    assert.equal(detectEngulfing(series(bar(10, 8), bar(8, 10)), "30m"), "bullish");
+  });
+});
+
+describe("4H sweep", () => {
+  const flat = (high: number, low: number, close = (high + low) / 2): Candle => ({
+    time: 0,
+    open: close,
+    high,
+    low,
+    close,
+    volume: 1,
+  });
+  // Five reference bars, the closed sweep bar, then a forming bar that must not count.
+  const withRef = (closed: Candle, forming: Candle = flat(10, 9)): Candle[] => [
+    flat(10, 8),
+    flat(10, 8),
+    flat(10, 8),
+    flat(10, 8),
+    flat(10, 8),
+    closed,
+    forming,
+  ];
+
+  test("a wick above the prior 5 highs that closes back below is a high sweep", () => {
+    assert.equal(detectSweep(withRef(flat(12, 8, 9))), "high");
+  });
+
+  test("a wick below the prior 5 lows that closes back above is a low sweep", () => {
+    assert.equal(detectSweep(withRef(flat(10, 6, 9))), "low");
+  });
+
+  test("a close that stays beyond the level is not a return", () => {
+    assert.equal(detectSweep(withRef(flat(12, 10.5, 11))), null);
+    assert.equal(detectSweep(withRef(flat(7.5, 6, 7))), null);
+  });
+
+  test("touching the prior high is not a sweep", () => {
+    assert.equal(detectSweep(withRef(flat(10, 8, 9))), null);
+  });
+
+  test("a sweep that exists only on the forming bar is ignored", () => {
+    assert.equal(detectSweep(withRef(flat(10, 8, 9), flat(14, 7, 8))), null);
+  });
+
+  test("fewer than 7 bars cannot name a 5-bar reference", () => {
+    assert.equal(detectSweep([flat(12, 6, 9), flat(12, 6, 9), flat(1, 1)]), null);
+  });
+
+  test("one candle can sweep both sides and close back inside", () => {
+    assert.equal(detectSweep(withRef(flat(12, 6, 9))), "both");
   });
 });
 
@@ -573,5 +682,71 @@ describe("bar aggregation", () => {
     const ascending = aggregate([mk(1), mk(2), mk(8)], "week");
     const descending = aggregate([mk(8), mk(2), mk(1)], "week");
     assert.deepEqual(ascending, descending);
+  });
+});
+
+describe("cTrader credential input", () => {
+  const saved = { clientId: "saved-client-id", clientSecret: "saved-client-secret" };
+
+  test("tokens alone are enough once the app details are stored", () => {
+    // The whole point: retyping an app secret on every reconnect is busywork.
+    const r = resolveConnectInput({ accessToken: "a", refreshToken: "r" }, saved);
+    assert.ok(r.ok, r.ok ? "" : r.error);
+    assert.deepEqual(r.value, { ...saved, accessToken: "a", refreshToken: "r" });
+  });
+
+  test("the first ever connect still requires all four fields", () => {
+    const r = resolveConnectInput({ accessToken: "a", refreshToken: "r" }, null);
+    assert.equal(r.ok, false);
+    assert.ok(!r.ok && r.error.includes("clientId"));
+  });
+
+  test("both tokens are always required", () => {
+    assert.equal(resolveConnectInput({ accessToken: "a" }, saved).ok, false);
+    assert.equal(resolveConnectInput({ refreshToken: "r" }, saved).ok, false);
+    assert.equal(resolveConnectInput({}, saved).ok, false);
+  });
+
+  test("sent app details override the stored ones, so a recreated app works", () => {
+    const r = resolveConnectInput(
+      { clientId: " new-id ", clientSecret: " new-secret ", accessToken: "a", refreshToken: "r" },
+      saved
+    );
+    assert.ok(r.ok);
+    assert.equal(r.value.clientId, "new-id");
+    assert.equal(r.value.clientSecret, "new-secret");
+  });
+
+  test("an empty string means omitted rather than blanking the stored value", () => {
+    const r = resolveConnectInput({ clientId: "", clientSecret: "   ", accessToken: "a", refreshToken: "r" }, saved);
+    assert.ok(r.ok);
+    assert.equal(r.value.clientId, saved.clientId);
+    assert.equal(r.value.clientSecret, saved.clientSecret);
+  });
+
+  test("values are trimmed", () => {
+    const r = resolveConnectInput({ accessToken: " a ", refreshToken: " r " }, saved);
+    assert.ok(r.ok);
+    assert.equal(r.value.accessToken, "a");
+    assert.equal(r.value.refreshToken, "r");
+  });
+});
+
+describe("client id masking", () => {
+  test("never reveals the whole id", () => {
+    const masked = maskClientId("2845ABCDEF01234567890123456ABCDEF1bOE");
+    assert.ok(masked.includes("*"));
+    assert.notEqual(masked, "2845ABCDEF01234567890123456ABCDEF1bOE");
+    assert.ok(!masked.includes("CDEF0123456789"), "middle must be hidden");
+  });
+
+  test("keeps enough to recognise the app", () => {
+    assert.ok(maskClientId("2845ABCDEF01234567890123456ABCDEF1bOE").startsWith("2845"));
+    assert.ok(maskClientId("2845ABCDEF01234567890123456ABCDEF1bOE").endsWith("1bOE"));
+  });
+
+  test("a short id is fully hidden", () => {
+    assert.equal(maskClientId("abc"), "***");
+    assert.equal(maskClientId(""), "");
   });
 });
