@@ -14,12 +14,14 @@ import { buildCatalog, resolveAgainstBroker, toSymbolMeta, searchCatalog } from 
 import { deriveCryptoPairs, cryptoCatalogEntries, type RawPair } from "../src/server/market/crypto";
 import { providerOrder } from "../src/server/market/providers/index";
 import { maskClientId, resolveConnectInput } from "../src/server/credentials";
+import { normalizeCapture } from "../src/server/market/captures";
 import { aggregate } from "../src/server/market/providers/binance";
 import { getTimeframe, TIMEFRAMES } from "../src/server/market/timeframes";
 import { noSourceError } from "../src/server/market/providers/index";
 import * as breaker from "../src/server/market/providers/breaker";
 import type { Candle, Timeframe } from "../src/server/market/types";
 import { applyOrder, moveTo, dropIndex } from "../src/webapp/src/market/order";
+import { changedSymbolCount, dayKey, dayLabel, fmtUtc3, groupChanges, matchesCapture, relativeTime } from "../src/webapp/src/market/captures";
 
 // Deterministic OHLC series: a slow sine drift around price 100, so every
 // indicator has something non-degenerate to chew on.
@@ -748,5 +750,146 @@ describe("client id masking", () => {
   test("a short id is fully hidden", () => {
     assert.equal(maskClientId("abc"), "***");
     assert.equal(maskClientId(""), "");
+  });
+});
+
+describe("OpenClaw capture normalization", () => {
+  test("reads the documented field/old/new shape", () => {
+    const c = normalizeCapture({
+      timestamp_utc: "2026-10-26T13:04:00Z",
+      session: "london",
+      capture_type: "full",
+      market_count: 17,
+      changes: [{ symbol: "BNBUSD", field: "signal", old: "Strong Sell", new: "Strong Buy" }],
+      true_alignments: {
+        engulf_1h_4h: [{ symbol: "XAUUSD", details: "Bear engulf + 4H low", signal: "Strong Sell" }],
+        triple: [{ symbol: "XAUUSD", type: "Strong Sell + bear engulf + 4H low" }],
+      },
+      needles_fired: [{ symbol: "XAUUSD", kind: "triple", level: "Strong Sell" }],
+      summary: { strong_buy: 0, strong_sell: 10, engulf_alignments: 0, triple_alignments: 0 },
+      next_check_utc: "2026-10-26T15:00:00Z",
+    });
+    assert.equal(c.changes[0].field, "signal");
+    assert.equal(c.true_alignments.engulf_1h_4h[0].details, "Bear engulf + 4H low");
+    assert.equal(c.summary.engulf_alignments, 0);
+    assert.equal(c.next_check_utc, "2026-10-26T15:00:00Z");
+  });
+
+  test("reads the cron's change_type/from/to shape and its summary keys", () => {
+    const c = normalizeCapture({
+      timestamp_utc: "2026-10-26T16:04:00Z",
+      session: "ny_afternoon",
+      capture_type: "hourly",
+      market_count: 18,
+      changes: [
+        { symbol: "BCHUSD", change_type: "signal_flip", from: "Strong Sell", to: "Buy" },
+        { symbol: "EURUSD", change_type: "pattern_change", from: "4H high", to: "Bear engulf" },
+      ],
+      true_alignments: { engulf_1h_4h: [], triple: [] },
+      needles_fired: [],
+      summary: { strong_buy: 2, strong_sell: 7, engulf_1h_4h: 0, triple: 0 },
+      next_check_utc: "2026-10-26T17:00:00Z",
+    });
+    assert.deepEqual(
+      c.changes.map((x) => [x.field, x.old, x.new]),
+      [
+        ["signal", "Strong Sell", "Buy"],
+        ["patterns", "4H high", "Bear engulf"],
+      ]
+    );
+    assert.equal(c.summary.engulf_alignments, 0);
+    assert.equal(c.summary.triple_alignments, 0);
+  });
+
+  test("splits a signal flip that also removed a pattern", () => {
+    const c = normalizeCapture({
+      timestamp_utc: "2026-10-26T17:04:00Z",
+      session: "hourly",
+      capture_type: "hourly",
+      changes: [
+        { symbol: "GER40", change: "signal_flip", from: "Buy", to: "Strong Buy", pattern_change: "Bull engulf removed" },
+      ],
+      summary: { strong_buy: 1, strong_sell: 1, true_1h_4h_alignments: 0, triple_alignments: 0 },
+    });
+    assert.deepEqual(
+      c.changes.map((x) => [x.symbol, x.field, x.old, x.new]),
+      [
+        ["GER40", "signal", "Buy", "Strong Buy"],
+        ["GER40", "patterns", "Bull engulf", ""],
+      ]
+    );
+    assert.equal(c.summary.engulf_alignments, 0);
+  });
+});
+
+describe("OpenClaw capture UI helpers", () => {
+  function cap(overrides: Partial<import("../src/webapp/src/market/types").OpenclawCapture> = {}) {
+    return {
+      schema_version: 1,
+      timestamp_utc: "2026-10-26T17:04:00Z",
+      session: "hourly",
+      capture_type: "hourly",
+      market_count: 4,
+      changes: [],
+      true_alignments: { engulf_1h_4h: [], triple: [] },
+      needles_fired: [],
+      summary: { strong_buy: 1, strong_sell: 1, engulf_alignments: 0, triple_alignments: 0 },
+      next_check_utc: null,
+      ...overrides,
+    };
+  }
+
+  test("converts UTC to a fixed UTC+3 clock", () => {
+    const now = Date.parse("2026-10-26T18:00:00Z");
+    assert.equal(fmtUtc3("2026-10-26T17:04:00Z", now), "20:04 UTC+3");
+    assert.equal(fmtUtc3("2026-10-23T17:04:00Z", now), "23 Oct 20:04 UTC+3");
+  });
+
+  test("day keys and labels roll over in UTC+3", () => {
+    assert.equal(dayKey("2026-10-26T22:30:00Z"), "2026-10-27");
+    const now = Date.parse("2026-10-26T12:00:00Z");
+    assert.equal(dayLabel("2026-10-26", now), "Today");
+    assert.equal(dayLabel("2026-10-25", now), "Yesterday");
+    assert.equal(dayLabel("2026-10-23", now), "23 Oct 2026");
+  });
+
+  test("relative time is compact", () => {
+    const now = Date.parse("2026-10-26T18:00:00Z");
+    assert.equal(relativeTime("2026-10-26T17:50:00Z", now), "10m ago");
+    assert.equal(relativeTime("2026-10-26T16:00:00Z", now), "2h ago");
+    assert.equal(relativeTime("2026-10-23T18:00:00Z", now), "3d ago");
+    assert.equal(relativeTime("2026-10-26T18:00:00Z", now), "just now");
+  });
+
+  test("groups multiple fields for one symbol", () => {
+    const groups = groupChanges([
+      { symbol: "GER40", field: "signal", old: "Buy", new: "Strong Buy" },
+      { symbol: "GER40", field: "patterns", old: "Bull engulf", new: "" },
+      { symbol: "XRPUSD", field: "signal", old: "Neutral", new: "Sell" },
+    ]);
+    assert.deepEqual(
+      groups.map((g) => [g.symbol, g.changes.length]),
+      [
+        ["GER40", 2],
+        ["XRPUSD", 1],
+      ]
+    );
+    assert.equal(changedSymbolCount([
+      { symbol: "GER40", field: "signal", old: "", new: "" },
+      { symbol: "GER40", field: "patterns", old: "", new: "" },
+    ]), 1);
+  });
+
+  test("search matches symbols, sessions and types", () => {
+    const c = cap({
+      true_alignments: {
+        engulf_1h_4h: [{ symbol: "XAUUSD", details: "Bear engulf + 4H low", type: "", signal: "Strong Sell" }],
+        triple: [],
+      },
+    });
+    assert.equal(matchesCapture(c, "xau"), true);
+    assert.equal(matchesCapture(c, "hourly"), true);
+    assert.equal(matchesCapture(c, "btcusd"), false);
+    assert.equal(matchesCapture(c, "  "), true);
   });
 });

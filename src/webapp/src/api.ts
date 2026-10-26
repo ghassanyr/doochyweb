@@ -188,6 +188,11 @@ export const marketApi = {
       { method: "POST" }
     ),
 
+  captures: (limit = 40) =>
+    request<{ captures: import("./market/types").OpenclawCapture[]; updatedAt: number }>(
+      `/api/market/captures?limit=${limit}`
+    ),
+
   settings: () => request<import("./market/types").MarketSettings>("/api/market/settings"),
 
   saveSettings: (patch: Partial<import("./market/types").MarketSettings>) =>

@@ -77,6 +77,46 @@ export interface MarketAnalysisError {
 
 export type MarketResult = MarketAnalysis | MarketAnalysisError;
 
+// ---- OpenClaw capture log (written by the doochy-scraper cron) ----
+
+export interface CaptureChange {
+  symbol: string;
+  field: string;
+  old: string;
+  new: string;
+}
+
+export interface CaptureAlignment {
+  symbol: string;
+  details: string;
+  type: string;
+  signal: string;
+}
+
+export interface CaptureNeedle {
+  symbol: string;
+  kind: string;
+  level: string;
+}
+
+export interface OpenclawCapture {
+  schema_version: number | null;
+  timestamp_utc: string;
+  session: string;
+  capture_type: string;
+  market_count: number;
+  changes: CaptureChange[];
+  true_alignments: { engulf_1h_4h: CaptureAlignment[]; triple: CaptureAlignment[] };
+  needles_fired: CaptureNeedle[];
+  summary: {
+    strong_buy: number;
+    strong_sell: number;
+    engulf_alignments: number;
+    triple_alignments: number;
+  };
+  next_check_utc: string | null;
+}
+
 export interface CatalogEntry {
   symbol: string;
   name: string;

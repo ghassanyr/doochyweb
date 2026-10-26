@@ -7,6 +7,7 @@ import { Card } from "../components/ui";
 import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
+import { OpenclawCaptures } from "./OpenclawCaptures";
 import { SortableGrid } from "./SortableGrid";
 import { applyOrder } from "./order";
 import { SymbolSearch } from "./SymbolSearch";
@@ -277,6 +278,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
             }
           />
         )}
+
+        <OpenclawCaptures onOpenSymbol={(symbol) => setDetail({ symbol, timeframe })} />
 
         <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
           Indicators computed server-side (RSI, STOCH, MACD, ADX, CCI, Williams %R, ATR, Ultimate

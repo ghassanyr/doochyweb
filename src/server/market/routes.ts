@@ -10,6 +10,7 @@
 import { Router } from "express";
 
 import { analyze, setStrongRatio } from "./analysis";
+import { readCaptures } from "./captures";
 import { detectSweep, type Sweep } from "./patterns";
 import { authRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
@@ -230,6 +231,18 @@ marketRouter.get("/analysis", async (req, res) => {
     analyzeSymbol(symbol, timeframe, catalog, settings, false, brokerError)
   );
   res.json({ timeframe, results, updatedAt: Date.now() });
+});
+
+// OpenClaw capture log. Written by the doochy-scraper cron, read here so the
+// browser never needs filesystem access. Public like the rest of the analysis
+// reads: it is market commentary, not account data.
+marketRouter.get("/captures", async (req, res) => {
+  const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 40));
+  try {
+    res.json({ captures: await readCaptures(limit), updatedAt: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: message(err) });
+  }
 });
 
 // Force-refresh a single symbol, bypassing the bar cache. Gated: it spends the
