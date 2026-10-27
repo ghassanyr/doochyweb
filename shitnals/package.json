@@ -1,0 +1,20 @@
+{
+  "name": "shitnals",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Signal edge-research sandbox: cTrader OHLCV + indicator backtests",
+  "type": "module",
+  "scripts": {
+    "fetch": "tsx src/fetch.ts",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@reiryoku/ctrader-layer": "^2.2.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

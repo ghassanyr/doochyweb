@@ -1,0 +1,8 @@
+data/candles/
+out/
+.env
+*.log
+node_modules/
+dist/
+.parquet
+.DS_Store
