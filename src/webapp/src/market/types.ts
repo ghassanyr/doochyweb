@@ -147,3 +147,26 @@ export interface MarketConfig {
   settings: MarketSettings;
   catalog: CatalogEntry[];
 }
+// ---- Breakouts (written by doochy-breakout-storage, served by /api/market/breakouts) ----
+
+export type BreakoutType = "resistance_break" | "support_break" | "pattern_break";
+
+export interface Breakout {
+  symbol: string;
+  type: BreakoutType;
+  level_price: number | null;
+  level_type: string;
+  break_price: number | null;
+  break_atr_mult: number | null;
+  confirmation: string;
+  session: string;
+  timestamp_utc: string;
+  asset_class: SymbolType;
+}
+
+export interface BreakoutsResponse {
+  enabled: boolean;
+  total: number;
+  breakouts: Breakout[];
+  updatedAt: number;
+}

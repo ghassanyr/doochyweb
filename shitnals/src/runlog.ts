@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Candle } from "./indicators.js";
 import type { Features, SignalSpec } from "./signals.js";
-import { ENGINE, ENGINE_VERSION, INSTRUMENT_COSTS, REGIME, roundTripCost } from "./config.js";
+import { COMMISSION_DIVISOR, COMMISSION_RAW, COMMISSION_UNIT_STATUS, ENGINE, ENGINE_VERSION, REGIME, SPREAD_TABLE, SPREAD_TABLE_DATE, roundTripCost } from "./config.js";
 import { tradesToCsv, type Trade } from "./backtest.js";
 
 export interface Summary {
@@ -71,9 +71,9 @@ function auditTrade(t: Trade, bars: Candle[], f: Features, spec: SignalSpec): st
   }
   if (x > last) lines.push(`  ... (${x - last} more bars)`);
   lines.push(`Exit        idx=${x}  ${new Date(t.exitTime).toISOString()}  reason=${t.exitReason}  tie=${t.tie}  exitPrice=${t.exitPrice}  barsHeld=${t.barsHeld}`);
-  const rate = INSTRUMENT_COSTS[t.symbol]!.commissionUsdPerMillionPerSide / 1e6;
+  const rate = COMMISSION_RAW[t.symbol]! / COMMISSION_DIVISOR / 1e6;
   lines.push(`P&L       gross = ${t.direction} * (${t.exitPrice} - ${t.entryPrice}) = ${f4(t.grossPnl, 6)}`);
-  lines.push(`          cost  = spread ${INSTRUMENT_COSTS[t.symbol]!.spreadPrice} + 2 * ${rate} * ${t.entryPrice} = ${f4(t.cost, 6)}  (check: ${f4(roundTripCost(t.symbol, t.entryPrice), 6)})`);
+  lines.push(`          cost  = spread ${SPREAD_TABLE[t.symbol]} + 2 * ${rate} * ${t.entryPrice} = ${f4(t.cost, 6)}  (check: ${f4(roundTripCost(t.symbol, t.entryPrice), 6)})`);
   lines.push(`          net   = ${f4(t.grossPnl, 6)} - ${f4(t.cost, 6)} = ${f4(t.netPnl, 6)}`);
   lines.push(`          MAE=${f4(t.mae, 6)}  MFE=${f4(t.mfe, 6)}`);
   return lines.join("\n");
@@ -109,7 +109,7 @@ export function writeRun(args: {
     spec,
     dataRange: { from: new Date(bars[0].time).toISOString(), to: new Date(bars[bars.length - 1].time).toISOString(), bars: bars.length },
     testStart: new Date(testStart).toISOString(),
-    config: { regime: REGIME, engine: ENGINE, costs: INSTRUMENT_COSTS[symbol] },
+    config: { regime: REGIME, engine: ENGINE, spread: SPREAD_TABLE[symbol], spreadDate: SPREAD_TABLE_DATE, commissionRaw: COMMISSION_RAW[symbol], commissionDivisor: COMMISSION_DIVISOR, commissionStatus: COMMISSION_UNIT_STATUS },
     all: summarize(trades),
     train: summarize(train),
     test: summarize(test),

@@ -48,7 +48,7 @@ const ALIASES: Record<string, string> = {
 };
 
 // Asset class, inferred from the broker name. Drives the type badge in the UI.
-function inferType(brokerName: string): SymbolType {
+export function inferType(brokerName: string): SymbolType {
   const raw = brokerName.toUpperCase();
   const n = raw.replace(/\s+/g, "");
   if (/^(BTC|ETH)(USD|USDT)$/.test(n)) return "crypto";

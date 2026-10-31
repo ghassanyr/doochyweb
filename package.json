@@ -10,7 +10,7 @@
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && pnpm typecheck:web && pnpm typecheck:test",
     "build": "tsc -p tsconfig.server.json && pnpm typecheck:web && pnpm typecheck:test && vite build",
-    "test": "tsx --test test/market.test.ts",
+    "test": "tsx --test test/market.test.ts test/breakouts.test.ts",
     "start": "node dist/server/index.js"
   },
   "packageManager": "pnpm@11.18.0",

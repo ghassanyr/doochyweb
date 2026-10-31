@@ -6,20 +6,23 @@
  *   - Entry fills at bar t+1 OPEN. SL/TP sized from ATR(14) at bar t.
  *   - Bar t+1 is also checked for SL/TP against its high/low (fill bar included).
  *   - Gap: if bar's OPEN is already beyond SL or TP, exit at that OPEN (SL_GAP / TP_GAP).
- *   - Intrabar: if both SL and TP are inside the bar's range -> SL first (conservative), flagged tie=true.
+ *   - Intrabar tie (both SL and TP inside the bar's range, not a gap): resolved by tiePolicy.
+ *       "SL" (default, pessimistic): exit at SL. "TP" (optimistic): exit at TP.
+ *     Every tie is flagged tie=true. The sweep reports both policies as a band.
  *   - Time stop: position open at entry+MAX_HOLD_BARS closes at that bar's OPEN (TIME).
  *   - End of data: closes at the last bar's CLOSE (EOD).
  *   - One position at a time. A new signal is evaluated on the exit bar's close.
  *
- * COSTS: netPnl = grossPnl - roundTripCost(symbol, entryPrice). Charged once per trade.
+ * COSTS: netPnl = grossPnl - roundTripCost(symbol, entryPrice), charged once per trade.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { computeFeatures, decide, type Features, type SignalSpec } from "./signals.js";
-import { ENGINE, roundTripCost } from "./config.js";
+import { ENGINE, roundTripCost, COMMISSION_DIVISOR } from "./config.js";
 import type { Candle } from "./indicators.js";
 
 export type ExitReason = "SL" | "TP" | "SL_GAP" | "TP_GAP" | "TIME" | "EOD";
+export type TiePolicy = "SL" | "TP";
 
 export interface Trade {
   id: number;
@@ -67,28 +70,39 @@ export interface ExitResult {
   mfe: number;
 }
 
-/** Exit check on one bar, given the position levels. Returns null if the position stays open. */
+/** Exit check on one bar. Returns null if the position stays open. */
 export function checkExit(
   dir: 1 | -1,
   sl: number,
   tp: number,
   o: number,
   h: number,
-  l: number
+  l: number,
+  tiePolicy: TiePolicy = "SL"
 ): { price: number; reason: ExitReason; tie: boolean } | null {
   if (dir === 1) {
     if (o <= sl) return { price: o, reason: "SL_GAP", tie: false };
     if (o >= tp) return { price: o, reason: "TP_GAP", tie: false };
     const slHit = l <= sl;
     const tpHit = h >= tp;
-    if (slHit) return { price: sl, reason: "SL", tie: slHit && tpHit };
+    if (slHit && tpHit) {
+      return tiePolicy === "SL"
+        ? { price: sl, reason: "SL", tie: true }
+        : { price: tp, reason: "TP", tie: true };
+    }
+    if (slHit) return { price: sl, reason: "SL", tie: false };
     if (tpHit) return { price: tp, reason: "TP", tie: false };
   } else {
     if (o >= sl) return { price: o, reason: "SL_GAP", tie: false };
     if (o <= tp) return { price: o, reason: "TP_GAP", tie: false };
     const slHit = h >= sl;
     const tpHit = l <= tp;
-    if (slHit) return { price: sl, reason: "SL", tie: slHit && tpHit };
+    if (slHit && tpHit) {
+      return tiePolicy === "SL"
+        ? { price: sl, reason: "SL", tie: true }
+        : { price: tp, reason: "TP", tie: true };
+    }
+    if (slHit) return { price: sl, reason: "SL", tie: false };
     if (tpHit) return { price: tp, reason: "TP", tie: false };
   }
   return null;
@@ -108,7 +122,8 @@ export function walkExit(
   sl: number,
   tp: number,
   entryPrice: number,
-  maxHoldBars: number = ENGINE.MAX_HOLD_BARS
+  maxHoldBars: number = ENGINE.MAX_HOLD_BARS,
+  tiePolicy: TiePolicy = "SL"
 ): ExitResult {
   const n = opens.length;
   let mae = 0;
@@ -118,7 +133,6 @@ export function walkExit(
     if (b - entryIdx >= maxHoldBars) {
       return { exitIdx: b, exitPrice: opens[b], reason: "TIME", tie: false, mae, mfe };
     }
-    // Excursions over this bar (the bar's range is within the holding period).
     if (dir === 1) {
       mae = Math.max(mae, entryPrice - lows[b]);
       mfe = Math.max(mfe, highs[b] - entryPrice);
@@ -126,13 +140,12 @@ export function walkExit(
       mae = Math.max(mae, highs[b] - entryPrice);
       mfe = Math.max(mfe, entryPrice - lows[b]);
     }
-    const hit = checkExit(dir, sl, tp, opens[b], highs[b], lows[b]);
+    const hit = checkExit(dir, sl, tp, opens[b], highs[b], lows[b], tiePolicy);
     if (hit) return { exitIdx: b, exitPrice: hit.price, reason: hit.reason, tie: hit.tie, mae, mfe };
     if (b === n - 1) {
       return { exitIdx: b, exitPrice: closes[b], reason: "EOD", tie: false, mae, mfe };
     }
   }
-  // Unreachable: loop always returns at the last bar.
   throw new Error("walkExit: ran past end of data");
 }
 
@@ -147,6 +160,10 @@ export interface SimOptions {
   maxHoldBars?: number;
   /** Inverted twin: trade the opposite direction, with SL and TP distances swapped. */
   invert?: boolean;
+  /** Tie-bar resolution. Default "SL" (pessimistic). */
+  tiePolicy?: TiePolicy;
+  /** Commission divisor override for sensitivity runs. Default COMMISSION_DIVISOR. */
+  commissionDivisor?: number;
 }
 
 /** Simulate one SignalSpec over one series. Pure function of inputs. */
@@ -154,6 +171,8 @@ export function simulate(bars: Candle[], f: Features, spec: SignalSpec, opts: Si
   const n = bars.length;
   const trades: Trade[] = [];
   const hold = opts.maxHoldBars ?? ENGINE.MAX_HOLD_BARS;
+  const tiePolicy = opts.tiePolicy ?? "SL";
+  const divisor = opts.commissionDivisor ?? COMMISSION_DIVISOR;
   const inRange = (t: number) => (opts.from == null || t >= opts.from) && (opts.to == null || t < opts.to);
 
   let i = 0;
@@ -177,9 +196,9 @@ export function simulate(bars: Candle[], f: Features, spec: SignalSpec, opts: Si
     const sl = dir === 1 ? entry - slDist : entry + slDist;
     const tp = dir === 1 ? entry + tpDist : entry - tpDist;
 
-    const ex = walkExit(f.opens, f.highs, f.lows, f.closes, e, dir, sl, tp, entry, hold);
+    const ex = walkExit(f.opens, f.highs, f.lows, f.closes, e, dir, sl, tp, entry, hold, tiePolicy);
     const gross = dir * (ex.exitPrice - entry);
-    const cost = roundTripCost(opts.symbol, entry);
+    const cost = roundTripCost(opts.symbol, entry, divisor);
 
     trades.push({
       id: trades.length,
@@ -249,7 +268,7 @@ export function tradesToCsv(trades: Trade[]): string {
   return [cols.join(","), ...rows].join("\n") + "\n";
 }
 
-// ---- CLI: tsx src/backtest.ts --symbol=XAUUSD --tf=15m --variant=minisig_a ----
+// ---- CLI: tsx src/backtest.ts --symbol=XAUUSD --tf=15m --variant=minisig_a [--tiePolicy=TP] ----
 async function cli() {
   const { BASELINE_VARIANTS } = await import("./signals.js");
   const { writeRun } = await import("./runlog.js");
@@ -258,13 +277,14 @@ async function cli() {
   const symbol = get("symbol", "XAUUSD");
   const timeframe = get("tf", "15m");
   const variant = get("variant", "minisig_a");
+  const tiePolicy = get("tiePolicy", "SL") as TiePolicy;
   const spec = BASELINE_VARIANTS.find((v) => v.name === variant);
   if (!spec) throw new Error(`Unknown variant ${variant}`);
 
   const bars = loadCandles(symbol, timeframe);
   const f = computeFeatures(bars, spec);
   const testStart = testStartFor(bars[bars.length - 1].time);
-  const trades = simulate(bars, f, spec, { symbol, timeframe, testStart });
+  const trades = simulate(bars, f, spec, { symbol, timeframe, testStart, tiePolicy });
   writeRun({ kind: "backtest", symbol, timeframe, spec, bars, features: f, trades, testStart });
 }
 

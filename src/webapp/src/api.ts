@@ -193,6 +193,12 @@ export const marketApi = {
       `/api/market/captures?limit=${limit}`
     ),
 
+  breakouts: (params: { limit?: number; offset?: number; types?: string; session?: string; symbol?: string }) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "" ) qs.set(k, String(v));
+    return request<import("./market/types").BreakoutsResponse>(`/api/market/breakouts?${qs.toString()}`);
+  },
+
   settings: () => request<import("./market/types").MarketSettings>("/api/market/settings"),
 
   saveSettings: (patch: Partial<import("./market/types").MarketSettings>) =>

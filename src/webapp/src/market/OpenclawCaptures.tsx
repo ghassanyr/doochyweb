@@ -107,13 +107,14 @@ function ChangeGroup({
 function AlignmentLine({ a, onOpenSymbol }: { a: CaptureAlignment; onOpenSymbol: (s: string) => void }) {
   const text = a.details || a.type;
   const tone = a.signal || text;
+  const showSignal = a.signal && a.signal !== a.type;
   return (
     <li className="flex items-start gap-1.5">
       <Target className="mt-[2px] h-3 w-3 shrink-0" style={{ color: labelColor(tone) }} />
       <span className="min-w-0">
         <SymbolButton symbol={a.symbol} onOpen={onOpenSymbol} />
         <span className="text-fg-muted"> {text}</span>
-        {a.signal && (
+        {showSignal && (
           <span className="ml-1 font-medium" style={{ color: labelColor(a.signal) }}>
             ({a.signal})
           </span>
@@ -134,7 +135,9 @@ function NeedleChip({
   level: string;
   onOpenSymbol: (s: string) => void;
 }) {
-  const color = labelColor(level);
+  if (!symbol) return null;
+  const color = labelColor(level) === RATINGS.neutral.color && !level ? RATINGS.neutral.color : labelColor(level);
+  const label = kind === "triple" ? "triple" : kind === "engulf_1h_4h" ? "1H+4H" : kind || "needle";
   return (
     <button
       type="button"
@@ -144,7 +147,7 @@ function NeedleChip({
       title={`Open ${symbol} analysis`}
     >
       <Zap className="h-3 w-3" />
-      {symbol} {kind === "triple" ? "triple" : "1H+4H"} ({level})
+      {symbol} {label}{level ? ` (${level})` : ""}
     </button>
   );
 }
@@ -269,6 +272,28 @@ function CaptureRow({
                 ))}
                 {cap.true_alignments.triple.map((a, i) => (
                   <AlignmentLine key={`t-${a.symbol}-${i}`} a={a} onOpenSymbol={onOpenSymbol} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {cap.true_alignments.engulf_1h_4h.length > 0 && (
+            <div>
+              <div className="mb-1 text-[10.5px] uppercase tracking-wide text-fg-faint">1H+4H align</div>
+              <ul className="space-y-1 rounded-lg border border-hairline bg-soft/40 px-2.5 py-2 text-[12px]">
+                {cap.true_alignments.engulf_1h_4h.map((a, i) => (
+                  <AlignmentLine key={`e2-${a.symbol}-${i}`} a={a} onOpenSymbol={onOpenSymbol} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {cap.true_alignments.triple.length > 0 && (
+            <div>
+              <div className="mb-1 text-[10.5px] uppercase tracking-wide text-fg-faint">Triple alignments</div>
+              <ul className="space-y-1 rounded-lg border border-hairline bg-soft/40 px-2.5 py-2 text-[12px]">
+                {cap.true_alignments.triple.map((a, i) => (
+                  <AlignmentLine key={`t2-${a.symbol}-${i}`} a={a} onOpenSymbol={onOpenSymbol} />
                 ))}
               </ul>
             </div>

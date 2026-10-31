@@ -11,6 +11,14 @@ import { Router } from "express";
 
 import { analyze, setStrongRatio } from "./analysis";
 import { readCaptures } from "./captures";
+import {
+  BREAKOUT_TYPES,
+  breakoutsEnabled,
+  dedupe,
+  filterBreakouts,
+  sortNewestFirst,
+  type BreakoutType,
+} from "./breakouts";
 import { detectSweep, type Sweep } from "./patterns";
 import { authRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
@@ -240,6 +248,40 @@ marketRouter.get("/captures", async (req, res) => {
   const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 40));
   try {
     res.json({ captures: await readCaptures(limit), updatedAt: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: message(err) });
+  }
+});
+
+// Breakout feed, newest first. Served from the same JSONL as /captures. Filters:
+// types (comma list), session, symbol (substring). Pagination: limit (max 200) and offset. The live
+// sidebar asks for limit=20; the historical log pages with offset.
+marketRouter.get("/breakouts", async (req, res) => {
+  const updatedAt = Date.now();
+  if (!breakoutsEnabled()) {
+    res.json({ enabled: false, total: 0, breakouts: [], updatedAt });
+    return;
+  }
+  const q = (k: string) => (typeof req.query[k] === "string" ? (req.query[k] as string).trim() : "");
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 20));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  // Absent = no type filter. Present but empty = no types selected = nothing matches.
+  const types = typeof req.query.types === "string"
+    ? (req.query.types as string)
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t): t is BreakoutType => (BREAKOUT_TYPES as readonly string[]).includes(t))
+    : undefined;
+  try {
+    // Captures are capped at 1000 lines; the writer appends about one per hour.
+    const captures = await readCaptures(1000);
+    const all = dedupe(sortNewestFirst(captures.flatMap((c) => c.breakouts)));
+    const matched = filterBreakouts(all, {
+      types,
+      session: q("session").toLowerCase() || undefined,
+      symbol: q("symbol") || undefined,
+    });
+    res.json({ enabled: true, total: matched.length, breakouts: matched.slice(offset, offset + limit), updatedAt });
   } catch (err) {
     res.status(500).json({ error: message(err) });
   }

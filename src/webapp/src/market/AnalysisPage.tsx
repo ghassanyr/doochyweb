@@ -8,6 +8,7 @@ import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
 import { OpenclawCaptures } from "./OpenclawCaptures";
+import { Breakouts } from "./Breakouts";
 import { SortableGrid } from "./SortableGrid";
 import { applyOrder } from "./order";
 import { SymbolSearch } from "./SymbolSearch";
@@ -278,6 +279,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
             }
           />
         )}
+
+        <Breakouts onOpenSymbol={(symbol) => setDetail({ symbol, timeframe })} />
 
         <OpenclawCaptures onOpenSymbol={(symbol) => setDetail({ symbol, timeframe })} />
 

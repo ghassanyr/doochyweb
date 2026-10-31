@@ -10,6 +10,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { normalizeBreakouts, type Breakout } from "./breakouts";
+
 export interface CaptureChange {
   symbol: string;
   /** "signal" or "patterns" for the known shapes; free text otherwise. */
@@ -49,6 +51,8 @@ export interface CaptureView {
   needles_fired: CaptureNeedle[];
   summary: CaptureSummary;
   next_check_utc: string | null;
+  /** Breakout events from the writer. Empty when none fired or the feature is off. */
+  breakouts: Breakout[];
 }
 
 export function capturesPath(): string {
@@ -151,7 +155,50 @@ export function normalizeCapture(raw: Record<string, unknown>): CaptureView {
       triple_alignments: num(summary.triple_alignments ?? summary.triple),
     },
     next_check_utc: str(raw.next_check_utc) || null,
+    breakouts: normalizeBreakouts(raw.breakouts),
   };
+}
+
+/** Try to parse concatenated JSON objects (defensive against a misbehaving writer). */
+function splitJsonObjects(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let start = -1;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") {
+      if (depth === 0) start = i;
+      depth++;
+      continue;
+    }
+    if (ch === "}" || ch === "]") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        out.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  if (depth === 0 && start >= 0) out.push(text.slice(start));
+  return out;
 }
 
 /** Newest first, capped at `limit`. Missing file reads as empty. */
@@ -165,13 +212,24 @@ export async function readCaptures(limit = 40): Promise<CaptureView[]> {
   }
 
   const views: CaptureView[] = [];
-  for (const line of text.split(/\r?\n/)) {
+  const candidates = text.includes("\n") ? text.split(/\r?\n/) : splitJsonObjects(text);
+  for (const line of candidates) {
     if (!line.trim()) continue;
     try {
       const parsed = JSON.parse(line);
-      if (parsed && typeof parsed === "object") views.push(normalizeCapture(parsed));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+        views.push(normalizeCapture(parsed));
     } catch {
-      // Skip a torn or malformed line; the next valid line still renders.
+      // Try to extract one object from a concatenated/torn blob.
+      for (const obj of splitJsonObjects(line)) {
+        try {
+          const parsed = JSON.parse(obj);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+            views.push(normalizeCapture(parsed));
+        } catch {
+          // Skip a torn or malformed line; the next valid line still renders.
+        }
+      }
     }
   }
 
