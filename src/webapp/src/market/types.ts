@@ -164,9 +164,20 @@ export interface Breakout {
   asset_class: SymbolType;
 }
 
+export interface BreakoutRunStatus {
+  timestamp_utc: string;
+  asOf: string;
+  evaluated: number;
+  skipped: number;
+  skippedDetail: Record<string, string>;
+  newBreakouts: number;
+  error: string | null;
+}
+
 export interface BreakoutsResponse {
   enabled: boolean;
   total: number;
   breakouts: Breakout[];
   updatedAt: number;
+  lastRun: BreakoutRunStatus | null;
 }

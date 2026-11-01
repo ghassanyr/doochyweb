@@ -16,9 +16,11 @@ import {
   breakoutsEnabled,
   dedupe,
   filterBreakouts,
+  normalizeBreakouts,
   sortNewestFirst,
   type BreakoutType,
 } from "./breakouts";
+import { latestRun, readRuns } from "./breakoutFeed";
 import { detectSweep, type Sweep } from "./patterns";
 import { authRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
@@ -68,7 +70,7 @@ const MAX_SWEEP = 4;
  * comes back empty, and every forex and metals symbol would otherwise claim it
  * does not exist.
  */
-async function loadCatalog(): Promise<{ items: CatalogEntry[]; brokerError: string | null }> {
+export async function loadCatalog(): Promise<{ items: CatalogEntry[]; brokerError: string | null }> {
   const crypto = await cryptoPairs();
   let broker: string[] = [];
   let brokerError: string | null = null;
@@ -87,7 +89,7 @@ async function loadCatalog(): Promise<{ items: CatalogEntry[]; brokerError: stri
  * Binance pair as its `name`, so handing the whole catalog to the broker
  * resolver would let it match "SOLUSDT" as though it were a broker symbol.
  */
-function resolveMeta(symbol: string, catalog: CatalogEntry[]): SymbolMeta | null {
+export function resolveMeta(symbol: string, catalog: CatalogEntry[]): SymbolMeta | null {
   const short = normalizeSymbol(symbol);
   const entry = catalog.find((c) => c.symbol === short);
   const pair = entry?.provider === "binance" ? entry.name : null;
@@ -259,7 +261,7 @@ marketRouter.get("/captures", async (req, res) => {
 marketRouter.get("/breakouts", async (req, res) => {
   const updatedAt = Date.now();
   if (!breakoutsEnabled()) {
-    res.json({ enabled: false, total: 0, breakouts: [], updatedAt });
+    res.json({ enabled: false, total: 0, breakouts: [], updatedAt, lastRun: null });
     return;
   }
   const q = (k: string) => (typeof req.query[k] === "string" ? (req.query[k] as string).trim() : "");
@@ -275,13 +277,31 @@ marketRouter.get("/breakouts", async (req, res) => {
   try {
     // Captures are capped at 1000 lines; the writer appends about one per hour.
     const captures = await readCaptures(1000);
-    const all = dedupe(sortNewestFirst(captures.flatMap((c) => c.breakouts)));
+    const runs = readRuns();
+    const all = dedupe(
+      sortNewestFirst([
+        ...normalizeBreakouts(runs.flatMap((r) => r.breakouts)),
+        ...captures.flatMap((c) => c.breakouts),
+      ])
+    );
+    const last = latestRun(runs);
+    const lastRun = last
+      ? {
+          timestamp_utc: last.timestamp_utc,
+          asOf: last.asOf,
+          evaluated: last.evaluated.length,
+          skipped: Object.keys(last.skipped).length,
+          skippedDetail: last.skipped,
+          newBreakouts: last.breakouts.length,
+          error: last.error ?? null,
+        }
+      : null;
     const matched = filterBreakouts(all, {
       types,
       session: q("session").toLowerCase() || undefined,
       symbol: q("symbol") || undefined,
     });
-    res.json({ enabled: true, total: matched.length, breakouts: matched.slice(offset, offset + limit), updatedAt });
+    res.json({ enabled: true, total: matched.length, breakouts: matched.slice(offset, offset + limit), updatedAt, lastRun });
   } catch (err) {
     res.status(500).json({ error: message(err) });
   }

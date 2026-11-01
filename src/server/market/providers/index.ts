@@ -219,7 +219,7 @@ async function fetchFromSource(
       release();
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeError(err);
     const rateLimited = /rate limit|BLOCKED_PAYLOAD_TYPE|429|418/i.test(message);
     if (rateLimited && pid === "ctrader") lastRateLimitAt = Date.now();
     breaker.recordFailure(pid, rateLimited ? "rate limit" : message);
@@ -272,6 +272,23 @@ function listProviders(names: ProviderId[]): string {
 
 /** The only diagnostic a user gets when bars cannot be read, so it has to name
  *  every source that was tried and say why each one failed. Exported for testing. */
+/** Readable text for any thrown value. cTrader rejects with plain {errorCode, description} objects. */
+export function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object") {
+    const o = err as Record<string, unknown>;
+    const text = [o.errorCode, o.description ?? o.message].filter((x) => x != null && x !== "").join(": ");
+    if (text) return text;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      /* fall through */
+    }
+  }
+  return String(err);
+}
+
 export function noSourceError(warnings: ProviderWarning[]): string {
   if (!warnings.length) return "Could not read bars from any configured source.";
   const detail = warnings.map((w) => `${PROVIDER_LABEL[w.provider] || w.provider}: ${w.message}`).join("; ");

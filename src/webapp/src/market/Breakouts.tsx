@@ -16,7 +16,7 @@ import {
   type TypeSelection,
 } from "./breakouts";
 import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
-import type { Breakout } from "./types";
+import type { Breakout, BreakoutRunStatus } from "./types";
 
 const TYPE_KEY = "doochyweb_breakouts_types";
 const LIVE_N = 20;
@@ -112,7 +112,7 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
   const [page, setPage] = useState(0);
   const [enabled, setEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [lastRun, setLastRun] = useState<BreakoutRunStatus | null>(null);
   const [showLog, setShowLog] = useState(false);
 
   // Debounce every filter change so typing does not fire a request per keystroke.
@@ -150,7 +150,7 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
         setLogRows(h.breakouts);
         setLogTotal(h.total);
       }
-      setUpdatedAt(l.updatedAt);
+      setLastRun(l.lastRun);
       setError(null);
     } catch {
       setError("Could not load breakouts");
@@ -173,7 +173,12 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
       <div className="mb-3 flex items-center gap-2">
         <Radio className="h-4 w-4 text-accent" />
         <h3 className="text-sm font-semibold text-fg">Breakouts</h3>
-        {updatedAt && <span className="text-[11px] text-fg-faint">updated {relativeTime(new Date(updatedAt).toISOString())}</span>}
+        {lastRun && (
+          <span className="text-[11px] text-fg-faint" title={Object.entries(lastRun.skippedDetail).map(([k, v]) => k + ": " + v).join("\n")}>
+            checked {relativeTime(lastRun.timestamp_utc)} · {lastRun.evaluated} evaluated
+            {lastRun.skipped > 0 ? ` · ${lastRun.skipped} skipped` : ""}
+          </span>
+        )}
       </div>
 
       {!enabled && <p className="mb-3 text-[12.5px] text-fg-muted">Breakout detection is turned off (ENABLE_BREAKOUTS=false).</p>}
@@ -186,7 +191,11 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
           <p className="py-4 text-center text-[12.5px] text-fg-faint">Select at least one breakout type.</p>
         )}
         {enabled && !noneSelected(filters.types) && live.length === 0 && !error && (
-          <p className="py-4 text-center text-[12.5px] text-fg-faint">No breakouts match these filters.</p>
+          <p className="py-4 text-center text-[12.5px] text-fg-faint">
+            {lastRun
+              ? `No breakouts match these filters. The last check covered ${lastRun.evaluated} symbols.`
+              : "No breakouts yet. The first check runs shortly after the server starts."}
+          </p>
         )}
         <ul className="divide-y divide-hairline">
           {live.map((b) => (

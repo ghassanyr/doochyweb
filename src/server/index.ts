@@ -10,6 +10,7 @@ import { discoverAccounts } from "./ctrader/auth";
 import { reconcileAccount, listAccounts } from "./ctrader/reads";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
+import { startBreakoutScheduler } from "./market/breakoutRunner";
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -419,6 +420,7 @@ async function main() {
   app.listen(port, "127.0.0.1", () => {
     console.log(`[SERVER] Listening on http://127.0.0.1:${port}`);
   });
+  startBreakoutScheduler();
 }
 
 main().catch((err) => {
