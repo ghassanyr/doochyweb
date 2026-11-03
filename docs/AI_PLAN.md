@@ -69,8 +69,9 @@ Cutover checklist (2026-11-03):
 - [x] Telegram token in doochyweb env; @DoochyBot validated, test message delivered.
 - [x] In-process trigger at HH:02 UTC, gated by SCRAPER_ENABLED (default false).
 - [x] Detector one-bar-lag bug fixed; deployed. Post-deploy dry run: 48/48 comparisons equal, 0 lag, 0 unexplained.
-- [ ] Parity week: SCRAPER_ENABLED=true alongside the OpenClaw cron, timestamp-matched.
-- [ ] Compare change/needle output for the week, then disable the OpenClaw cron.
+- [x] In-process scheduler enabled (SCRAPER_ENABLED=true); captures now written to the UI file.
+- [x] All seven OpenClaw Doochy capture crons disabled (hourly, 4H closes, session opens).
+- [ ] Operational soak: 24-48h, with live-vs-replay spot-checks at 4H closes.
 - [ ] Commit the branch (deploy was built from the working tree).
 - Dry run compares our rules with our own code's output on the API. It proves deployment consistency, not signal accuracy. Twelve Data now gives an independent check for FX and gold.
 - The 16 vs 17 market count: the stale row is parsed but not evaluated.
@@ -171,11 +172,19 @@ During parity, point OPENCLAW_CAPTURES_FILE at a separate file so the UI does no
 
 ### Still to do
 - [x] Deploy and re-run the dry run: post-deploy result is 48/48 equal.
-- [ ] Run SCRAPER_ENABLED=true for a week alongside OpenClaw, timestamp-matched (compressed by the replay harness below).
-- [ ] Compare needle/change output for the week, then disable the OpenClaw cron.
+- [x] SCRAPER_ENABLED=true; OpenClaw capture crons disabled. The dual-run A/B was dropped: the OpenClaw captures are not a stable reference (mixed schemas, torn JSONL).
+- [ ] Operational soak 24-48h; compare live captures with replay at 4H closes.
 - [x] Deterministic replay harness over stored bars (169 hourly boundaries, 17 symbols).
 - [ ] Commit the branch; the deploy was built from the working tree.
 - pm2 restart only with approval.
+
+## Cutover (2026-11-03)
+
+- .env: SCRAPER_ENABLED=true. OPENCLAW_CAPTURES_FILE override removed, so captures go to the default ~/doochyweb/openclaw-captures.json that the UI reads. The one capture written to the temporary parity file was merged back; the file was removed.
+- Repaired openclaw-captures.json: it contained two objects on one line. All 9 rows now parse.
+- Disabled all seven OpenClaw Doochy capture crons (hourly 1H, 4H closes 04/12/20, Tokyo/London/NY opens). Heartbeat and memory crons were left alone.
+- Rebuilt and restarted pm2. First in-process run 2026-11-03 16:02 UTC: 16 evaluated, 1 stale skipped, capture + summary notification.
+- The week-long A/B against OpenClaw is dropped. What remains is an ops soak and a live-vs-replay spot-check at each 4H close. No waiting on the OpenClaw cron.
 
 ## Replay harness (2026-11-03)
 
