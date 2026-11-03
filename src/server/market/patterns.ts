@@ -27,11 +27,20 @@ const MIN_MS = 15 * 60 * 1000;
  * open). Bearish is the mirror. Wicks are ignored. A doji (open === close) has
  * no direction, so either bar being a doji is not a match.
  */
-export function detectEngulfing(candles: Candle[], timeframeId: string): Engulfing | null {
+export function detectEngulfing(
+  candles: Candle[],
+  timeframeId: string,
+  lastBarForming: boolean = true
+): Engulfing | null {
   if (getTimeframe(timeframeId).ms < MIN_MS) return null;
   if (!Array.isArray(candles) || candles.length < 3) return null;
-  const prior = candles[candles.length - 3];
-  const current = candles[candles.length - 2];
+  // The bar under test is the last CLOSED one. When the last element is still forming
+  // (Binance includes the live bar) that is length - 2; when it has closed (cTrader
+  // series contain no forming bar) it is length - 1.
+  const cur = lastBarForming ? candles.length - 2 : candles.length - 1;
+  if (cur < 1) return null;
+  const prior = candles[cur - 1];
+  const current = candles[cur];
   const priorBody = prior.close - prior.open;
   const currentBody = current.close - current.open;
   if (priorBody === 0 || currentBody === 0) return null;
@@ -66,10 +75,12 @@ export function detectEngulfing(candles: Candle[], timeframeId: string): Engulfi
  * "high" is a failed break above. "low" is a failed break below. A single candle
  * can do both and still close back inside the prior range.
  */
-export function detectSweep(candles: Candle[]): Sweep | null {
-  if (!Array.isArray(candles) || candles.length < SWEEP_LOOKBACK + 2) return null;
-  const sweep = candles[candles.length - 2];
-  const ref = candles.slice(candles.length - 2 - SWEEP_LOOKBACK, candles.length - 2);
+export function detectSweep(candles: Candle[], lastBarForming: boolean = true): Sweep | null {
+  const min = SWEEP_LOOKBACK + (lastBarForming ? 2 : 1);
+  if (!Array.isArray(candles) || candles.length < min) return null;
+  const end = lastBarForming ? candles.length - 1 : candles.length; // exclusive end of closed bars
+  const sweep = candles[end - 1];
+  const ref = candles.slice(end - 1 - SWEEP_LOOKBACK, end - 1);
   const refHigh = Math.max(...ref.map((c) => c.high));
   const refLow = Math.min(...ref.map((c) => c.low));
   const high = sweep.high > refHigh && sweep.close < refHigh;
@@ -78,4 +89,14 @@ export function detectSweep(candles: Candle[]): Sweep | null {
   if (high) return "high";
   if (low) return "low";
   return null;
+}
+
+/**
+ * True when the newest bar is still forming at `now`. Bars are stamped by open time,
+ * so a bar closes at time + tfMs. Use this to pick lastBarForming for a series.
+ */
+export function isLastBarForming(candles: Candle[], tfMs: number, now: number = Date.now()): boolean {
+  if (!candles.length) return false;
+  const last = candles[candles.length - 1];
+  return last.time + tfMs > now;
 }

@@ -11,6 +11,7 @@ import { reconcileAccount, listAccounts } from "./ctrader/reads";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
+import { startScraperScheduler } from "./market/scraperRunner";
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -421,6 +422,7 @@ async function main() {
     console.log(`[SERVER] Listening on http://127.0.0.1:${port}`);
   });
   startBreakoutScheduler();
+  startScraperScheduler();
 }
 
 main().catch((err) => {

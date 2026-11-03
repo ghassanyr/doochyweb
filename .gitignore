@@ -10,3 +10,6 @@ webapp/dist/
 
 openclaw-captures.json
 openclaw-breakouts.jsonl
+
+# Research bar history (analogue search)
+data/

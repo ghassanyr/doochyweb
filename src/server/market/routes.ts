@@ -21,7 +21,7 @@ import {
   type BreakoutType,
 } from "./breakouts";
 import { latestRun, readRuns } from "./breakoutFeed";
-import { detectSweep, type Sweep } from "./patterns";
+import { detectSweep, isLastBarForming, type Sweep } from "./patterns";
 import { authRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
 import { clearCache, cTraderCatalog, getCandles } from "./providers/index";
@@ -36,7 +36,7 @@ import {
   saveCardOrder,
   updateSettings,
 } from "./store";
-import { DEFAULT_TIMEFRAME, timeframeLabels, TIMEFRAMES } from "./timeframes";
+import { DEFAULT_TIMEFRAME, getTimeframe, timeframeLabels, TIMEFRAMES } from "./timeframes";
 import type {
   AnalysisError,
   AnalysisSettings,
@@ -346,7 +346,7 @@ async function sweep4h(
 ): Promise<Sweep | null> {
   try {
     const series = timeframe === "4h" ? bars : (await getCandles(meta, "4h", settings, { force })).bars;
-    return detectSweep(series);
+    return detectSweep(series, isLastBarForming(series, getTimeframe("4h").ms));
   } catch {
     return null;
   }
