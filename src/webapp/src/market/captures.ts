@@ -4,7 +4,7 @@
 import type { CaptureChange, OpenclawCapture } from "./types";
 
 // The cron writes UTC. Everything the trader reads is UTC+3 (fixed offset, no
-// DST) to match the Telegram messages.
+// DST) to match the legacy capture summaries.
 export const UTC3_MS = 3 * 3_600_000;
 
 export const SESSION_LABEL: Record<string, string> = {

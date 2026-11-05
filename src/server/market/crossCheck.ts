@@ -1,5 +1,5 @@
 // Cross-check the production bars against Twelve Data, an independent source.
-// Reads only: no captures, no state, no Telegram.
+// Reads only: no captures, no state.
 //
 //   tsx src/server/market/crossCheck.ts [--timeframe=1h] [--symbols=BTCUSD,XAUUSD] [--output=400]
 //

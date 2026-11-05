@@ -13,6 +13,7 @@ import { analyze, setStrongRatio } from "./analysis";
 import { readCaptures } from "./captures";
 import {
   BREAKOUT_TYPES,
+  breakoutKey,
   breakoutsEnabled,
   dedupe,
   filterBreakouts,
@@ -21,6 +22,8 @@ import {
   type BreakoutType,
 } from "./breakouts";
 import { latestRun, readRuns } from "./breakoutFeed";
+import { TEMPLATE_MODEL } from "./narration";
+import { listNarrations } from "./narrationStore";
 import { detectSweep, isLastBarForming, type Sweep } from "./patterns";
 import { authRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
@@ -301,7 +304,48 @@ marketRouter.get("/breakouts", async (req, res) => {
       session: q("session").toLowerCase() || undefined,
       symbol: q("symbol") || undefined,
     });
-    res.json({ enabled: true, total: matched.length, breakouts: matched.slice(offset, offset + limit), updatedAt, lastRun });
+    const page = matched.slice(offset, offset + limit).map((b) => ({ ...b, event_key: breakoutKey(b) }));
+    res.json({ enabled: true, total: matched.length, breakouts: page, updatedAt, lastRun });
+  } catch (err) {
+    res.status(500).json({ error: message(err) });
+  }
+});
+
+// Public research note for one breakout event. Reads saved, published records
+// only; a page view never spends a model call. 404 keeps the feed quiet when a
+// note is still being generated or was withheld by the guard.
+marketRouter.get("/narrations", async (req, res) => {
+  const event = typeof req.query.event === "string" ? req.query.event.trim() : "";
+  if (!event) {
+    res.status(400).json({ error: "event is required" });
+    return;
+  }
+  if (event.length > 300) {
+    res.status(400).json({ error: "event key is too long" });
+    return;
+  }
+  try {
+    const note = listNarrations().find(
+      (r) =>
+        r.event_key === event &&
+        r.published !== false &&
+        !r.error &&
+        r.model !== TEMPLATE_MODEL &&
+        r.output.trim().length > 0
+    );
+    if (!note) {
+      res.status(404).json({ error: "no published research note" });
+      return;
+    }
+    res.json({
+      event_key: event,
+      symbol: note.symbol ?? note.input.breakouts[0]?.symbol ?? null,
+      text: note.output,
+      model: note.model,
+      created_at: note.created_at,
+      prompt_version: note.prompt_version,
+      brief: note.input.breakouts[0]?.brief ?? null,
+    });
   } catch (err) {
     res.status(500).json({ error: message(err) });
   }

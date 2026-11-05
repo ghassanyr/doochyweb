@@ -5,9 +5,9 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import {
-  appendCapture, captureMessage, loadState, nextRunAt, saveState, stateFile, type ScraperState,
+  appendCapture, loadState, nextRunAt, saveState, stateFile, type ScraperState,
 } from "../src/server/market/scraperRunner";
-import type { CapturePayload, Obs } from "../src/server/market/scraperRules";
+import type { CapturePayload } from "../src/server/market/scraperRules";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "scraper-"));
 
@@ -64,29 +64,4 @@ describe("scraper runner persistence", () => {
     assert.equal(new Date(nextRunAt(Date.UTC(2026, 10, 3, 12, 2))).toISOString(), "2026-11-03T13:02:00.000Z");
   });
 
-  test("notifications are one message per run", () => {
-    const quiet = capture("2026-11-03T11:00:00.000Z");
-    assert.equal(captureMessage(quiet, new Map()), null, "quiet hourly capture is silent");
-
-    const full = { ...quiet, capture_type: "full" as const, session: "4h_close" };
-    const fullMsg = captureMessage(full, new Map());
-    assert.ok(fullMsg?.startsWith("Doochy 4h_close capture 11:00 UTC (full)"));
-
-    const nd = {
-      ...full,
-      needles_fired: [
-        { symbol: "XAUUSD", kind: "triple" as const, level: "Strong Sell", key: "XAUUSD:4h_close:2026-11-03:triple" },
-        { symbol: "EURUSD", kind: "engulf_1h_4h" as const, level: "Buy", key: "EURUSD:4h_close:2026-11-03:engulf_1h_4h" },
-      ],
-    };
-    const obs = new Map<string, Obs>([
-      ["XAUUSD", { symbol: "XAUUSD", category: "commodity", price: 4012.5 } as Obs],
-      ["EURUSD", { symbol: "EURUSD", category: "forex", price: 1.0876 } as Obs],
-    ]);
-    const msg = captureMessage(nd, obs);
-    assert.ok(msg);
-    assert.equal((msg.match(/NEEDLES/g) ?? []).length, 1, "needles are bundled");
-    assert.ok(msg.includes("XAUUSD triple | Strong Sell | 4012.5"));
-    assert.ok(msg.includes("EURUSD 1H+4H engulf | Buy | 1.0876"));
-  });
 });

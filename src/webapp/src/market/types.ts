@@ -152,6 +152,8 @@ export interface MarketConfig {
 export type BreakoutType = "resistance_break" | "support_break" | "pattern_break";
 
 export interface Breakout {
+  /** Stable per-event key shared with the research-note API and deep links. */
+  event_key?: string;
   symbol: string;
   type: BreakoutType;
   level_price: number | null;
@@ -172,6 +174,55 @@ export interface BreakoutRunStatus {
   skippedDetail: Record<string, string>;
   newBreakouts: number;
   error: string | null;
+}
+
+export interface NarrationBriefHistory {
+  sample_size: number;
+  pool_size: number;
+  up_first: number;
+  down_first: number;
+  tie: number;
+  neither: number;
+  decisive_up_share: number | null;
+  decisive_down_share: number | null;
+  base_n: number;
+  base_up_share: number | null;
+  base_down_share: number | null;
+  recent_n: number;
+  recent_up_share: number | null;
+  recent_down_share: number | null;
+  recent_conflicts: boolean;
+  median_mfe: number | null;
+  median_mae: number | null;
+  base_median_mfe: number | null;
+  base_median_mae: number | null;
+  match_train: number;
+  match_test: number;
+}
+
+export interface NarrationBrief {
+  symbol: string;
+  event: string;
+  direction: "above" | "below";
+  session: string;
+  level_price: number;
+  level_type: string;
+  break_price: number;
+  break_atr_mult: number;
+  invalidation_level: number;
+  history: NarrationBriefHistory | null;
+  quality: string[];
+  limits: string[];
+}
+
+export interface NarrationNote {
+  event_key?: string;
+  symbol: string | null;
+  text: string;
+  model: string;
+  created_at: string;
+  prompt_version: number;
+  brief?: NarrationBrief | null;
 }
 
 export interface BreakoutsResponse {

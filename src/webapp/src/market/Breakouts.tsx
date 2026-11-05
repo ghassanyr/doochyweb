@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, Radio } from "lucide-react";
 
-import { marketApi } from "../api";
+import { ApiError, marketApi } from "../api";
 import { Card, inputCls } from "../components/ui";
 import {
   BREAKOUT_STYLE,
@@ -16,7 +16,7 @@ import {
   type TypeSelection,
 } from "./breakouts";
 import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
-import type { Breakout, BreakoutRunStatus } from "./types";
+import type { Breakout, BreakoutRunStatus, NarrationBrief, NarrationNote } from "./types";
 
 const TYPE_KEY = "doochyweb_breakouts_types";
 const LIVE_N = 20;
@@ -34,7 +34,147 @@ function rowKey(b: Breakout): string {
   return `${b.symbol}|${b.type}|${b.session}|${b.timestamp_utc}|${b.level_price ?? ""}`;
 }
 
-function BreakoutRow({ b, onOpen }: { b: Breakout; onOpen: (symbol: string) => void }) {
+function noteUrl(eventKey: string): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set("note", eventKey);
+  return url.toString();
+}
+
+const fmtPct = (r: number | null): string => (r == null ? "—" : `${(r * 100).toFixed(0)}%`);
+const fmtAtr = (x: number | null): string => (x == null ? "—" : `${Math.abs(x).toFixed(2)} ATR`);
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-fg-faint">{label}</div>
+      <div className="text-fg-muted">{value}</div>
+    </div>
+  );
+}
+
+function NarrationStats({ brief }: { brief: NarrationBrief }) {
+  const [open, setOpen] = useState(false);
+  const h = brief.history;
+  return (
+    <div className="mt-2 border-t border-hairline pt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="text-[11px] font-medium text-accent hover:underline"
+      >
+        {open ? "Hide historical data" : "Historical data"}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 text-[11px]">
+          {h ? (
+            <>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
+                <Stat label="Sample" value={`${h.sample_size} / ${h.pool_size} bars`} />
+                <Stat label="Split" value={`${h.match_train} older / ${h.match_test} recent`} />
+                <Stat label="Up first" value={`${fmtPct(h.decisive_up_share)} (${h.up_first})`} />
+                <Stat label="Down first" value={`${fmtPct(h.decisive_down_share)} (${h.down_first})`} />
+                <Stat label="Tie / neither" value={`${h.tie} / ${h.neither}`} />
+                <Stat label="Base up first" value={`${fmtPct(h.base_up_share)} (n=${h.base_n})`} />
+                <Stat label="Recent up first" value={`${fmtPct(h.recent_up_share)} (n=${h.recent_n})`} />
+                <Stat label="Recent down first" value={fmtPct(h.recent_down_share)} />
+                <Stat label="Median MFE" value={fmtAtr(h.median_mfe)} />
+                <Stat label="Median MAE" value={fmtAtr(h.median_mae)} />
+                <Stat label="Base MFE / MAE" value={`${fmtAtr(h.base_median_mfe)} / ${fmtAtr(h.base_median_mae)}`} />
+              </div>
+              <p className="text-fg-faint">
+                First-touch race: ±1 ATR over 6 bars from the next open. Not a win rate. Decisions exclude ties and
+                neither-touched cases.
+              </p>
+            </>
+          ) : (
+            <p className="text-fg-faint">No analogue history was available for this event.</p>
+          )}
+          <ul className="list-disc space-y-0.5 pl-4 text-fg-faint">
+            {[...brief.limits, ...brief.quality].map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotePanel({ eventKey, onClose }: { eventKey: string; onClose?: () => void }) {
+  const [note, setNote] = useState<NarrationNote | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setNote(null);
+    setError(null);
+    setCopied(false);
+    marketApi
+      .narration(eventKey)
+      .then((n) => alive && setNote(n))
+      .catch((err: unknown) => {
+        if (!alive) return;
+        const api = err instanceof ApiError ? err : null;
+        setError(api?.status === 404 ? "The research note for this event is not available yet." : "Could not load the research note.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [eventKey]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(noteUrl(eventKey));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable: the address bar still holds the link */
+    }
+  };
+
+  return (
+    <div className="mt-1.5 rounded-lg border border-hairline bg-soft p-2.5 text-[12px]">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="font-medium text-fg">Research note</span>
+        <span className="ml-auto flex items-center gap-2 text-[11px]">
+          {note && (
+            <button type="button" onClick={() => void copy()} className="text-accent hover:underline">
+              {copied ? "Link copied" : "Copy link"}
+            </button>
+          )}
+          {onClose && (
+            <button type="button" onClick={onClose} className="text-fg-muted hover:text-fg">
+              Close
+            </button>
+          )}
+        </span>
+      </div>
+      {!note && !error && <p className="text-fg-faint">Loading note…</p>}
+      {error && <p className="text-fg-faint">{error}</p>}
+      {note && (
+        <>
+          <p className="whitespace-pre-line leading-relaxed text-fg-muted">{note.text}</p>
+          {note.brief && <NarrationStats brief={note.brief} />}
+          <p className="mt-1 text-[10.5px] text-fg-faint">
+            {note.symbol ?? "—"} · generated {relativeTime(note.created_at)} · {note.model.split("/").pop()}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BreakoutRow({
+  b, onOpen, onNote, noteOpen, note,
+}: {
+  b: Breakout;
+  onOpen: (symbol: string) => void;
+  onNote?: () => void;
+  noteOpen?: boolean;
+  note?: ReactNode;
+}) {
   const style = BREAKOUT_STYLE[b.type];
   return (
     <li className="flex items-start gap-2 py-1.5 text-[12.5px]">
@@ -51,6 +191,16 @@ function BreakoutRow({ b, onOpen }: { b: Breakout; onOpen: (symbol: string) => v
         <span className="ml-1.5 font-medium" style={{ color: style.color }}>
           {style.short}
         </span>
+        {onNote && (
+          <button
+            type="button"
+            onClick={onNote}
+            aria-expanded={noteOpen}
+            className="ml-1.5 text-[11px] font-medium text-accent hover:underline"
+          >
+            {noteOpen ? "Hide note" : "Note"}
+          </button>
+        )}
         <div className="truncate text-fg-muted" title={breakoutSummary(b)}>
           Level {fmtPrice(b.level_price)} {b.level_type ? `(${b.level_type.replace(/_/g, " ")})` : ""} · break{" "}
           {fmtPrice(b.break_price)}
@@ -59,6 +209,7 @@ function BreakoutRow({ b, onOpen }: { b: Breakout; onOpen: (symbol: string) => v
           {SESSION_LABEL[b.session] ?? b.session} · {b.confirmation.replace(/_/g, " ") || "confirmed"} ·{" "}
           {fmtUtc3(b.timestamp_utc)} · {relativeTime(b.timestamp_utc)}
         </div>
+        {note}
       </div>
     </li>
   );
@@ -114,6 +265,9 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<BreakoutRunStatus | null>(null);
   const [showLog, setShowLog] = useState(false);
+  const [noteKey, setNoteKey] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("note")
+  );
 
   // Debounce every filter change so typing does not fire a request per keystroke.
   useEffect(() => {
@@ -168,6 +322,21 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
 
   const pages = pageCount(logTotal, PAGE);
 
+  const openNote = (eventKey: string) => {
+    setNoteKey(eventKey);
+    const url = new URL(window.location.href);
+    url.searchParams.set("note", eventKey);
+    window.history.replaceState(null, "", url);
+  };
+  const closeNote = () => {
+    setNoteKey(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("note");
+    window.history.replaceState(null, "", url);
+  };
+
+  const visibleKeys = new Set([...live, ...logRows].map((b) => b.event_key).filter(Boolean));
+
   return (
     <Card className="mb-4 p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -184,6 +353,12 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
       {!enabled && <p className="mb-3 text-[12.5px] text-fg-muted">Breakout detection is turned off (ENABLE_BREAKOUTS=false).</p>}
       {error && <p className="mb-3 text-[12.5px] text-danger">{error}</p>}
 
+      {noteKey && !visibleKeys.has(noteKey) && (
+        <div className="mb-3">
+          <NotePanel eventKey={noteKey} onClose={closeNote} />
+        </div>
+      )}
+
       <FilterBar filters={filters} onChange={setFilters} />
 
       <div className="mt-3">
@@ -198,9 +373,20 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
           </p>
         )}
         <ul className="divide-y divide-hairline">
-          {live.map((b) => (
-            <BreakoutRow key={rowKey(b)} b={b} onOpen={(s) => onOpenSymbol?.(s)} />
-          ))}
+          {live.map((b) => {
+            const key = b.event_key;
+            const open = Boolean(key) && key === noteKey;
+            return (
+              <BreakoutRow
+                key={rowKey(b)}
+                b={b}
+                onOpen={(s) => onOpenSymbol?.(s)}
+                onNote={key ? () => (open ? closeNote() : openNote(key)) : undefined}
+                noteOpen={open}
+                note={key && open ? <NotePanel eventKey={key} onClose={closeNote} /> : undefined}
+              />
+            );
+          })}
         </ul>
       </div>
 
@@ -226,25 +412,51 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
                   <th className="py-1 pr-2 font-medium">Level</th>
                   <th className="py-1 pr-2 font-medium">Break</th>
                   <th className="py-1 pr-2 font-medium">ATR x</th>
-                  <th className="py-1 font-medium">Session</th>
+                  <th className="py-1 pr-2 font-medium">Session</th>
+                  <th className="py-1 font-medium">Note</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline">
-                {logRows.map((b) => (
-                  <tr key={rowKey(b)}>
-                    <td className="py-1 pr-2 text-fg-muted">{fmtUtc3(b.timestamp_utc)}</td>
-                    <td className="py-1 pr-2">
-                      <button type="button" className="font-semibold hover:text-accent" onClick={() => onOpenSymbol?.(b.symbol)}>
-                        {b.symbol}
-                      </button>
-                    </td>
-                    <td className="py-1 pr-2" style={{ color: BREAKOUT_STYLE[b.type].color }}>{BREAKOUT_STYLE[b.type].short}</td>
-                    <td className="py-1 pr-2">{fmtPrice(b.level_price)}</td>
-                    <td className="py-1 pr-2">{fmtPrice(b.break_price)}</td>
-                    <td className="py-1 pr-2">{b.break_atr_mult == null ? "-" : b.break_atr_mult.toFixed(1)}</td>
-                    <td className="py-1">{SESSION_LABEL[b.session] ?? b.session}</td>
-                  </tr>
-                ))}
+                {logRows.map((b) => {
+                  const key = b.event_key;
+                  const open = Boolean(key) && key === noteKey;
+                  return (
+                    <Fragment key={rowKey(b)}>
+                      <tr>
+                        <td className="py-1 pr-2 text-fg-muted">{fmtUtc3(b.timestamp_utc)}</td>
+                        <td className="py-1 pr-2">
+                          <button type="button" className="font-semibold hover:text-accent" onClick={() => onOpenSymbol?.(b.symbol)}>
+                            {b.symbol}
+                          </button>
+                        </td>
+                        <td className="py-1 pr-2" style={{ color: BREAKOUT_STYLE[b.type].color }}>{BREAKOUT_STYLE[b.type].short}</td>
+                        <td className="py-1 pr-2">{fmtPrice(b.level_price)}</td>
+                        <td className="py-1 pr-2">{fmtPrice(b.break_price)}</td>
+                        <td className="py-1 pr-2">{b.break_atr_mult == null ? "-" : b.break_atr_mult.toFixed(1)}</td>
+                        <td className="py-1 pr-2">{SESSION_LABEL[b.session] ?? b.session}</td>
+                        <td className="py-1">
+                          {key && (
+                            <button
+                              type="button"
+                              onClick={() => (open ? closeNote() : openNote(key))}
+                              aria-expanded={open}
+                              className="text-[11px] font-medium text-accent hover:underline"
+                            >
+                              {open ? "Hide" : "Note"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {key && open && (
+                        <tr>
+                          <td colSpan={8}>
+                            <NotePanel eventKey={key} onClose={closeNote} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

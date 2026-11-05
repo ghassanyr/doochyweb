@@ -18,6 +18,7 @@ import { backfillDone, breakoutsFile, firedIds, readRuns, type RunRecord, type S
 import { describeError, getCandles } from "./providers/index";
 import { getWatchlist, publicSettings } from "./store";
 import { loadCatalog, resolveMeta } from "./routes";
+import { publishRunNarrations } from "./narrationEvents";
 import type { Candle } from "./types";
 
 export const BACKFILL_DAYS = 7;
@@ -148,20 +149,25 @@ export async function runOnce(now = Date.now()): Promise<RunRecord> {
 }
 
 /**
- * Replay the engine at every hourly boundary of the past BACKFILL_DAYS, once.
+ * Replay the engine at every hourly boundary of the past `days`, once.
  * Writes one run line per boundary, flagged backfilled. Writes nothing if it fails.
+ * `force` is for a one-off longer backfill: it ignores the done marker but still
+ * skips boundaries already present, so no run is duplicated.
  */
-export async function backfill(now = Date.now()): Promise<number> {
+export async function backfill(now = Date.now(), days = BACKFILL_DAYS, force = false): Promise<number> {
   const runs = readRuns();
-  if (backfillDone(runs)) return 0;
+  if (!force && backfillDone(runs)) return 0;
   const fired = firedIds(runs);
+  const seen = new Set(runs.map((r) => r.timestamp_utc));
   const data = await loadWatchlistBars();
   const end = lastBoundary(now);
-  const start = end - BACKFILL_DAYS * 24 * H1_MS;
+  const start = end - days * 24 * H1_MS;
   const records: RunRecord[] = [];
   for (let t = start; t <= end; t += H1_MS) {
+    const iso = new Date(t).toISOString();
+    if (force && seen.has(iso)) continue;
     const rec = runAt(t, data, fired, true);
-    rec.timestamp_utc = new Date(t).toISOString();
+    rec.timestamp_utc = iso;
     records.push(rec);
   }
   appendRuns(records);
@@ -193,6 +199,7 @@ export function startBreakoutScheduler(log: (msg: string) => void = console.log)
       if (filled) log(`[breakouts] backfill wrote ${filled} breakouts over ${BACKFILL_DAYS} days`);
       const rec = await runOnce();
       log(`[breakouts] run ${rec.asOf}: ${rec.evaluated.length} evaluated, ${Object.keys(rec.skipped).length} skipped, ${rec.breakouts.length} new`);
+      if (rec.breakouts.length) void publishRunNarrations(rec, log);
     } catch (err) {
       log(`[breakouts] run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -203,12 +210,16 @@ export function startBreakoutScheduler(log: (msg: string) => void = console.log)
   setTimeout(tick, FIRST_RUN_DELAY_MS);
 }
 
-// CLI: tsx src/server/market/breakoutRunner.ts [--once] [--backfill]
+// CLI: tsx src/server/market/breakoutRunner.ts [--once] [--backfill [--days=N] [--force]]
 if (process.argv[1]?.endsWith("breakoutRunner.ts")) {
   const args = process.argv.slice(2);
   (async () => {
     await connectDb();
-    if (args.includes("--backfill")) console.log("backfilled:", await backfill());
+    if (args.includes("--backfill")) {
+      const daysArg = args.find((a) => a.startsWith("--days="));
+      const days = daysArg ? Number(daysArg.slice("--days=".length)) : BACKFILL_DAYS;
+      console.log("backfilled:", await backfill(Date.now(), days, args.includes("--force")));
+    }
     if (args.includes("--once")) {
       const rec = await runOnce();
       console.log(JSON.stringify({ asOf: rec.asOf, evaluated: rec.evaluated, skipped: rec.skipped, breakouts: rec.breakouts }, null, 2));

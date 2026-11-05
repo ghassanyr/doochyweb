@@ -2,7 +2,7 @@ import "dotenv/config";
 // Scraper runner: replaces the OpenClaw doochy-scraper cron.
 //
 // One run per hour at HH:02 UTC: collect closed bars, diff against the previous run,
-// detect needles, append the capture JSONL the UI already reads, and notify Telegram.
+// detect needles, and append the capture JSONL the UI already reads.
 // Change detection and needle dedup are persisted in data/scraper-state.json.
 //
 // Disabled by default (SCRAPER_ENABLED=false) so it can run alongside the OpenClaw cron
@@ -16,7 +16,6 @@ import mongoose from "mongoose";
 
 import { connectDb } from "../db";
 import { capturesPath } from "./captures";
-import { sendTelegram } from "./notify";
 import { collectObservations } from "./scraperCollect";
 import {
   buildCapture, diffObservations, newNeedles, sessionLabel,
@@ -86,31 +85,6 @@ export function appendCapture(payload: CapturePayload, file: string = capturesPa
   fs.appendFileSync(file, prefix + line);
 }
 
-/**
- * One message per run, at most. Captures with needles or a full session anchor
- * report the summary; needle lines are bundled so a symbol never costs a separate
- * message. Quiet hourly captures stay silent.
- */
-export function captureMessage(p: CapturePayload, bySymbol: Map<string, Obs>): string | null {
-  if (!p.needles_fired.length && p.capture_type !== "full") return null;
-  const hhmm = p.timestamp_utc.slice(11, 16);
-  const lines = [
-    `Doochy ${p.session} capture ${hhmm} UTC (${p.capture_type})`,
-    `Strong Buy ${p.summary.strong_buy}, Strong Sell ${p.summary.strong_sell}, ` +
-      `1H+4H alignments ${p.summary.engulf_alignments}, triple ${p.summary.triple_alignments}`,
-  ];
-  if (p.needles_fired.length) {
-    lines.push("", "NEEDLES");
-    for (const n of p.needles_fired) {
-      const o = bySymbol.get(n.symbol);
-      const price = o?.price != null ? String(o.price) : "-";
-      const label = n.kind === "triple" ? "triple" : "1H+4H engulf";
-      lines.push(`${n.symbol} ${label} | ${n.level} | ${price}`);
-    }
-  }
-  return lines.join("\n");
-}
-
 export interface RunResult {
   timestamp_utc: string;
   session: string;
@@ -118,7 +92,6 @@ export interface RunResult {
   skipped: Record<string, string>;
   changes: number;
   needles: Needle[];
-  notified: number;
   capture: CapturePayload;
 }
 
@@ -126,7 +99,7 @@ export interface RunResult {
  * One live run. Persists state and appends the capture. `now` defaults to the clock.
  * The capture is stamped at the last closed hour boundary.
  */
-export async function runOnce(now: number = Date.now(), opts: { force?: boolean; notify?: boolean } = {}): Promise<RunResult> {
+export async function runOnce(now: number = Date.now(), opts: { force?: boolean } = {}): Promise<RunResult> {
   const state = loadState();
   const ts = new Date(Math.floor(now / H1_MS) * H1_MS);
   const timestampUtc = ts.toISOString();
@@ -141,18 +114,6 @@ export async function runOnce(now: number = Date.now(), opts: { force?: boolean;
   const needles = newNeedles(state.obs, cur, `${session}:${date}`, fired);
   const capture = buildCapture({ timestamp_utc: timestampUtc, obs: cur, changes, needles });
   appendCapture(capture);
-
-  let notified = 0;
-  const wantNotify = opts.notify !== false && (process.env.SCRAPER_TELEGRAM ?? "true").trim().toLowerCase() !== "false";
-  if (wantNotify) {
-    const bySymbol = new Map(cur.map((o) => [o.symbol, o]));
-    const text = captureMessage(capture, bySymbol);
-    if (text) {
-      const err = await sendTelegram(text);
-      if (err) process.stderr.write(`[scraper] telegram capture: ${err}\n`);
-      else notified++;
-    }
-  }
 
   // Keep the last observation of symbols that were skipped this run, so a stale gap
   // does not look like a brand-new alignment when the series recovers.
@@ -176,7 +137,6 @@ export async function runOnce(now: number = Date.now(), opts: { force?: boolean;
     skipped: coll.skipped,
     changes: changes.length,
     needles,
-    notified,
     capture,
   };
 }
@@ -208,7 +168,7 @@ export function startScraperScheduler(log: (msg: string) => void = console.log):
     running = true;
     try {
       const r = await runOnce();
-      log(`[scraper] ${r.timestamp_utc} ${r.session}: ${r.evaluated} evaluated, ${Object.keys(r.skipped).length} skipped, ${r.changes} changes, ${r.needles.length} needles, ${r.notified} notified`);
+      log(`[scraper] ${r.timestamp_utc} ${r.session}: ${r.evaluated} evaluated, ${Object.keys(r.skipped).length} skipped, ${r.changes} changes, ${r.needles.length} needles`);
     } catch (err) {
       log(`[scraper] run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -221,16 +181,16 @@ export function startScraperScheduler(log: (msg: string) => void = console.log):
   setTimeout(tick, delay);
 }
 
-// CLI: tsx src/server/market/scraperRunner.ts [--once] [--no-notify]
+// CLI: tsx src/server/market/scraperRunner.ts [--once]
 if (process.argv[1]?.endsWith("scraperRunner.ts")) {
   const args = process.argv.slice(2);
   (async () => {
     await connectDb();
     if (args.includes("--once")) {
-      const r = await runOnce(Date.now(), { notify: !args.includes("--no-notify") });
+      const r = await runOnce(Date.now());
       process.stdout.write(JSON.stringify({
         timestamp_utc: r.timestamp_utc, session: r.session, evaluated: r.evaluated,
-        skipped: r.skipped, changes: r.changes, needles: r.needles, notified: r.notified,
+        skipped: r.skipped, changes: r.changes, needles: r.needles,
       }, null, 2) + "\n");
     }
   })()

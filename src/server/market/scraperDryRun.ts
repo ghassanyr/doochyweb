@@ -1,6 +1,6 @@
 // Dry run of the ported scraper rules on live bars. Writes nothing (no captures, no CSV,
-// no Telegram, no state). It prints the observations, the capture that would be written,
-// and a parity table against the public doochy.net analysis API.
+// no state). It prints the observations, the capture that would be written, and a parity
+// table against the public doochy.net analysis API.
 //
 //   tsx src/server/market/scraperDryRun.ts [--compare=https://doochy.net]
 import "dotenv/config";

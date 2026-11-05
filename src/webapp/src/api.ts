@@ -199,6 +199,12 @@ export const marketApi = {
     return request<import("./market/types").BreakoutsResponse>(`/api/market/breakouts?${qs.toString()}`);
   },
 
+  // Published research note for one breakout event. 404 = not generated yet.
+  narration: (eventKey: string) =>
+    request<import("./market/types").NarrationNote>(
+      `/api/market/narrations?event=${encodeURIComponent(eventKey)}`
+    ),
+
   settings: () => request<import("./market/types").MarketSettings>("/api/market/settings"),
 
   saveSettings: (patch: Partial<import("./market/types").MarketSettings>) =>
