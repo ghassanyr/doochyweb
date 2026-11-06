@@ -16,6 +16,8 @@ import { normalizeCapture } from "../src/server/market/captures";
 import {
   ALL_TYPES,
   breakPct,
+  breakoutDirection,
+  breakoutMeterPct,
   breakoutSummary,
   loadTypeSelection,
   noneSelected,
@@ -140,6 +142,20 @@ describe("webapp helpers", () => {
     const s = breakoutSummary(b);
     assert.ok(s.includes("EURJPY") && s.includes("Resistance") && s.includes("1.3x ATR"), s);
     assert.equal(breakPct({ ...b, level_price: null }), null);
+  });
+
+  test("card direction and ATR meter", () => {
+    const resistance = normalizeBreakout(SAMPLE)!;
+    const support = normalizeBreakout({ ...SAMPLE, type: "support_break", level_type: "swing_low", break_price: 175.9 })!;
+    const patternUp = normalizeBreakout({ ...SAMPLE, type: "pattern_break" })!;
+    const patternDown = normalizeBreakout({ ...SAMPLE, type: "pattern_break", break_price: 175.9 })!;
+    assert.equal(breakoutDirection(resistance), "above");
+    assert.equal(breakoutDirection(support), "below");
+    assert.equal(breakoutDirection(patternUp), "above");
+    assert.equal(breakoutDirection(patternDown), "below");
+    assert.equal(breakoutMeterPct({ ...resistance, break_atr_mult: null }), 0);
+    assert.ok(Math.abs(breakoutMeterPct(resistance) - (1.3 / 3) * 100) < 1e-9);
+    assert.equal(breakoutMeterPct({ ...resistance, break_atr_mult: 9 }), 100);
   });
 
   test("type selection maps to the API parameter", () => {

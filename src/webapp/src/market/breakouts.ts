@@ -53,6 +53,20 @@ export function fmtPrice(n: number | null): string {
   return n.toFixed(abs >= 100 ? 2 : abs >= 1 ? 4 : 6);
 }
 
+/** Whether the event broke above or below its reference level. */
+export function breakoutDirection(b: Breakout): "above" | "below" {
+  if (b.type === "resistance_break") return "above";
+  if (b.type === "support_break") return "below";
+  if (b.level_price == null || b.break_price == null) return "above";
+  return b.break_price >= b.level_price ? "above" : "below";
+}
+
+/** Meter fill for the ATR distance; 3 ATR or more fills the bar. */
+export function breakoutMeterPct(b: Breakout): number {
+  if (b.break_atr_mult == null) return 0;
+  return Math.max(0, Math.min(100, (Math.abs(b.break_atr_mult) / 3) * 100));
+}
+
 /** One-line summary used in tooltips. */
 export function breakoutSummary(b: Breakout): string {
   const style = BREAKOUT_STYLE[b.type];
