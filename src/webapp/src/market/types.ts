@@ -77,7 +77,7 @@ export interface MarketAnalysisError {
 
 export type MarketResult = MarketAnalysis | MarketAnalysisError;
 
-// ---- OpenClaw capture log (written by the doochy-scraper cron) ----
+// ---- Market snapshot log (written by the doochy-scraper cron) ----
 
 export interface CaptureChange {
   symbol: string;
@@ -99,7 +99,7 @@ export interface CaptureNeedle {
   level: string;
 }
 
-export interface OpenclawCapture {
+export interface MarketSnapshot {
   schema_version: number | null;
   timestamp_utc: string;
   session: string;

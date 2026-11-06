@@ -14,8 +14,9 @@ import {
   matchesCapture,
   relativeTime,
 } from "./captures";
-import type { CaptureAlignment, CaptureChange, OpenclawCapture } from "./types";
+import type { CaptureAlignment, CaptureChange, MarketSnapshot } from "./types";
 
+// Keep the old key so existing users do not lose their read marker.
 const SEEN_KEY = "doochyweb_openclaw_seen";
 const PAGE = 40;
 const MAX = 1000;
@@ -163,14 +164,14 @@ function Stat({ label, value, color }: { label: string; value: number; color?: s
   );
 }
 
-function CaptureRow({
+function SnapshotRow({
   cap,
   open,
   unseen,
   onToggle,
   onOpenSymbol,
 }: {
-  cap: OpenclawCapture;
+  cap: MarketSnapshot;
   open: boolean;
   unseen: boolean;
   onToggle: () => void;
@@ -194,7 +195,7 @@ function CaptureRow({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        aria-label={`${fmtUtc3(cap.timestamp_utc)} ${sessionLabel} capture`}
+        aria-label={`${fmtUtc3(cap.timestamp_utc)} ${sessionLabel} snapshot`}
         className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left transition hover:bg-surface-hover/60"
       >
         <span
@@ -316,7 +317,7 @@ function CaptureRow({
             </div>
           )}
 
-          {!hasDetail && <div className="text-[12px] text-fg-muted">No pattern changes or alignments this capture.</div>}
+          {!hasDetail && <div className="text-[12px] text-fg-muted">No pattern changes or alignments this snapshot.</div>}
 
           {cap.next_check_utc && (
             <div className="text-[11px] text-fg-faint">
@@ -331,8 +332,8 @@ function CaptureRow({
 
 type Filter = "all" | "full" | "hourly";
 
-export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) => void }) {
-  const [captures, setCaptures] = useState<OpenclawCapture[]>([]);
+export function MarketSnapshots({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) => void }) {
+  const [captures, setCaptures] = useState<MarketSnapshot[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -353,7 +354,7 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
   // persisted on hide/leave only if the section was actually on screen, plus
   // immediately via the explicit Mark read control.
   const cardRef = useRef<HTMLDivElement>(null);
-  const capturesRef = useRef<OpenclawCapture[]>([]);
+  const capturesRef = useRef<MarketSnapshot[]>([]);
   const inViewRef = useRef(false);
   useEffect(() => {
     capturesRef.current = captures;
@@ -412,7 +413,7 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
     } catch (err) {
       // Keep the last good list on screen; the header says it is reconnecting.
       setStale(true);
-      setError(err instanceof Error ? err.message : "Failed to read captures");
+      setError(err instanceof Error ? err.message : "Failed to read snapshots");
     } finally {
       setLoaded(true);
     }
@@ -438,7 +439,7 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
   );
 
   const groups = useMemo(() => {
-    const out: { key: string; label: string; items: OpenclawCapture[] }[] = [];
+    const out: { key: string; label: string; items: MarketSnapshot[] }[] = [];
     for (const cap of visible) {
       const key = dayKey(cap.timestamp_utc);
       const last = out[out.length - 1];
@@ -474,10 +475,10 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
       <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-3.5 py-2.5">
         <Radio className="h-4 w-4 text-accent" />
-        <h2 className="text-sm font-semibold text-fg">OpenClaw Captures</h2>
+        <h2 className="text-sm font-semibold text-fg">Market Snapshots</h2>
         {captures.length > 0 && (
           <Badge tone="muted">
-            {captures.length} {captures.length === 1 ? "capture" : "captures"}
+            {captures.length} {captures.length === 1 ? "snapshot" : "snapshots"}
           </Badge>
         )}
         {unread > 0 && (
@@ -520,7 +521,7 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter symbol"
-              aria-label="Filter captures by symbol"
+              aria-label="Filter snapshots by symbol"
               className="h-7 w-40 rounded-md border border-hairline-strong bg-soft pl-7 pr-2 text-xs text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
             />
           </div>
@@ -528,7 +529,7 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
       )}
 
       {!loaded ? (
-        <div className="px-3.5 py-6 text-center text-[12px] text-fg-muted">Loading captures…</div>
+        <div className="px-3.5 py-6 text-center text-[12px] text-fg-muted">Loading snapshots…</div>
       ) : error && captures.length === 0 ? (
         <div className="px-3.5 py-6 text-center text-[12px] text-fg-muted">
           {error}
@@ -542,11 +543,11 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
         </div>
       ) : captures.length === 0 ? (
         <div className="px-3.5 py-6 text-center text-[12px] text-fg-muted">
-          No captures yet. The next cron run will append one here.
+          No snapshots yet. The next cron run will append one here.
         </div>
       ) : visible.length === 0 ? (
         <div className="px-3.5 py-6 text-center text-[12px] text-fg-muted">
-          No captures match this filter.
+          No snapshots match this filter.
         </div>
       ) : (
         <div className="max-h-[460px] overflow-y-auto overscroll-contain">
@@ -557,7 +558,7 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
               </div>
               {group.items.map((cap) => (
                 <div key={cap.timestamp_utc} className="border-t border-hairline/60 first:border-t-0">
-                  <CaptureRow
+                  <SnapshotRow
                     cap={cap}
                     open={open[cap.timestamp_utc] ?? cap === firstVisible}
                     unseen={Date.parse(cap.timestamp_utc) > seen}
@@ -580,7 +581,7 @@ export function OpenclawCaptures({ onOpenSymbol }: { onOpenSymbol?: (symbol: str
                 onClick={() => setLimit((l) => Math.min(MAX, l + PAGE))}
                 className="rounded-md px-3 py-1 text-[11px] font-medium text-accent hover:bg-accent-soft"
               >
-                Load older captures
+                Load older snapshots
               </button>
             </div>
           )}

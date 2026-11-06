@@ -189,7 +189,7 @@ export const marketApi = {
     ),
 
   captures: (limit = 40) =>
-    request<{ captures: import("./market/types").OpenclawCapture[]; updatedAt: number }>(
+    request<{ captures: import("./market/types").MarketSnapshot[]; updatedAt: number }>(
       `/api/market/captures?limit=${limit}`
     ),
 

@@ -822,8 +822,8 @@ describe("OpenClaw capture normalization", () => {
   });
 });
 
-describe("OpenClaw capture UI helpers", () => {
-  function cap(overrides: Partial<import("../src/webapp/src/market/types").OpenclawCapture> = {}) {
+describe("market snapshot UI helpers", () => {
+  function cap(overrides: Partial<import("../src/webapp/src/market/types").MarketSnapshot> = {}) {
     return {
       schema_version: 1,
       timestamp_utc: "2026-10-26T17:04:00Z",

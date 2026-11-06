@@ -1,7 +1,7 @@
-// Pure formatting and filtering helpers for the OpenClaw captures panel. Kept
+// Pure formatting and filtering helpers for the market snapshots panel. Kept
 // out of the .tsx so they can be unit tested (the test tsconfig has no JSX).
 
-import type { CaptureChange, OpenclawCapture } from "./types";
+import type { CaptureChange, MarketSnapshot } from "./types";
 
 // The cron writes UTC. Everything the trader reads is UTC+3 (fixed offset, no
 // DST) to match the legacy capture summaries.
@@ -91,7 +91,7 @@ export function changedSymbolCount(changes: CaptureChange[]): number {
 }
 
 /** True when the free-text query matches any symbol, session or type. */
-export function matchesCapture(cap: OpenclawCapture, query: string): boolean {
+export function matchesCapture(cap: MarketSnapshot, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const symbols = [

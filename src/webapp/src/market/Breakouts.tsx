@@ -338,7 +338,7 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
   const visibleKeys = new Set([...live, ...logRows].map((b) => b.event_key).filter(Boolean));
 
   return (
-    <Card className="mb-4 p-4">
+    <Card className="p-4">
       <div className="mb-3 flex items-center gap-2">
         <Radio className="h-4 w-4 text-accent" />
         <h3 className="text-sm font-semibold text-fg">Breakouts</h3>

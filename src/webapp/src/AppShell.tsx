@@ -4,18 +4,19 @@ import { LogIn, LogOut, RefreshCw, Settings } from "lucide-react";
 import { Button } from "./components/ui";
 
 // Top-level shell: brand, primary navigation, and the account-level actions
-// (settings / sign out). Both the trading view and the Analysis page render
+// (settings / sign out). The Analysis, Breakouts and Trading views render
 // inside it, so switching between them never remounts the chrome.
 //
-// The header used to live inside Dashboard; it was lifted here so a second
-// top-level view could share it. Styling follows the standalone Gauge project:
+// The header used to live inside Dashboard; it was lifted here so more
+// top-level views could share it. Styling follows the standalone Gauge project:
 // sticky translucent topbar, a segmented control for the primary nav, and the
 // 1600px page measure.
 
-export type ViewKey = "trading" | "analysis";
+export type ViewKey = "trading" | "analysis" | "breakouts";
 
 const NAV: { key: ViewKey; label: string }[] = [
   { key: "analysis", label: "Analysis" },
+  { key: "breakouts", label: "Breakouts" },
   { key: "trading", label: "Trading" },
 ];
 
@@ -34,8 +35,8 @@ export function AppShell({
   // Optional view-level refresh. Omitted for views that own their own refresh
   // control (the Analysis page has one in its toolbar).
   onRefresh?: () => Promise<void> | void;
-  // The Analysis page is public; the account-level actions only appear once
-  // there is a session.
+  // The Analysis and Breakouts pages are public; the account-level actions
+  // only appear once there is a session.
   signedIn: boolean;
   onOpenSettings: () => void;
   onSignIn: () => void;

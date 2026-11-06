@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
+import BreakoutsPage from "./market/BreakoutsPage";
 import AppShell, { type ViewKey } from "./AppShell";
 import ConnectPanel from "./ConnectPanel";
 import Dashboard from "./Dashboard";
@@ -9,13 +10,17 @@ import SettingsPage from "./Settings";
 import { useAccounts } from "./useAccounts";
 import { Skeleton } from "./components/ui";
 
-// The Analysis page is public: market quotes and the shared watchlist carry no
-// account data, so a visitor can use it without an account. The Trading tab
-// holds cTrader credentials, positions and orders, so it stays behind auth.
+// The Analysis and Breakouts pages are public: market quotes, the shared
+// watchlist and the breakout feed carry no account data. The Trading tab holds
+// cTrader credentials, positions and orders, so it stays behind auth.
 export default function App() {
   const [token, setTokenState] = useState<string | null>(() => getToken());
   const [booting, setBooting] = useState<boolean>(() => !!getToken());
-  const [view, setView] = useState<ViewKey>("analysis");
+  const [view, setView] = useState<ViewKey>(() => {
+    // Shared note links land on the Breakouts tab, where the note panel lives.
+    if (typeof window === "undefined") return "analysis";
+    return new URLSearchParams(window.location.search).has("note") ? "breakouts" : "analysis";
+  });
   const [showSettings, setShowSettings] = useState(false);
   const signedIn = !!token;
   const { accounts, setAccounts, hasCredentials, load, refreshBalances, connect } =
@@ -46,11 +51,22 @@ export default function App() {
     setTokenState(t);
   }
 
+  function handleViewChange(next: ViewKey) {
+    setView(next);
+    if (next === "breakouts") return;
+    // A shared-note query belongs to the Breakouts tab; do not let it pull the
+    // next reload back there after the user leaves.
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("note")) return;
+    url.searchParams.delete("note");
+    window.history.replaceState(null, "", url);
+  }
+
   function handleLogout() {
     setToken(null);
     setTokenState(null);
     setShowSettings(false);
-    setView("analysis");
+    handleViewChange("analysis");
   }
 
   // Settings manages cTrader credentials, so it is a takeover for signed-in
@@ -72,15 +88,17 @@ export default function App() {
   return (
     <AppShell
       view={view}
-      onViewChange={setView}
+      onViewChange={handleViewChange}
       onRefresh={signedIn ? refreshBalances : undefined}
       signedIn={signedIn}
       onOpenSettings={() => setShowSettings(true)}
-      onSignIn={() => setView("trading")}
+      onSignIn={() => handleViewChange("trading")}
       onLogout={handleLogout}
     >
       {view === "analysis" ? (
         <AnalysisPage canWrite={signedIn} />
+      ) : view === "breakouts" ? (
+        <BreakoutsPage canWrite={signedIn} />
       ) : !signedIn ? (
         <div className="flex justify-center py-8">
           <Login
