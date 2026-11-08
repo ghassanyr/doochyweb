@@ -12,6 +12,7 @@ import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder,
 import { marketRouter } from "./market/routes";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
+import { createTrainerRouter } from "./trainer/routes";
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -389,6 +390,7 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 // Everything under /api/accounts and /api/credentials stays behind auth.
 // -----------------------------------------------------------------------
 app.use("/api/market", marketRouter);
+app.use("/api/trainer", createTrainerRouter());
 
 // -----------------------------------------------------------------------
 // Static serving for the React SPA (production build)

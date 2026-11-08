@@ -32,6 +32,12 @@ export const BATCH_VERSION = "v1";
 /** Approximate number of curated items in the pilot batch. */
 export const BATCH_TARGET = 50;
 
+/** Maximum context bars shown before the cut (the cut bar is included). */
+export const CONTEXT_MAX_BARS = 120;
+
+/** Balance caps an over-represented outcome at this share of the batch. */
+export const BALANCE_MAX_SHARE = 0.7;
+
 /**
  * Maximum candidates kept per tag per series. Larger match sets are sampled
  * deterministically so the review CSV stays small and evenly spread in time.

@@ -87,6 +87,23 @@ export interface ReviewRow {
   notes: string;
 }
 
+/** Mechanical triple-barrier result for one cut, including excursions. */
+export interface OutcomeResult {
+  outcome: Outcome;
+  /** Bar index that resolved the outcome; null for a time-barrier scratch. */
+  outcomeIndex: number | null;
+  /** Maximum favourable excursion in ATR units (clamped at 0). */
+  mfeAtr: number;
+  /** Maximum adverse excursion in ATR units (clamped at 0). */
+  maeAtr: number;
+  /** MFE expressed in R multiples of the barrier width. */
+  mfeR: number;
+  /** MAE expressed in R multiples of the barrier width. */
+  maeR: number;
+  /** True when both barriers were touched on the resolving bar. */
+  ambiguousSameBar: boolean;
+}
+
 /** Triple-barrier levels for one item, all anchored to the cut bar. */
 export interface Barrier {
   /** Bar index of the cut; the reveal window starts after this bar. */
@@ -130,6 +147,10 @@ export interface TrainerItem {
   mfeAtr: number;
   /** Maximum adverse excursion in ATR units from the cut close. */
   maeAtr: number;
+  /** MFE expressed in R multiples of the barrier width. */
+  mfeR: number;
+  /** MAE expressed in R multiples of the barrier width. */
+  maeR: number;
   /** Short explainer shown after reveal. */
   why: string;
 }
@@ -144,5 +165,7 @@ export interface TrainerBatch {
   barrierHorizon: number;
   /** Empirical outcome frequencies keyed by tag, plus "all". */
   baseRates: Record<string, Record<Outcome, number>>;
+  /** Raw outcome counts backing `baseRates`, keyed by tag plus "all". */
+  baseRateCounts: Record<string, Record<Outcome, number>>;
   items: TrainerItem[];
 }

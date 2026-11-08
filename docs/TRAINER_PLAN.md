@@ -38,8 +38,8 @@ short delivery note. The worker updates the checkboxes and status table in this 
 | 1 | Long-history ingestion + bar QA | done |
 | 2 | Detector refactor + historical scan | done |
 | 3 | CLI + CSV review workflow | done |
-| 4 | Outcome, barriers, base rates, publish | not started |
-| 5 | Public API (server) | not started |
+| 4 | Outcome, barriers, base rates, publish | done |
+| 5 | Public API (server) | done |
 | 6 | Minimal public UI + accuracy scoring | not started |
 | 7 | Pilot review, deploy, docs | not started |
 
@@ -143,17 +143,17 @@ tests + typecheck pass.
 **Goal:** turn accepted items into a labelled, versioned batch.
 
 Tasks:
-- [ ] Implement `src/server/trainer/outcomes.ts`: triple barrier at cut with `k=1.0×ATR`,
+- [x] Implement `src/server/trainer/outcomes.ts`: triple barrier at cut with `k=1.0×ATR`,
       `H=20`; label `up | down | scratch`; compute MFE/MAE in ATR and R terms.
-- [ ] Compute per-item realized direction and base rates per tag + pooled baseline.
-- [ ] Enforce non-overlap where possible and flag near-duplicates; stratify published items
+- [x] Compute per-item realized direction and base rates per tag + pooled baseline.
+- [x] Enforce non-overlap where possible and flag near-duplicates; stratify published items
       by outcome so the batch is not all one direction.
-- [ ] Assert no look-ahead leakage: context is strictly bars `[.. cut]`; reveal is
+- [x] Assert no look-ahead leakage: context is strictly bars `[.. cut]`; reveal is
       `(cut, cut+H]`; nothing from the future is stored in the context payload.
-- [ ] Publish an immutable batch: `data/trainer/batches/<version>.json` plus Mongo
+- [x] Publish an immutable batch: `data/trainer/batches/<version>.json` plus Mongo
       `TrainerBatches` / `TrainerItems`.
-- [ ] Add `pnpm trainer:publish` with a batch version and item count report.
-- [ ] Tests: barrier resolution (up/down/scratch), MFE/MAE, base-rate math, overlap
+- [x] Add `pnpm trainer:publish` with a batch version and item count report.
+- [x] Tests: barrier resolution (up/down/scratch), MFE/MAE, base-rate math, overlap
       detection, leakage assertion.
 
 Deliverables: outcome engine + batch publisher.
@@ -166,14 +166,14 @@ Acceptance: a ~50-item batch (`v1`) is published with base rates; tests + typech
 **Goal:** serve anonymous drill sessions with server-side reveal.
 
 Tasks:
-- [ ] Add `src/server/trainer/routes.ts`, mounted under `/api/trainer`.
-- [ ] Endpoints: `GET /batch` (metadata), `GET /session` / `GET /item` (anonymized context
+- [x] Add `src/server/trainer/routes.ts`, mounted under `/api/trainer`.
+- [x] Endpoints: `GET /batch` (metadata), `GET /session` / `GET /item` (anonymized context
       only), `POST /answer` (validate, record), `POST /reveal` (returns future bars + outcome
       + base rate + why). Reveal is a separate call a client can only make after answering.
-- [ ] Anonymize payloads: no symbol, no absolute timestamps/dates, no absolute price; provide
+- [x] Anonymize payloads: no symbol, no absolute timestamps/dates, no absolute price; provide
       `%`/index-100 normalized values. Strip any field that could leak identity.
-- [ ] Store anonymous attempts in memory or Mongo keyed by a client session id; no login.
-- [ ] Tests: no future data in item payload, reveal gating, anonymization fields absent,
+- [x] Store anonymous attempts in memory or Mongo keyed by a client session id; no login.
+- [x] Tests: no future data in item payload, reveal gating, anonymization fields absent,
       validation.
 
 Deliverables: trainer API.
@@ -243,3 +243,5 @@ Add a dated line here when a phase starts, blocks, or completes.
 - 2026-11-08 — Phase 1 done: Binance ingestion + TrainerBars + QA + CLI; ingested 262,794 bars across 6 pairs with 0 gaps; `pnpm typecheck` and `pnpm test` pass.
 - 2026-11-08 — Phase 2 done: pure detectors for all 11 tags + `scan.ts` guards, deterministic per-tag cap (`SCAN_CAP_PER_TAG_PER_SERIES=10`), candidates CSV and `trainer:scan`; scan emitted 660 rows across 6 pairs; `pnpm typecheck` and `pnpm test` (249) pass.
 - 2026-11-08 — Phase 3 done: RFC4180 CSV helpers, export/import validation, `TrainerReviews` store, and `trainer:review` export/import/stats/set; 660-row review round-trip preserved every pending row, one row set to accept; `pnpm typecheck` and `pnpm test` (281) pass.
+- 2026-11-08 — Phase 4 done: `outcomes.ts` triple barrier + MFE/MAE/R, no-leak context slices, `publish.ts` deterministic frozen batch, per-series overlap guard, outcome balancing, per-tag + pooled base rates, file/Mongo publisher, and `trainer:publish`; dry run kept 1 accepted row (`sr_flip`, up 1.000) and wrote nothing; `pnpm typecheck` and `pnpm test` (304) pass.
+- 2026-11-08 — Phase 5 done: public `/api/trainer` router with lazy latest-batch loading, anonymous session selection, percent/volume-normalized context and reveal payloads, opaque item ids, in-memory first-answer-wins attempt store with TTL/session cap, and answer-gated reveal; `pnpm typecheck` and `pnpm test` (329) pass.
