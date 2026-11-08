@@ -10,13 +10,14 @@
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && pnpm typecheck:web && pnpm typecheck:test",
     "build": "tsc -p tsconfig.server.json && pnpm typecheck:web && pnpm typecheck:test && vite build",
-    "test": "tsx --test test/market.test.ts test/breakouts.test.ts test/breakoutEngine.test.ts test/analogues.test.ts test/narration.test.ts test/narrationModel.test.ts test/scraperRules.test.ts test/scraperRunner.test.ts test/scraperReplay.test.ts test/twelveData.test.ts test/trainerIngest.test.ts test/trainerDetectors.test.ts test/trainerScan.test.ts",
+    "test": "tsx --test test/market.test.ts test/breakouts.test.ts test/breakoutEngine.test.ts test/analogues.test.ts test/narration.test.ts test/narrationModel.test.ts test/scraperRules.test.ts test/scraperRunner.test.ts test/scraperReplay.test.ts test/twelveData.test.ts test/trainerIngest.test.ts test/trainerDetectors.test.ts test/trainerScan.test.ts test/trainerReview.test.ts",
     "start": "node dist/server/index.js",
     "crosscheck": "tsx src/server/market/crossCheck.ts",
     "replay": "tsx src/server/market/scraperReplay.ts",
     "narrate": "tsx src/server/market/narrateCli.ts",
     "trainer:ingest": "tsx src/server/trainer/ingest.ts",
-    "trainer:scan": "tsx src/server/trainer/scan.ts"
+    "trainer:scan": "tsx src/server/trainer/scan.ts",
+    "trainer:review": "tsx src/server/trainer/review.ts"
   },
   "packageManager": "pnpm@11.18.0",
   "dependencies": {

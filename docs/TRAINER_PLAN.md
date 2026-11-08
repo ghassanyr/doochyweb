@@ -37,7 +37,7 @@ short delivery note. The worker updates the checkboxes and status table in this 
 | 0 | Foundations, taxonomy, config | done |
 | 1 | Long-history ingestion + bar QA | done |
 | 2 | Detector refactor + historical scan | done |
-| 3 | CLI + CSV review workflow | not started |
+| 3 | CLI + CSV review workflow | done |
 | 4 | Outcome, barriers, base rates, publish | not started |
 | 5 | Public API (server) | not started |
 | 6 | Minimal public UI + accuracy scoring | not started |
@@ -116,18 +116,21 @@ pass.
 **Goal:** let a human curate candidates without a UI.
 
 Tasks:
-- [ ] Define and document the CSV schema (see below).
-- [ ] Add `pnpm trainer:review` commands: `export` (candidates → review CSV), `import`
+- [x] Define and document the CSV schema (see below).
+- [x] Add `pnpm trainer:review` commands: `export` (candidates → review CSV), `import`
       (validated review CSV → store), `stats` (counts by tag/status/ambiguity), and
-      `accept`/`reject` quick edits.
-- [ ] Validate on import: known tag, cutIndex within range, required level fields for tags
+      `set` quick edits.
+- [x] Validate on import: known tag, cutIndex within range, required level fields for tags
       that need them, ambiguity 1–5, no unknown ids. Reject bad rows with clear messages.
-- [ ] Round-trip safety: importing never loses unedited rows; ids are stable.
-- [ ] Tests: CSV serialise/parse round-trip, validation failures, stats.
+- [x] Round-trip safety: importing never loses unedited rows; ids are stable.
+- [x] Tests: CSV serialise/parse round-trip, validation failures, stats.
 
-Review CSV schema (minimum):
-`id, symbol, timeframe, cutIndex, tag, family, status(accept|reject), ambiguity(1-5),
- levelUpper, levelLower, neckline, notes`
+Review CSV schema:
+`id, symbol, timeframe, cutIndex, tag, family, direction, startIndex, endIndex,
+ levelUpper, levelLower, neckline, notes, status(pending|accept|reject), ambiguity(1-5)`
+
+Blank status means `pending`. Candidate identity and bounds are read-only; the human may
+edit `status`, `ambiguity`, `cutIndex`, levels and `notes`. Pending rows are imported too.
 
 Deliverables: CLI + validation + docs.
 Acceptance: a human can go from candidates CSV to a validated accepted set and back;
@@ -239,3 +242,4 @@ Add a dated line here when a phase starts, blocks, or completes.
 - 2026-11-08 — Phase 0 done: taxonomy, config, pointer-only types and skeleton modules added; `pnpm typecheck` and `pnpm test` pass.
 - 2026-11-08 — Phase 1 done: Binance ingestion + TrainerBars + QA + CLI; ingested 262,794 bars across 6 pairs with 0 gaps; `pnpm typecheck` and `pnpm test` pass.
 - 2026-11-08 — Phase 2 done: pure detectors for all 11 tags + `scan.ts` guards, deterministic per-tag cap (`SCAN_CAP_PER_TAG_PER_SERIES=10`), candidates CSV and `trainer:scan`; scan emitted 660 rows across 6 pairs; `pnpm typecheck` and `pnpm test` (249) pass.
+- 2026-11-08 — Phase 3 done: RFC4180 CSV helpers, export/import validation, `TrainerReviews` store, and `trainer:review` export/import/stats/set; 660-row review round-trip preserved every pending row, one row set to accept; `pnpm typecheck` and `pnpm test` (281) pass.

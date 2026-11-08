@@ -61,10 +61,13 @@ export interface Candidate {
   notes?: string;
 }
 
-/** Human decision on a candidate. */
-export type ReviewStatus = "accept" | "reject";
+/** Human decision on a candidate. Blank status in the CSV means "pending". */
+export type ReviewStatus = "pending" | "accept" | "reject";
 
-/** One row in the review CSV. Mirrors the minimum Phase 3 column schema. */
+/**
+ * One row in the review CSV. Candidate identity and pattern bounds are
+ * read-only; only status, ambiguity, cutIndex, levels and notes are editable.
+ */
 export interface ReviewRow {
   id: string;
   symbol: TrainerSymbol;
@@ -72,9 +75,12 @@ export interface ReviewRow {
   cutIndex: number;
   tag: Tag;
   family: TagFamily;
+  direction: Direction | null;
+  startIndex: number;
+  endIndex: number;
   status: ReviewStatus;
-  /** 1 = unambiguous, 5 = very ambiguous. */
-  ambiguity: number;
+  /** 1 = unambiguous, 5 = very ambiguous. Null for untouched pending rows. */
+  ambiguity: number | null;
   levelUpper: number | null;
   levelLower: number | null;
   neckline: number | null;
