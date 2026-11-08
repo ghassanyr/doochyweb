@@ -32,6 +32,12 @@ export const BATCH_VERSION = "v1";
 /** Approximate number of curated items in the pilot batch. */
 export const BATCH_TARGET = 50;
 
+/**
+ * Maximum candidates kept per tag per series. Larger match sets are sampled
+ * deterministically so the review CSV stays small and evenly spread in time.
+ */
+export const SCAN_CAP_PER_TAG_PER_SERIES = 10;
+
 /** Mechanical pattern tags, grouped in taxonomy order. */
 export const TAGS = [
   "bullish_engulfing",

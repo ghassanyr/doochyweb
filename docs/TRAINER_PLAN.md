@@ -36,7 +36,7 @@ short delivery note. The worker updates the checkboxes and status table in this 
 |---|---|---|
 | 0 | Foundations, taxonomy, config | done |
 | 1 | Long-history ingestion + bar QA | done |
-| 2 | Detector refactor + historical scan | not started |
+| 2 | Detector refactor + historical scan | done |
 | 3 | CLI + CSV review workflow | not started |
 | 4 | Outcome, barriers, base rates, publish | not started |
 | 5 | Public API (server) | not started |
@@ -92,17 +92,17 @@ tests + typecheck pass.
 **Goal:** find candidate instances across full history and emit them for review.
 
 Tasks:
-- [ ] Implement pure detectors in `src/server/trainer/detectors.ts`: `(bars, i) => match | null`
+- [x] Implement pure detectors in `src/server/trainer/detectors.ts`: `(bars, i) => match | null`
       for each taxonomy tag. Reuse logic/concepts from `patterns.ts` and `breakoutEngine.ts`
       (swings, ATR thresholds) without regressing the live analysis/breakout features.
-- [ ] Implement `src/server/trainer/scan.ts`: walk every closed bar, run detectors, and
+- [x] Implement `src/server/trainer/scan.ts`: walk every closed bar, run detectors, and
       produce `Candidate { id, symbol, timeframe, cutIndex, tag, family, bounds, notes }`.
-- [ ] Propose a default `cutIndex` per candidate; record pattern bounds and any reference
+- [x] Propose a default `cutIndex` per candidate; record pattern bounds and any reference
       levels the detector can infer.
-- [ ] Enforce a minimum context (≥ 60 bars) and a minimum forward horizon (`H` bars) so the
+- [x] Enforce a minimum context (≥ 60 bars) and a minimum forward horizon (`H` bars) so the
       outcome is always computable.
-- [ ] Emit `data/trainer/candidates/<runId>.csv` with a stable column schema.
-- [ ] Tests: each detector on small synthetic arrays (positive and negative cases), scan
+- [x] Emit `data/trainer/candidates/<runId>.csv` with a stable column schema.
+- [x] Tests: each detector on small synthetic arrays (positive and negative cases), scan
       range guards, determinism.
 
 Deliverables: detectors, scanner, candidates CSV.
@@ -238,3 +238,4 @@ Add a dated line here when a phase starts, blocks, or completes.
 - 2026-11-08 — Plan created. Phase 0 ready for worker.
 - 2026-11-08 — Phase 0 done: taxonomy, config, pointer-only types and skeleton modules added; `pnpm typecheck` and `pnpm test` pass.
 - 2026-11-08 — Phase 1 done: Binance ingestion + TrainerBars + QA + CLI; ingested 262,794 bars across 6 pairs with 0 gaps; `pnpm typecheck` and `pnpm test` pass.
+- 2026-11-08 — Phase 2 done: pure detectors for all 11 tags + `scan.ts` guards, deterministic per-tag cap (`SCAN_CAP_PER_TAG_PER_SERIES=10`), candidates CSV and `trainer:scan`; scan emitted 660 rows across 6 pairs; `pnpm typecheck` and `pnpm test` (249) pass.
