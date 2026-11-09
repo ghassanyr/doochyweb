@@ -4,7 +4,7 @@ import { LogIn, LogOut, RefreshCw, Settings } from "lucide-react";
 import { Button } from "./components/ui";
 
 // Top-level shell: brand, primary navigation, and the account-level actions
-// (settings / sign out). The Analysis, Breakouts and Trading views render
+// (settings / sign out). The Analysis, Breakouts, Learn and Trading views render
 // inside it, so switching between them never remounts the chrome.
 //
 // The header used to live inside Dashboard; it was lifted here so more
@@ -12,11 +12,12 @@ import { Button } from "./components/ui";
 // sticky translucent topbar, a segmented control for the primary nav, and the
 // 1600px page measure.
 
-export type ViewKey = "trading" | "analysis" | "breakouts";
+export type ViewKey = "trading" | "analysis" | "breakouts" | "learn";
 
 const NAV: { key: ViewKey; label: string }[] = [
   { key: "analysis", label: "Analysis" },
   { key: "breakouts", label: "Breakouts" },
+  { key: "learn", label: "Learn" },
   { key: "trading", label: "Trading" },
 ];
 
@@ -58,7 +59,7 @@ export function AppShell({
           </div>
 
           <nav
-            className="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg border border-hairline bg-soft p-[3px]"
+            className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-soft p-[3px]"
             aria-label="Primary"
           >
             {NAV.map((n) => {
@@ -70,7 +71,7 @@ export function AppShell({
                   onClick={() => onViewChange(n.key)}
                   aria-current={active ? "page" : undefined}
                   className={
-                    "rounded-md px-3 py-1.5 text-[13px] transition duration-150 " +
+                    "rounded-md whitespace-nowrap px-3 py-1.5 text-[13px] transition duration-150 " +
                     (active
                       ? "bg-accent font-semibold text-accent-fg"
                       : "font-medium text-fg-muted hover:text-fg")

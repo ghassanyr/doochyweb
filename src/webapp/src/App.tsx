@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import BreakoutsPage from "./market/BreakoutsPage";
+import LearnPage from "./learn/LearnPage";
 import AppShell, { type ViewKey } from "./AppShell";
 import ConnectPanel from "./ConnectPanel";
 import Dashboard from "./Dashboard";
@@ -10,9 +11,10 @@ import SettingsPage from "./Settings";
 import { useAccounts } from "./useAccounts";
 import { Skeleton } from "./components/ui";
 
-// The Analysis and Breakouts pages are public: market quotes, the shared
-// watchlist and the breakout feed carry no account data. The Trading tab holds
-// cTrader credentials, positions and orders, so it stays behind auth.
+// The Analysis, Breakouts and Learn pages are public: market quotes, the shared
+// watchlist, the breakout feed and the anonymous drill carry no account data.
+// The Trading tab holds cTrader credentials, positions and orders, so it stays
+// behind auth.
 export default function App() {
   const [token, setTokenState] = useState<string | null>(() => getToken());
   const [booting, setBooting] = useState<boolean>(() => !!getToken());
@@ -99,6 +101,8 @@ export default function App() {
         <AnalysisPage canWrite={signedIn} />
       ) : view === "breakouts" ? (
         <BreakoutsPage canWrite={signedIn} />
+      ) : view === "learn" ? (
+        <LearnPage />
       ) : !signedIn ? (
         <div className="flex justify-center py-8">
           <Login

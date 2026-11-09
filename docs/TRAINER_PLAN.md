@@ -187,18 +187,18 @@ pass.
 **Goal:** make the drill playable in the browser for a free, anonymous user.
 
 Tasks:
-- [ ] Add a trainer view under `src/webapp/src/` (no router library; follow existing view
+- [x] Add a trainer view under `src/webapp/src/` (no router library; follow existing view
       switching), reusing Tailwind/lucide/framer-motion.
-- [ ] Render candles client-side (add `lightweight-charts`, Apache 2.0); hide future bars
+- [x] Render candles client-side (add `lightweight-charts`, Apache 2.0); hide future bars
       until reveal; no symbol/date/price labels.
-- [ ] Answer panel: probability slider/input + take/pass; submit triggers reveal with
+- [x] Answer panel: probability slider/input + take/pass; submit triggers reveal with
       animated future bars, barriers, outcome, base rate, short "why".
-- [ ] Daily drill: fixed mix of tags, ~10 items; progress and accuracy in `localStorage`.
-- [ ] Accuracy v1: probability converted to a directional call at 50% for correctness; store
+- [x] Daily drill: fixed mix of tags, ~10 items; progress and accuracy in `localStorage`.
+- [x] Accuracy v1: probability converted to a directional call at 50% for correctness; store
       the raw probability so calibration can be added later. Trade/pass graded against the
       realized outcome.
-- [ ] Responsible design: no streak/loss framing; show disclaimer and base-rate context.
-- [ ] Tests: scoring/selection logic; typecheck for UI.
+- [x] Responsible design: no streak/loss framing; show disclaimer and base-rate context.
+- [x] Tests: scoring/selection logic; typecheck for UI.
 
 Deliverables: minimal playable trainer.
 Acceptance: a user can complete a drill and see accuracy + base rates; tests + typecheck
@@ -245,3 +245,4 @@ Add a dated line here when a phase starts, blocks, or completes.
 - 2026-11-08 — Phase 3 done: RFC4180 CSV helpers, export/import validation, `TrainerReviews` store, and `trainer:review` export/import/stats/set; 660-row review round-trip preserved every pending row, one row set to accept; `pnpm typecheck` and `pnpm test` (281) pass.
 - 2026-11-08 — Phase 4 done: `outcomes.ts` triple barrier + MFE/MAE/R, no-leak context slices, `publish.ts` deterministic frozen batch, per-series overlap guard, outcome balancing, per-tag + pooled base rates, file/Mongo publisher, and `trainer:publish`; dry run kept 1 accepted row (`sr_flip`, up 1.000) and wrote nothing; `pnpm typecheck` and `pnpm test` (304) pass.
 - 2026-11-08 — Phase 5 done: public `/api/trainer` router with lazy latest-batch loading, anonymous session selection, percent/volume-normalized context and reveal payloads, opaque item ids, in-memory first-answer-wins attempt store with TTL/session cap, and answer-gated reveal; `pnpm typecheck` and `pnpm test` (329) pass.
+- 2026-11-09 — Phase 6 done: public Learn tab with `lightweight-charts` anonymized candles/barriers, answer + reveal flow, daily 10-item localStorage queue, 50% directional grading and separate take/pass accuracy, tag/pooled base rates, reduced-motion reveal, mobile/a11y states, and scoring/reset tests; `pnpm typecheck`, `pnpm test` (340) and `pnpm build` pass.
