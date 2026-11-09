@@ -1,7 +1,7 @@
 # Doochy Learn — Build Plan
 
 **Purpose:** track what is done and what is not. The idea itself lives in
-[`concept2.md`](../concept2.md); the original brainstorm is in [`concept.txt`](../concept.txt).
+[`concept2.md`](./concept2.md); the original brainstorm is in [`concept.txt`](./concept.txt).
 If this plan and the concept disagree, the concept wins and this plan is corrected.
 
 **Working mode:** an **overseer agent** writes worker prompts; a **worker agent** executes
@@ -40,8 +40,8 @@ short delivery note. The worker updates the checkboxes and status table in this 
 | 3 | CLI + CSV review workflow | done |
 | 4 | Outcome, barriers, base rates, publish | done |
 | 5 | Public API (server) | done |
-| 6 | Minimal public UI + accuracy scoring | not started |
-| 7 | Pilot review, deploy, docs | not started |
+| 6 | Minimal public UI + accuracy scoring | done |
+| 7 | Pilot review, deploy, docs | in progress - awaiting human curation |
 
 ---
 
@@ -213,11 +213,15 @@ pass.
 Tasks:
 - [ ] Curate the ~50-item pilot batch using the Phase 3 workflow.
 - [ ] End-to-end pass: ingest → scan → review → publish → play → reveal.
-- [ ] Add `learn.doochy.net` routing (Express + nginx) alongside the existing app.
-- [ ] Add user-facing docs/disclaimer text; internal README for the trainer CLIs.
-- [ ] Record known limitations and deferred work (placebos, calibration, accounts,
+- [x] Add `learn.doochy.net` host/query routing in the SPA and document nginx/DNS/certbot.
+- [x] Add the read-only HTML shortlist preview (`trainer:review preview`) and tests.
+- [x] Document the verified origin certificate, the recommended expansion command, the
+      Cloudflare options and the final nginx block.
+- [ ] Apply the approved DNS/nginx/certbot deploy and restart pm2.
+- [x] Add user-facing docs/disclaimer text; internal README for the trainer CLIs.
+- [x] Record known limitations and deferred work (placebos, calibration, accounts,
       more timeframes, paid).
-- [ ] Final `pnpm typecheck` + `pnpm test`.
+- [x] Final `pnpm typecheck` + `pnpm test`.
 
 Deliverables: deployed pilot.
 Acceptance: the pilot is playable on the subdomain with 50 curated items.
@@ -246,3 +250,5 @@ Add a dated line here when a phase starts, blocks, or completes.
 - 2026-11-08 — Phase 4 done: `outcomes.ts` triple barrier + MFE/MAE/R, no-leak context slices, `publish.ts` deterministic frozen batch, per-series overlap guard, outcome balancing, per-tag + pooled base rates, file/Mongo publisher, and `trainer:publish`; dry run kept 1 accepted row (`sr_flip`, up 1.000) and wrote nothing; `pnpm typecheck` and `pnpm test` (304) pass.
 - 2026-11-08 — Phase 5 done: public `/api/trainer` router with lazy latest-batch loading, anonymous session selection, percent/volume-normalized context and reveal payloads, opaque item ids, in-memory first-answer-wins attempt store with TTL/session cap, and answer-gated reveal; `pnpm typecheck` and `pnpm test` (329) pass.
 - 2026-11-09 — Phase 6 done: public Learn tab with `lightweight-charts` anonymized candles/barriers, answer + reveal flow, daily 10-item localStorage queue, 50% directional grading and separate take/pass accuracy, tag/pooled base rates, reduced-motion reveal, mobile/a11y states, and scoring/reset tests; `pnpm typecheck`, `pnpm test` (340) and `pnpm build` pass.
+- 2026-11-09 — Phase 7A done: `trainer:review shortlist` emits a deterministic 88-row CSV (8/tag, alternating direction, all six series), Learn scoring disclosure, `initialView` for `learn.*` / `?view=learn`, and `docs/TRAINER.md` + `docs/TRAINER_DEPLOY.md`; dry-run `v1` kept the 1 accepted `sr_flip` and wrote nothing. `pnpm typecheck`, `pnpm test` (351) and `pnpm build` pass. Phase 7 remains in progress pending human curation; no publish, DNS/nginx change or pm2 restart.
+- 2026-11-09 — Phase 7B done: added the deterministic read-only `trainer:review preview` HTML gallery (`preview.ts`, inline SVG/candles, filters/search, no network, no Mongo writes) and preview tests; generated `data/trainer/review/2026-11-08T16-24-40-459Z.preview.html` with 88 cards and 0 missing series. Updated `TRAINER_DEPLOY.md` with the verified cert facts, certbot expansion command, Cloudflare options and final nginx block using `/etc/letsencrypt/live/doochy.net/*`; documented that no pm2 restart is needed while `/api/trainer/batch` is already live and 503. `pnpm typecheck`, `pnpm test` (357) and `pnpm build` pass. Curate, import, publish and apply DNS/nginx/certbot/deploy remain unchecked and approval-gated.

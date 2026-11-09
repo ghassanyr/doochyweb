@@ -3,6 +3,7 @@ import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import BreakoutsPage from "./market/BreakoutsPage";
 import LearnPage from "./learn/LearnPage";
+import { initialView } from "./initialView";
 import AppShell, { type ViewKey } from "./AppShell";
 import ConnectPanel from "./ConnectPanel";
 import Dashboard from "./Dashboard";
@@ -19,9 +20,8 @@ export default function App() {
   const [token, setTokenState] = useState<string | null>(() => getToken());
   const [booting, setBooting] = useState<boolean>(() => !!getToken());
   const [view, setView] = useState<ViewKey>(() => {
-    // Shared note links land on the Breakouts tab, where the note panel lives.
     if (typeof window === "undefined") return "analysis";
-    return new URLSearchParams(window.location.search).has("note") ? "breakouts" : "analysis";
+    return initialView(window.location.search, window.location.hostname);
   });
   const [showSettings, setShowSettings] = useState(false);
   const signedIn = !!token;
@@ -55,13 +55,17 @@ export default function App() {
 
   function handleViewChange(next: ViewKey) {
     setView(next);
-    if (next === "breakouts") return;
-    // A shared-note query belongs to the Breakouts tab; do not let it pull the
-    // next reload back there after the user leaves.
     const url = new URL(window.location.href);
-    if (!url.searchParams.has("note")) return;
-    url.searchParams.delete("note");
-    window.history.replaceState(null, "", url);
+    let changed = false;
+    if (next !== "breakouts" && url.searchParams.has("note")) {
+      url.searchParams.delete("note");
+      changed = true;
+    }
+    if (next !== "learn" && url.searchParams.has("view")) {
+      url.searchParams.delete("view");
+      changed = true;
+    }
+    if (changed) window.history.replaceState(null, "", url);
   }
 
   function handleLogout() {

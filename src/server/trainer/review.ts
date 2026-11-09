@@ -5,10 +5,12 @@
 // the store and CLI can share one contract. Imports never drop unedited rows:
 // pending rows are upserted exactly like accepted and rejected ones.
 //
-// CLI: `pnpm trainer:review <export|import|stats|set> ...`.
+// CLI: `pnpm trainer:review <export|import|shortlist|preview|stats|set> ...`.
 //
 //   export [--from=<candidatesCsv>] [--runId=<id>]
 //   import --file=<reviewCsv> [--candidates=<candidatesCsv>]
+//   shortlist --from=<reviewCsv> [--per-tag=8] [--out=<path>]
+//   preview --file=<shortlistCsv> [--out=<html>] [--context=120]
 //   stats [--file=<reviewCsv>]
 //   set --id=<id> --status=accept|reject [--ambiguity=1-5]
 
@@ -18,7 +20,10 @@ import path from "node:path";
 import mongoose from "mongoose";
 
 import { connectDb } from "../db";
+import type { Candle } from "../market/types";
 import { SYMBOLS, TAG_FAMILY, TAGS, TIMEFRAMES } from "./config";
+import { readTrainerBars } from "./bars";
+import { PREVIEW_CONTEXT_DEFAULT, renderPreviewHtml } from "./preview";
 import { readAll, readById, updateReview, upsertMany } from "./reviewStore";
 import { CANDIDATES_DIR, CANDIDATE_COLUMNS } from "./scan";
 import type {
@@ -59,6 +64,10 @@ export interface ReviewStats {
   byTag: Record<Tag, number>;
   byAmbiguity: Record<string, number>;
   bySeries: Record<string, number>;
+}
+
+export interface ReviewShortlistOptions {
+  perTag?: number;
 }
 
 // ------------------------------------------------------------------- CSV I/O
@@ -130,6 +139,29 @@ export function csvCell(value: unknown): string {
 export function serializeCsv(rows: readonly (readonly unknown[])[]): string {
   if (rows.length === 0) return "";
   return rows.map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+export function serializeReviewRows(rows: readonly ReviewRow[]): string {
+  return serializeCsv([
+    [...REVIEW_COLUMNS],
+    ...rows.map((row) => [
+      row.id,
+      row.symbol,
+      row.timeframe,
+      String(row.cutIndex),
+      row.tag,
+      row.family,
+      row.direction ?? "",
+      String(row.startIndex),
+      String(row.endIndex),
+      row.levelUpper == null ? "" : String(row.levelUpper),
+      row.levelLower == null ? "" : String(row.levelLower),
+      row.neckline == null ? "" : String(row.neckline),
+      row.notes,
+      row.status,
+      row.ambiguity == null ? "" : String(row.ambiguity),
+    ]),
+  ]);
 }
 
 function isBlankRow(row: readonly string[]): boolean {
@@ -290,8 +322,15 @@ export function importReviewCsv(
     const rawStatus = cell("status").trim().toLowerCase();
     let status: ReviewStatus = "pending";
     if (rawStatus !== "") {
-      if (rawStatus === "accept" || rawStatus === "reject") status = rawStatus;
-      else addError("status", "must be blank, accept or reject");
+      if (
+        rawStatus === "pending" ||
+        rawStatus === "accept" ||
+        rawStatus === "reject"
+      ) {
+        status = rawStatus;
+      } else {
+        addError("status", "must be blank, pending, accept or reject");
+      }
     }
 
     const rawAmbiguity = cell("ambiguity").trim();
@@ -494,6 +533,111 @@ export function reviewStats(rows: readonly ReviewRow[]): ReviewStats {
   return { total: rows.length, byStatus, byTag, byAmbiguity, bySeries };
 }
 
+export function selectReviewShortlist(
+  rows: readonly ReviewRow[],
+  options: ReviewShortlistOptions = {}
+): ReviewRow[] {
+  const perTag = options.perTag ?? 8;
+  if (!Number.isInteger(perTag) || perTag < 1) {
+    throw new Error("perTag must be a positive integer");
+  }
+
+  const pending = rows
+    .map((row, index) => ({ row, index }))
+    .filter((entry) => entry.row.status === "pending");
+  const byTag = new Map<Tag, { row: ReviewRow; index: number }[]>();
+  for (const entry of pending) {
+    const list = byTag.get(entry.row.tag);
+    if (list) list.push(entry);
+    else byTag.set(entry.row.tag, [entry]);
+  }
+
+  const seriesOrder = SYMBOLS.flatMap((symbol) =>
+    TIMEFRAMES.map((timeframe) => `${symbol}:${timeframe}`)
+  );
+  const seriesRank = new Map(seriesOrder.map((series, index) => [series, index]));
+  const seriesCounts = new Map(seriesOrder.map((series) => [series, 0]));
+  const selected = new Set<number>();
+  const chosen: { row: ReviewRow; index: number }[] = [];
+
+  for (const tag of TAGS) {
+    const pool = byTag.get(tag);
+    if (!pool || pool.length === 0) continue;
+
+    const present: (Direction | "none")[] = [];
+    for (const entry of pool) {
+      const direction = entry.row.direction ?? "none";
+      if (!present.includes(direction)) present.push(direction);
+    }
+
+    const directional = present.filter(
+      (direction): direction is Direction =>
+        direction === "up" || direction === "down"
+    );
+    const directionOrder: (Direction | "none")[] =
+      directional.length === 0
+        ? ["none"]
+        : directional.length === 1
+          ? [directional[0]]
+          : directional[0] === "down"
+            ? ["down", "up"]
+            : ["up", "down"];
+
+    let cursor = 0;
+    let selectedForTag = 0;
+    while (selectedForTag < perTag) {
+      let best: { row: ReviewRow; index: number } | null = null;
+      let bestSeries = "";
+      let bestCount = Number.POSITIVE_INFINITY;
+      let bestRank = Number.POSITIVE_INFINITY;
+      let chose = false;
+
+      for (let attempt = 0; attempt < directionOrder.length; attempt++) {
+        const direction = directionOrder[(cursor + attempt) % directionOrder.length];
+        best = null;
+        bestSeries = "";
+        bestCount = Number.POSITIVE_INFINITY;
+        bestRank = Number.POSITIVE_INFINITY;
+
+        for (const entry of pool) {
+          if (selected.has(entry.index)) continue;
+          if ((entry.row.direction ?? "none") !== direction) continue;
+
+          const series = `${entry.row.symbol}:${entry.row.timeframe}`;
+          const count = seriesCounts.get(series) ?? 0;
+          const rank = seriesRank.get(series) ?? Number.MAX_SAFE_INTEGER;
+          if (
+            best === null ||
+            count < bestCount ||
+            (count === bestCount &&
+              (rank < bestRank || (rank === bestRank && entry.index < best.index)))
+          ) {
+            best = entry;
+            bestSeries = series;
+            bestCount = count;
+            bestRank = rank;
+          }
+        }
+
+        if (best) {
+          cursor = (cursor + attempt + 1) % directionOrder.length;
+          chose = true;
+          break;
+        }
+      }
+
+      if (!chose || !best) break;
+      selected.add(best.index);
+      chosen.push(best);
+      seriesCounts.set(bestSeries, (seriesCounts.get(bestSeries) ?? 0) + 1);
+      selectedForTag++;
+    }
+  }
+
+  chosen.sort((a, b) => a.index - b.index);
+  return chosen.map((entry) => entry.row);
+}
+
 // ---------------------------------------------------------------------- CLI
 
 interface CliArgs {
@@ -670,6 +814,122 @@ async function cmdStats(flags: ReadonlyMap<string, string>): Promise<void> {
   printStats("store", reviewStats(rows));
 }
 
+async function cmdShortlist(flags: ReadonlyMap<string, string>): Promise<void> {
+  const from = requiredFlag(flags, "from");
+  const rawPerTag = flags.get("per-tag");
+  let perTag = 8;
+  if (rawPerTag !== undefined) {
+    if (!/^\d+$/.test(rawPerTag) || Number(rawPerTag) < 1) {
+      throw new Error("--per-tag must be a positive integer");
+    }
+    perTag = Number(rawPerTag);
+  }
+
+  const text = await readFile(from, "utf8");
+  const result = importReviewCsv(text);
+  if (result.errors.length) {
+    for (const error of result.errors) {
+      process.stderr.write(
+        `row ${error.row} field=${error.field} id=${error.id || "-"}: ${error.message}\n`
+      );
+    }
+    throw new Error(
+      `${result.errors.length} invalid row(s) in ${from}; no shortlist written`
+    );
+  }
+
+  const shortlist = selectReviewShortlist(result.rows, { perTag });
+  const base = path.basename(from);
+  const runId = base.endsWith(".review.csv")
+    ? base.slice(0, -".review.csv".length)
+    : base.replace(/\.csv$/i, "");
+  const file = flags.get("out") ?? path.join(REVIEW_DIR, `${runId}.shortlist.csv`);
+
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, serializeReviewRows(shortlist), "utf8");
+
+  const stats = reviewStats(shortlist);
+  const directions = { up: 0, down: 0, blank: 0 };
+  for (const row of shortlist) {
+    if (row.direction === "up") directions.up++;
+    else if (row.direction === "down") directions.down++;
+    else directions.blank++;
+  }
+
+  const out = (line: string) => process.stdout.write(line + "\n");
+  out("TRAINER REVIEW SHORTLIST");
+  out(`source=${from}`);
+  out(`path=${file}`);
+  out(`rows=${stats.total} perTag=${perTag}`);
+  out(`tag ${TAGS.map((tag) => `${tag}=${stats.byTag[tag]}`).join(" ")}`);
+  out(
+    `direction up=${directions.up} down=${directions.down} blank=${directions.blank}`
+  );
+  out(
+    `series ${Object.entries(stats.bySeries)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(" ")}`
+  );
+}
+
+async function cmdPreview(flags: ReadonlyMap<string, string>): Promise<void> {
+  const file = requiredFlag(flags, "file");
+  const rawContext = flags.get("context");
+  let context = PREVIEW_CONTEXT_DEFAULT;
+  if (rawContext !== undefined) {
+    if (!/^\d+$/.test(rawContext) || Number(rawContext) < 1) {
+      throw new Error("--context must be a positive integer");
+    }
+    context = Number(rawContext);
+  }
+
+  const text = await readFile(file, "utf8");
+  const result = importReviewCsv(text);
+  if (result.errors.length) {
+    for (const error of result.errors) {
+      process.stderr.write(
+        `row ${error.row} field=${error.field} id=${error.id || "-"}: ${error.message}\n`
+      );
+    }
+    throw new Error(
+      `${result.errors.length} invalid row(s) in ${file}; no preview written`
+    );
+  }
+
+  const barsBySeries: Record<string, Candle[] | null> = {};
+  for (const row of result.rows) {
+    const key = `${row.symbol}:${row.timeframe}`;
+    if (Object.prototype.hasOwnProperty.call(barsBySeries, key)) continue;
+    const stored = await readTrainerBars(row.symbol, row.timeframe);
+    barsBySeries[key] = stored?.bars ?? null;
+  }
+
+  const html = renderPreviewHtml(result.rows, barsBySeries, { context });
+  const base = path.basename(file);
+  const runId = base.endsWith(".shortlist.csv")
+    ? base.slice(0, -".shortlist.csv".length)
+    : base.endsWith(".review.csv")
+      ? base.slice(0, -".review.csv".length)
+      : base.replace(/\.csv$/i, "");
+  const output = flags.get("out") ?? path.join(REVIEW_DIR, `${runId}.preview.html`);
+
+  await mkdir(path.dirname(output), { recursive: true });
+  await writeFile(output, html, "utf8");
+
+  let missing = 0;
+  for (const row of result.rows) {
+    const bars = barsBySeries[`${row.symbol}:${row.timeframe}`];
+    if (!bars || row.cutIndex >= bars.length) missing++;
+  }
+
+  const out = (line: string) => process.stdout.write(line + "\n");
+  out("TRAINER REVIEW PREVIEW");
+  out(`source=${file}`);
+  out(`path=${output}`);
+  out(`rows=${result.rows.length} cards=${result.rows.length} missing=${missing}`);
+  out(`context=${context}`);
+}
+
 async function cmdSet(flags: ReadonlyMap<string, string>): Promise<void> {
   const id = requiredFlag(flags, "id");
   const rawStatus = requiredFlag(flags, "status").trim().toLowerCase();
@@ -715,6 +975,8 @@ function printUsage(): void {
       "Usage: pnpm trainer:review <command> [--flag=value]",
       "  export [--from=<candidatesCsv>] [--runId=<id>]",
       "  import --file=<reviewCsv> [--candidates=<candidatesCsv>]",
+      "  shortlist --from=<reviewCsv> [--per-tag=8] [--out=<path>]",
+      "  preview --file=<shortlistCsv> [--out=<html>] [--context=120]",
       "  stats [--file=<reviewCsv>]",
       "  set --id=<id> --status=accept|reject [--ambiguity=1-5]",
     ].join("\n") + "\n"
@@ -729,6 +991,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "shortlist") {
+    await cmdShortlist(flags);
+    return;
+  }
+
   await connectDb();
   switch (command) {
     case "export":
@@ -736,6 +1003,9 @@ async function main(): Promise<void> {
       break;
     case "import":
       await cmdImport(flags);
+      break;
+    case "preview":
+      await cmdPreview(flags);
       break;
     case "stats":
       await cmdStats(flags);

@@ -8,7 +8,9 @@ import {
   importReviewCsv,
   parseCsv,
   reviewStats,
+  selectReviewShortlist,
   serializeCsv,
+  serializeReviewRows,
 } from "../src/server/trainer/review";
 import { CANDIDATE_COLUMNS } from "../src/server/trainer/scan";
 import type {
@@ -102,6 +104,12 @@ function reviewCsv(rows: readonly Row[]): string {
     [...REVIEW_COLUMNS],
     ...rows.map((row) => REVIEW_COLUMNS.map((column) => row[column] ?? "")),
   ]);
+}
+
+function reviewRows(rows: readonly Row[]) {
+  const result = importReviewCsv(reviewCsv(rows));
+  assert.deepEqual(result.errors, []);
+  return result.rows;
 }
 
 function candidateCsv(rows: readonly Row[]): string {
@@ -462,5 +470,150 @@ describe("stats", () => {
     assert.deepEqual(stats.byStatus, { pending: 0, accept: 0, reject: 0 });
     assert.equal(Object.keys(stats.byTag).length, TAGS.length);
     assert.equal(Object.keys(stats.bySeries).length, SYMBOLS.length * TIMEFRAMES.length);
+  });
+});
+
+describe("shortlist", () => {
+  test("selects pending rows deterministically in source order", () => {
+    const rows = reviewRows([
+      makeRow({ startIndex: "10", endIndex: "20" }),
+      makeRow({ startIndex: "30", endIndex: "40", status: "accept", ambiguity: "3" }),
+      makeRow({ startIndex: "50", endIndex: "60", status: "reject" }),
+      makeRow({ startIndex: "70", endIndex: "80", tag: "double_top", direction: "down" }),
+    ]);
+
+    const first = selectReviewShortlist(rows);
+    const second = selectReviewShortlist(rows);
+
+    assert.deepEqual(first, second);
+    assert.deepEqual(
+      first.map((row) => row.id),
+      [rows[0].id, rows[3].id]
+    );
+    assert.ok(first.every((row) => row.status === "pending"));
+  });
+
+  test("caps each tag at eight rows and reaches the 88-row target", () => {
+    const rows = reviewRows(
+      TAGS.flatMap((tag) =>
+        Array.from({ length: 12 }, (_, index) =>
+          makeRow({
+            tag,
+            startIndex: String(10 + index),
+            endIndex: String(20 + index),
+          })
+        )
+      )
+    );
+
+    const shortlist = selectReviewShortlist(rows);
+    const stats = reviewStats(shortlist);
+
+    assert.equal(shortlist.length, TAGS.length * 8);
+    for (const tag of TAGS) assert.equal(stats.byTag[tag], 8);
+  });
+
+  test("alternates directions within a tag", () => {
+    const rows = reviewRows(
+      Array.from({ length: 20 }, (_, index) =>
+        makeRow({
+          tag: "sweep_up",
+          direction: index % 2 === 0 ? "down" : "up",
+          startIndex: String(10 + index),
+          endIndex: String(20 + index),
+        })
+      )
+    );
+
+    const shortlist = selectReviewShortlist(rows, { perTag: 8 });
+    const directions = { up: 0, down: 0, blank: 0 };
+    for (const row of shortlist) {
+      if (row.direction === "up") directions.up++;
+      else if (row.direction === "down") directions.down++;
+      else directions.blank++;
+    }
+
+    assert.deepEqual(directions, { up: 4, down: 4, blank: 0 });
+  });
+
+  test("round-robins across all six symbol:timeframe series", () => {
+    const series = SYMBOLS.flatMap((symbol) =>
+      TIMEFRAMES.map((timeframe) => ({ symbol, timeframe }))
+    );
+    const rows = reviewRows(
+      series.flatMap(({ symbol, timeframe }, seriesIndex) =>
+        Array.from({ length: 4 }, (_, index) =>
+          makeRow({
+            symbol,
+            timeframe,
+            tag: "sweep_up",
+            direction: index % 2 === 0 ? "down" : "up",
+            startIndex: String(10 + seriesIndex * 10 + index),
+            endIndex: String(20 + seriesIndex * 10 + index),
+          })
+        )
+      )
+    );
+
+    const shortlist = selectReviewShortlist(rows, { perTag: 8 });
+    const stats = reviewStats(shortlist);
+    const counts = series.map(
+      ({ symbol, timeframe }) => stats.bySeries[`${symbol}:${timeframe}`]
+    );
+
+    assert.ok(counts.every((count) => count >= 1));
+    assert.ok(Math.max(...counts) - Math.min(...counts) <= 1);
+  });
+
+  test("serializes the exact review header with pending status and blank ambiguity", () => {
+    const csv = serializeReviewRows(reviewRows([makeRow()]));
+    const grid = parseCsv(csv);
+
+    assert.deepEqual(grid[0], [...REVIEW_COLUMNS]);
+    assert.equal(grid[1][13], "pending");
+    assert.equal(grid[1][14], "");
+
+    const imported = importReviewCsv(csv);
+    assert.deepEqual(imported.errors, []);
+    assert.equal(imported.rows.length, 1);
+    assert.equal(imported.rows[0].status, "pending");
+    assert.equal(imported.rows[0].ambiguity, null);
+  });
+
+  test("does not mutate source rows", () => {
+    const rows = reviewRows([
+      makeRow({ startIndex: "10", endIndex: "20" }),
+      makeRow({ startIndex: "30", endIndex: "40", tag: "inside_bar", direction: "" }),
+      makeRow({ startIndex: "50", endIndex: "60", status: "accept", ambiguity: "2" }),
+    ]);
+    const before = rows.map((row) => ({ ...row }));
+
+    selectReviewShortlist(rows);
+
+    assert.deepEqual(rows, before);
+  });
+
+  test("round-trips a shortlist through import validation", () => {
+    const rows = reviewRows(
+      TAGS.flatMap((tag, tagIndex) =>
+        Array.from({ length: 10 }, (_, index) =>
+          makeRow({
+            tag,
+            startIndex: String(10 + tagIndex * 100 + index),
+            endIndex: String(20 + tagIndex * 100 + index),
+          })
+        )
+      )
+    );
+    const shortlist = selectReviewShortlist(rows);
+    const imported = importReviewCsv(serializeReviewRows(shortlist));
+
+    assert.deepEqual(imported.errors, []);
+    assert.deepEqual(
+      imported.rows.map((row) => row.id),
+      shortlist.map((row) => row.id)
+    );
+    assert.ok(imported.rows.every((row) => row.status === "pending"));
+    assert.ok(imported.rows.every((row) => row.ambiguity === null));
   });
 });

@@ -206,6 +206,31 @@ export default function LearnPage() {
           </div>
         )}
 
+        <details className="rounded-xl border border-hairline bg-soft/40 px-3 py-2 text-xs text-fg-muted">
+          <summary className="cursor-pointer font-medium text-fg">
+            How scoring works
+          </summary>
+          <div className="mt-2 space-y-1.5 leading-relaxed">
+            <p>
+              A probability of 50% or higher is an up call; below 50% is a down
+              call.
+            </p>
+            <p>
+              Take is correct when your call matches the realized outcome. Pass is
+              correct when it does not. A scratch — neither barrier hit first —
+              counts as a miss.
+            </p>
+            <p>
+              Base rates are historical frequencies from the pilot batch; they are
+              not a promise about the next chart.
+            </p>
+            <p>
+              Your progress is saved only in this browser. This is pattern
+              practice, not financial advice.
+            </p>
+          </div>
+        </details>
+
         {status === "loading" && <DrillSkeleton />}
 
         {status === "preparing" && <PreparingCard onRetry={retry} />}
