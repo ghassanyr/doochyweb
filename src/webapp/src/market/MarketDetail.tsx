@@ -22,7 +22,8 @@ export function MarketDetail({
   timeframe,
   strongRatio,
   timeframes,
-  canWrite,
+  canRefresh,
+  canRemove,
   onClose,
   onRemove,
   onTimeframeChange,
@@ -31,7 +32,10 @@ export function MarketDetail({
   timeframe: string;
   strongRatio: number;
   timeframes: { id: string; label: string }[];
-  canWrite: boolean;
+  /** Signed-in users can force a broker read; anonymous visitors cannot. */
+  canRefresh: boolean;
+  /** Only admins can change the shared watchlist. */
+  canRemove: boolean;
   onClose: () => void;
   onRemove: (symbol: string) => void;
   onTimeframeChange: (tf: string) => void;
@@ -49,7 +53,7 @@ export function MarketDetail({
     setData(null);
     setBusy(true);
     const load = async (): Promise<MarketResult> => {
-      if (canWrite) {
+      if (canRefresh) {
         try {
           return await marketApi.refreshSymbol(symbol, timeframe, true);
         } catch {
@@ -72,7 +76,7 @@ export function MarketDetail({
     return () => {
       alive = false;
     };
-  }, [symbol, timeframe, seq, canWrite]);
+  }, [symbol, timeframe, seq, canRefresh]);
 
   const a = data?.ok ? data : null;
 
@@ -83,8 +87,9 @@ export function MarketDetail({
       size="lg"
       title={symbol}
       actions={
-        canWrite ? (
+        canRefresh || canRemove ? (
           <>
+          {canRefresh && (
           <button
             type="button"
             onClick={() => setSeq((n) => n + 1)}
@@ -95,6 +100,8 @@ export function MarketDetail({
           >
             <RefreshCw className={"h-4 w-4 " + (busy ? "animate-spin" : "")} />
           </button>
+          )}
+          {canRemove && (
           <button
             type="button"
             onClick={() => {
@@ -107,6 +114,7 @@ export function MarketDetail({
           >
             <Trash2 className="h-4 w-4" />
           </button>
+          )}
           </>
         ) : null
       }

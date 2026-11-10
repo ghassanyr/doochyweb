@@ -10,6 +10,7 @@ import { discoverAccounts } from "./ctrader/auth";
 import { reconcileAccount, listAccounts } from "./ctrader/reads";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
+import { promoteConfiguredAdmins } from "./admin/roles";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
 import { createTrainerRouter } from "./trainer/routes";
@@ -62,12 +63,19 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
 
 app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
+    const user = await User.findById(req.userId!).lean().exec();
+    if (!user) {
+      res.status(401).json({ error: "user no longer exists" });
+      return;
+    }
     const creds = await loadCredentials(req.userId!);
     // listAccounts enriches each account with live balance + broker name (both
     // need a per-account broker round-trip), so /api/me returns the same shape
     // as /api/accounts rather than the raw stored rows.
     const accounts = creds ? await listAccounts(req.userId!) : [];
     res.json({
+      username: user.username,
+      role: (user.role as string | undefined) ?? "user",
       hasCredentials: !!creds,
       // Enough for Settings to say which OpenAPI app is connected without ever
       // sending the secret, or even the whole client id, to the browser.
@@ -419,6 +427,7 @@ app.get("*", (req: Request, res: Response, next: NextFunction) => {
 // -----------------------------------------------------------------------
 async function main() {
   await connectDb();
+  await promoteConfiguredAdmins();
   const port = parseInt(process.env.PORT || "9111");
   app.listen(port, "127.0.0.1", () => {
     console.log(`[SERVER] Listening on http://127.0.0.1:${port}`);

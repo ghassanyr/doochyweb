@@ -1,5 +1,7 @@
 const TOKEN_KEY = "doochyweb_token";
 
+export type UserRole = "user" | "admin";
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -230,10 +232,13 @@ export const api = {
     request<{ token: string }>("/api/auth/login", { method: "POST", body: { username, password } }),
 
   me: (token?: string) =>
-    request<{ hasCredentials: boolean; clientIdMasked: string | null; accounts: AccountView[] }>(
-      "/api/me",
-      { token }
-    ),
+    request<{
+      username: string;
+      role: UserRole;
+      hasCredentials: boolean;
+      clientIdMasked: string | null;
+      accounts: AccountView[];
+    }>("/api/me", { token }),
 
   connect: (creds: ConnectInput, token?: string) =>
     request<{ accounts: AccountView[] }>("/api/connect", { method: "POST", body: creds, token }),

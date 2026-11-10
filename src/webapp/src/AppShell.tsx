@@ -12,7 +12,7 @@ import { Button } from "./components/ui";
 // sticky translucent topbar, a segmented control for the primary nav, and the
 // 1600px page measure.
 
-export type ViewKey = "trading" | "analysis" | "breakouts" | "learn";
+export type ViewKey = "trading" | "analysis" | "breakouts" | "learn" | "admin";
 
 const NAV: { key: ViewKey; label: string }[] = [
   { key: "analysis", label: "Analysis" },
@@ -21,11 +21,14 @@ const NAV: { key: ViewKey; label: string }[] = [
   { key: "trading", label: "Trading" },
 ];
 
+const ADMIN_NAV: { key: ViewKey; label: string } = { key: "admin", label: "Admin" };
+
 export function AppShell({
   view,
   onViewChange,
   onRefresh,
   signedIn,
+  isAdmin,
   onOpenSettings,
   onSignIn,
   onLogout,
@@ -39,11 +42,14 @@ export function AppShell({
   // The Analysis and Breakouts pages are public; the account-level actions
   // only appear once there is a session.
   signedIn: boolean;
+  /** Shows the Admin tab; the API still enforces the role. */
+  isAdmin: boolean;
   onOpenSettings: () => void;
   onSignIn: () => void;
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const nav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
   return (
     <div className="min-h-screen bg-transparent text-fg">
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-xl">
@@ -62,7 +68,7 @@ export function AppShell({
             className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-soft p-[3px]"
             aria-label="Primary"
           >
-            {NAV.map((n) => {
+            {nav.map((n) => {
               const active = view === n.key;
               return (
                 <button

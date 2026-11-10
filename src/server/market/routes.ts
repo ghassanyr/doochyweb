@@ -3,9 +3,10 @@
 // src/server/market/providers/ctrader.
 //
 // Mounted at /api/market by index.ts. The page is public, so the read routes are
-// deliberately open. Anything that mutates shared state, or forces a fresh
-// broker request, sits behind authRequired: the watchlist and settings are ONE
-// global document, and a forced refresh spends the shared account's rate limit.
+// deliberately open. The watchlist and card layout are curated by an admin and
+// sit behind adminRequired. Analysis settings remain open to signed-in users,
+// and a forced refresh sits behind authRequired because it spends the shared
+// account's rate limit.
 
 import { Router } from "express";
 
@@ -25,7 +26,7 @@ import { latestRun, readRuns } from "./breakoutFeed";
 import { TEMPLATE_MODEL } from "./narration";
 import { listNarrations } from "./narrationStore";
 import { detectSweep, isLastBarForming, type Sweep } from "./patterns";
-import { authRequired } from "../auth";
+import { authRequired, adminRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
 import { clearCache, cTraderCatalog, getCandles } from "./providers/index";
 import { cryptoPairs } from "./crypto";
@@ -172,8 +173,8 @@ marketRouter.get("/watchlist", async (_req, res) => {
   res.json({ symbols: watchlist, order: cardOrder });
 });
 
-// Saved drag-and-drop layout. Auth required: the layout is shared state.
-marketRouter.post("/watchlist/order", authRequired, async (req, res) => {
+// Saved drag-and-drop layout. Admin only: the layout is shared state.
+marketRouter.post("/watchlist/order", adminRequired, async (req, res) => {
   const order = req.body?.order;
   if (!Array.isArray(order)) {
     res.status(400).json({ error: "order must be an array of symbols" });
@@ -182,7 +183,7 @@ marketRouter.post("/watchlist/order", authRequired, async (req, res) => {
   res.json({ order: await saveCardOrder(order) });
 });
 
-marketRouter.post("/watchlist", authRequired, async (req, res) => {
+marketRouter.post("/watchlist", adminRequired, async (req, res) => {
   const symbol = req.body?.symbol;
   if (!symbol) {
     res.status(400).json({ error: "symbol is required" });
@@ -199,7 +200,7 @@ marketRouter.post("/watchlist", authRequired, async (req, res) => {
   res.json({ symbols: await addToWatchlist(meta.symbol) });
 });
 
-marketRouter.delete("/watchlist", authRequired, async (req, res) => {
+marketRouter.delete("/watchlist", adminRequired, async (req, res) => {
   const symbol = req.query.symbol;
   if (!symbol) {
     res.status(400).json({ error: "symbol is required" });

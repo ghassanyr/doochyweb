@@ -13,7 +13,15 @@ import { SymbolSearch } from "./SymbolSearch";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes";
 import type { CatalogEntry, MarketResult, MarketSettings } from "./types";
 
-export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
+export default function AnalysisPage({
+  canRefresh,
+  canManageWatchlist,
+}: {
+  /** Signed-in users can force a broker read; anonymous visitors cannot. */
+  canRefresh: boolean;
+  /** Only admins can change the shared watchlist. */
+  canManageWatchlist: boolean;
+}) {
   const [config, setConfig] = useState<{
     timeframes: { id: string; label: string }[];
     settings: MarketSettings;
@@ -166,7 +174,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
   const addSymbol = useCallback(
     async (raw: string) => {
       const symbol = raw.trim();
-      if (!symbol || !canWrite) return;
+      if (!symbol || !canManageWatchlist) return;
       try {
         await marketApi.addSymbol(symbol);
         await load();
@@ -174,12 +182,12 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         setError(err instanceof Error ? err.message : "Failed to add market");
       }
     },
-    [load, canWrite]
+    [load, canManageWatchlist]
   );
 
   const removeSymbol = useCallback(
     async (symbol: string) => {
-      if (!canWrite) return;
+      if (!canManageWatchlist) return;
       setResults((prev) => prev.filter((r) => r.symbol !== symbol));
       try {
         await marketApi.removeSymbol(symbol);
@@ -188,7 +196,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         setError(err instanceof Error ? err.message : "Failed to remove market");
       }
     },
-    [load, canWrite]
+    [load, canManageWatchlist]
   );
 
   // Stable per-card handlers: the cards are memoised, so handing them a fresh
@@ -213,7 +221,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
 
   const refreshOne = useCallback(
     async (symbol: string) => {
-      if (!canWrite) return;
+      if (!canRefresh) return;
       setRefreshing((prev) => new Set(prev).add(symbol));
       try {
         const result = await marketApi.refreshSymbol(symbol, timeframe);
@@ -231,7 +239,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         });
       }
     },
-    [timeframe, canWrite, applyConfluence]
+    [timeframe, canRefresh, applyConfluence]
   );
 
   const okCount = results.filter((r) => r.ok).length;
@@ -261,11 +269,11 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
             ))}
           </div>
 
-          {canWrite ? (
+          {canManageWatchlist ? (
             <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
           ) : (
             <p className="flex-1 self-center px-1 text-sm text-fg-faint">
-              Viewing a shared watchlist. Sign in to add markets.
+              The watchlist is curated by an admin.
             </p>
           )}
         </Card>
@@ -318,7 +326,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
           <SortableGrid
             items={applyOrder(results, order)}
             onReorder={persistOrder}
-            canReorder={canWrite}
+            canReorder={canManageWatchlist}
             className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]"
             renderItem={(r) =>
               r.ok ? (
@@ -326,7 +334,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
                   analysis={r}
                   strongRatio={strongRatio}
                   refreshing={refreshing.has(r.symbol)}
-                  canWrite={canWrite}
+                  canRefresh={canRefresh}
+                  canRemove={canManageWatchlist}
                   onOpen={openDetail}
                   onRefresh={refreshOne}
                   onRemove={removeSymbol}
@@ -336,7 +345,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
                   symbol={r.symbol}
                   error={r.error}
                   refreshing={refreshing.has(r.symbol)}
-                  canWrite={canWrite}
+                  canRefresh={canRefresh}
+                  canRemove={canManageWatchlist}
                   onRefresh={refreshOne}
                   onRemove={removeSymbol}
                 />
@@ -357,7 +367,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
           timeframe={detail.timeframe}
           strongRatio={strongRatio}
           timeframes={timeframes}
-          canWrite={canWrite}
+          canRefresh={canRefresh}
+          canRemove={canManageWatchlist}
           onClose={() => setDetail(null)}
           onRemove={(s) => void removeSymbol(s)}
           onTimeframeChange={(tf) => setDetail((d) => (d ? { ...d, timeframe: tf } : d))}

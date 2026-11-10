@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { api, type AccountView, type ConnectInput } from "./api";
+import { api, type AccountView, type ConnectInput, type UserRole } from "./api";
 
 // Account state is shared by the trading view and the Settings takeover, so it
 // lives here rather than inside either component. Owned by App and passed down.
@@ -11,17 +11,20 @@ import { api, type AccountView, type ConnectInput } from "./api";
 export function useAccounts(enabled: boolean) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
+  const [me, setMe] = useState<{ username: string; role: UserRole } | null>(null);
 
   const load = useCallback(async () => {
     if (!enabled) {
       setAccounts([]);
       setHasCredentials(null);
+      setMe(null);
       return [];
     }
     try {
       const res = await api.me();
       setHasCredentials(res.hasCredentials);
       setAccounts(res.accounts);
+      setMe({ username: res.username, role: res.role });
       return res.accounts;
     } catch {
       setHasCredentials(false);
@@ -57,5 +60,5 @@ export function useAccounts(enabled: boolean) {
     []
   );
 
-  return { accounts, setAccounts, hasCredentials, load, refreshBalances, connect };
+  return { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect };
 }

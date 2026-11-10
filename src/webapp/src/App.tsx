@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import BreakoutsPage from "./market/BreakoutsPage";
+import AdminPage from "./admin/AdminPage";
 import LearnPage from "./learn/LearnPage";
 import { initialView } from "./initialView";
 import AppShell, { type ViewKey } from "./AppShell";
@@ -25,8 +26,9 @@ export default function App() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const signedIn = !!token;
-  const { accounts, setAccounts, hasCredentials, load, refreshBalances, connect } =
+  const { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect } =
     useAccounts(signedIn);
+  const isAdmin = me?.role === "admin";
 
   // Validate a stored token once on load; drop it if it expired.
   if (booting && token) {
@@ -54,6 +56,7 @@ export default function App() {
   }
 
   function handleViewChange(next: ViewKey) {
+    if (next === "admin" && !isAdmin) return;
     setView(next);
     const url = new URL(window.location.href);
     let changed = false;
@@ -97,14 +100,21 @@ export default function App() {
       onViewChange={handleViewChange}
       onRefresh={signedIn ? refreshBalances : undefined}
       signedIn={signedIn}
+      isAdmin={isAdmin}
       onOpenSettings={() => setShowSettings(true)}
       onSignIn={() => handleViewChange("trading")}
       onLogout={handleLogout}
     >
-      {view === "analysis" ? (
-        <AnalysisPage canWrite={signedIn} />
+      {view === "admin" ? (
+        isAdmin ? (
+          <AdminPage />
+        ) : (
+          <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
+        )
+      ) : view === "analysis" ? (
+        <AnalysisPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
       ) : view === "breakouts" ? (
-        <BreakoutsPage canWrite={signedIn} />
+        <BreakoutsPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
       ) : view === "learn" ? (
         <LearnPage />
       ) : !signedIn ? (
