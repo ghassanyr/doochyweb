@@ -353,13 +353,19 @@ marketRouter.get("/narrations", async (req, res) => {
 });
 
 // Force-refresh a single symbol, bypassing the bar cache. Gated: it spends the
-// shared account's cTrader rate limit.
+// shared account's cTrader rate limit. `all=1` also attaches the per-timeframe
+// strip the detail sheet renders, so opening a card is one request.
 marketRouter.post("/analysis/:symbol/refresh", authRequired, async (req, res) => {
   const timeframe = req.query.timeframe ? String(req.query.timeframe) : DEFAULT_TIMEFRAME;
   const { strongRatio } = await getSettings();
   setStrongRatio(strongRatio);
   const settings = await publicSettings();
-  res.json(await analyzeSymbol(req.params.symbol, timeframe, await cachedCatalog(), settings, true));
+  const catalog = await cachedCatalog();
+  const result = await analyzeSymbol(req.params.symbol, timeframe, catalog, settings, true);
+  if (result.ok && (req.query.all === "1" || req.query.all === "true")) {
+    result.timeframeRatings = await ratingsForAllTimeframes(req.params.symbol, catalog, settings);
+  }
+  res.json(result);
 });
 
 // Compact all-timeframe verdict for the card ribbon. A wide watchlist costs ten

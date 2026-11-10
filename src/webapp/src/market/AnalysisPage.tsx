@@ -421,7 +421,7 @@ function StatusLine({
       <span className="text-fg-muted">
         {loading
           ? "Updating…"
-          : `${okCount}/${total} markets analysed from cTrader`}
+          : `${okCount}/${total} markets analyzed`}
       </span>
       <span className="flex items-center gap-2 text-fg-faint">
         {secondsLeft > 0 && !loading && <span>Next refresh in {secondsLeft}s</span>}

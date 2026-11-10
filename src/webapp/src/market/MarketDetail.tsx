@@ -41,13 +41,25 @@ export function MarketDetail({
   const [seq, setSeq] = useState(0);
 
   // `seq` re-runs the fetch (used by the refresh button); symbol/timeframe
-  // changes replace the sheet rather than refetching in place.
+  // changes replace the sheet rather than refetching in place. Signed-in users
+  // force a broker read every time, so opening a card never shows the grid's
+  // last poll; a throttled force falls back to the cached detail.
   useEffect(() => {
     let alive = true;
     setData(null);
     setBusy(true);
-    marketApi
-      .detail(symbol, timeframe, true)
+    const load = async (): Promise<MarketResult> => {
+      if (canWrite) {
+        try {
+          return await marketApi.refreshSymbol(symbol, timeframe, true);
+        } catch {
+          // A forced read spends the shared rate limit; the cached read still
+          // renders the sheet when it is refused.
+        }
+      }
+      return marketApi.detail(symbol, timeframe, true);
+    };
+    load()
       .then((res) => {
         if (alive) setData(res);
       })
@@ -60,7 +72,7 @@ export function MarketDetail({
     return () => {
       alive = false;
     };
-  }, [symbol, timeframe, seq]);
+  }, [symbol, timeframe, seq, canWrite]);
 
   const a = data?.ok ? data : null;
 

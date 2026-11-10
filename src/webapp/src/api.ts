@@ -187,11 +187,12 @@ export const marketApi = {
       `/api/market/analysis/${encodeURIComponent(symbol)}/confluence`
     ),
 
-  // Force-refresh one market, bypassing the server's candle cache.
-  refreshSymbol: (symbol: string, timeframe: string) =>
+  // Force-refresh one market, bypassing the server's candle cache. `all` also
+  // attaches the per-timeframe strip the detail sheet shows.
+  refreshSymbol: (symbol: string, timeframe: string, all = false) =>
     request<import("./market/types").MarketResult>(
       `/api/market/analysis/${encodeURIComponent(symbol)}/refresh` +
-        `?timeframe=${encodeURIComponent(timeframe)}`,
+        `?timeframe=${encodeURIComponent(timeframe)}${all ? "&all=1" : ""}`,
       { method: "POST" }
     ),
 
