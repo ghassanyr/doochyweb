@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { analyze, RATINGS } from "../src/server/market/analysis";
+import { analyze, applyLatestPrice, RATINGS } from "../src/server/market/analysis";
 import { detectEngulfing, detectSweep } from "../src/server/market/patterns";
 import * as ti from "../src/server/market/indicators";
 import { buildCatalog, resolveAgainstBroker, toSymbolMeta, searchCatalog } from "../src/server/market/symbols";
@@ -120,6 +120,30 @@ describe("analysis", () => {
 
   test("rejects too little data", () => {
     assert.throws(() => analyze(makeCandles(10), { symbol: "X" }, "1d"));
+  });
+
+  test("latest price replaces the stale close and measures change from it", () => {
+    const result = analyze(makeCandles(320), { symbol: "XAUUSD", name: "Gold", type: "commodity" }, "4h");
+    const lastClose = result.price;
+    applyLatestPrice(result, lastClose + 12);
+    assert.equal(result.price, lastClose + 12);
+    assert.equal(result.previousClose, lastClose);
+    assert.equal(result.change, 12);
+    assert.ok(Math.abs(result.changePct - (12 / lastClose) * 100) < 1e-9);
+    // Indicators stay on the closed-bar series; only the display price moves.
+    assert.equal(result.oscillators.rows.length, 12);
+  });
+
+  test("an invalid latest price leaves the analysis untouched", () => {
+    const result = analyze(makeCandles(320), { symbol: "X", type: "crypto" }, "1d");
+    const before = { price: result.price, previousClose: result.previousClose, changePct: result.changePct };
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      applyLatestPrice(result, bad);
+      assert.deepEqual(
+        { price: result.price, previousClose: result.previousClose, changePct: result.changePct },
+        before
+      );
+    }
   });
 });
 

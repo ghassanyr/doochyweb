@@ -9,7 +9,7 @@
 
 import { Router } from "express";
 
-import { analyze, setStrongRatio } from "./analysis";
+import { analyze, applyLatestPrice, setStrongRatio } from "./analysis";
 import { readCaptures } from "./captures";
 import {
   BREAKOUT_TYPES,
@@ -462,6 +462,19 @@ async function analyzeSymbol(
   try {
     const { bars, provider, warnings, cached } = await getCandles(meta, timeframe, settings, { force });
     const result = analyze(bars, meta, timeframe);
+    // cTrader bars stop at the last closed bar, so the newest close can be a
+    // full timeframe old. Show the latest 1-minute close instead, which is at
+    // most a minute old; the rating and patterns above still come from the
+    // selected timeframe's closed bars only.
+    if (provider === "ctrader" && timeframe !== "1m") {
+      try {
+        const minute = await getCandles(meta, "1m", settings, { force });
+        const latest = minute.bars[minute.bars.length - 1]?.close;
+        if (latest != null) applyLatestPrice(result, latest);
+      } catch {
+        // A missing minute bar must not blank the card: the bar close is valid.
+      }
+    }
     return {
       ok: true,
       ...result,
