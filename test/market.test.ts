@@ -22,6 +22,9 @@ import * as breaker from "../src/server/market/providers/breaker";
 import type { Candle, Timeframe } from "../src/server/market/types";
 import { applyOrder, moveTo, dropIndex } from "../src/webapp/src/market/order";
 import { changedSymbolCount, dayKey, dayLabel, fmtUtc3, groupChanges, matchesCapture, relativeTime } from "../src/webapp/src/market/captures";
+import { computeConfluence } from "../src/webapp/src/market/confluence";
+import { timeframes as uiTimeframes } from "../src/webapp/src/market/timeframes";
+import type { Rating as UiRating, TimeframeRating as UiTimeframeRating } from "../src/webapp/src/market/types";
 
 // Deterministic OHLC series: a slow sine drift around price 100, so every
 // indicator has something non-degenerate to chew on.
@@ -891,5 +894,123 @@ describe("market snapshot UI helpers", () => {
     assert.equal(matchesCapture(c, "hourly"), true);
     assert.equal(matchesCapture(c, "btcusd"), false);
     assert.equal(matchesCapture(c, "  "), true);
+  });
+});
+
+describe("MTF confluence", () => {
+  const ids = uiTimeframes.map((t) => t.id);
+  const uniform = (rating: UiRating): Record<string, UiTimeframeRating> =>
+    Object.fromEntries(ids.map((id) => [id, { rating }]));
+
+  test("a BTC-like stack is a strong sell with full coverage", () => {
+    const ratings: Record<string, UiTimeframeRating> = {};
+    for (const id of ids) ratings[id] = { rating: id === "30m" ? "sell" : "strong_sell" };
+    const c = computeConfluence(ratings);
+    assert.equal(c.rating, "strong_sell");
+    assert.equal(c.label, "Strong Sell");
+    assert.ok(Math.abs(c.score - -0.9565) < 0.001, `score ${c.score}`);
+    assert.equal(c.aligned, 10);
+    assert.equal(c.available, 10);
+  });
+
+  test("all strong buy is a strong buy", () => {
+    const c = computeConfluence(uniform("strong_buy"));
+    assert.equal(c.rating, "strong_buy");
+    assert.equal(c.label, "Strong Buy");
+    assert.equal(c.aligned, 10);
+    assert.equal(c.available, 10);
+  });
+
+  test("a balanced split is Mixed, not a directional verdict", () => {
+    const ratings: Record<string, UiTimeframeRating> = {};
+    ids.forEach((id, i) => {
+      ratings[id] = { rating: i < 5 ? "strong_sell" : "strong_buy" };
+    });
+    const c = computeConfluence(ratings);
+    assert.equal(c.mixed, true);
+    assert.equal(c.label, "Mixed");
+  });
+
+  test("a neutral weighted score with both directions present is Mixed", () => {
+    // 1h strong buy (weight 1.1) balances 1m + 3m strong sell (0.5 + 0.6).
+    const ratings: Record<string, UiTimeframeRating> = uniform("neutral");
+    ratings["1h"] = { rating: "strong_buy" };
+    ratings["1m"] = { rating: "strong_sell" };
+    ratings["3m"] = { rating: "strong_sell" };
+    const c = computeConfluence(ratings);
+    assert.ok(Math.abs(c.score) < 1e-12, `score ${c.score}`);
+    assert.equal(c.rating, "neutral");
+    assert.equal(c.mixed, true);
+    assert.equal(c.label, "Mixed");
+  });
+
+  test("a neutral score stays Mixed even when the opposing count is under a third", () => {
+    // +1.0 on 1M offsets three half-strength sells: 1.8 + 1.6 + 0.6 = 4.0 * -0.5.
+    const ratings: Record<string, UiTimeframeRating> = uniform("neutral");
+    ratings["1M"] = { rating: "strong_buy" };
+    ratings["1w"] = { rating: "sell" };
+    ratings["1d"] = { rating: "sell" };
+    ratings["3m"] = { rating: "sell" };
+    const c = computeConfluence(ratings);
+    assert.ok(Math.abs(c.score) < 1e-12, `score ${c.score}`);
+    assert.equal(c.rating, "neutral");
+    assert.equal(c.mixed, true);
+    assert.equal(c.label, "Mixed");
+  });
+
+  test("all neutral is Neutral, not Mixed", () => {
+    const c = computeConfluence(uniform("neutral"));
+    assert.equal(c.mixed, false);
+    assert.equal(c.label, "Neutral");
+    assert.equal(c.rating, "neutral");
+    assert.equal(c.available, 10);
+  });
+
+  test("missing and errored timeframes are excluded from score and coverage", () => {
+    const ratings: Record<string, UiTimeframeRating> = {};
+    for (const id of ids) {
+      if (id === "1m" || id === "3m") continue;
+      ratings[id] = { rating: "strong_buy" };
+    }
+    ratings["1m"] = { error: "no bars" };
+    const c = computeConfluence(ratings);
+    assert.equal(c.available, 8);
+    assert.equal(c.aligned, 8);
+    assert.equal(c.score, 1);
+    const byId = new Map(c.segments.map((s) => [s.id, s]));
+    assert.equal(byId.get("1m")?.available, false);
+    assert.equal(byId.get("1m")?.error, true);
+    assert.equal(byId.get("3m")?.available, false);
+    assert.equal(byId.get("3m")?.error, false);
+  });
+
+  test("the 1M weight moves the score more than 1m", () => {
+    const base = uniform("neutral");
+    const short = computeConfluence({ ...base, "1m": { rating: "strong_buy" } });
+    const long = computeConfluence({ ...base, "1M": { rating: "strong_buy" } });
+    assert.ok(long.score > short.score);
+    assert.ok(Math.abs(short.score - 0.5 / 11.5) < 1e-9);
+    assert.ok(Math.abs(long.score - 2 / 11.5) < 1e-9);
+  });
+
+  test("selection only marks a segment; it never changes the weighted result", () => {
+    const ratings = uniform("sell");
+    const a = computeConfluence(ratings, "1m");
+    const b = computeConfluence(ratings, "1M");
+    assert.equal(a.score, b.score);
+    assert.equal(a.rating, b.rating);
+    assert.equal(a.aligned, b.aligned);
+    assert.equal(a.segments.find((s) => s.id === "1m")?.selected, true);
+    assert.equal(b.segments.find((s) => s.id === "1M")?.selected, true);
+    assert.equal(a.segments.find((s) => s.id === "1M")?.selected, false);
+  });
+
+  test("segments keep static order and the approved weights", () => {
+    const c = computeConfluence(uniform("buy"));
+    assert.deepEqual(c.segments.map((s) => s.id), ids);
+    assert.deepEqual(
+      c.segments.map((s) => s.weight),
+      [0.5, 0.6, 0.7, 0.9, 1, 1.1, 1.3, 1.6, 1.8, 2]
+    );
   });
 });

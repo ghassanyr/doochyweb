@@ -45,6 +45,7 @@ import type {
   AnalysisSettings,
   AnalysisResponse,
   CatalogEntry,
+  ConfluenceResponse,
   ProviderWarning,
   SymbolMeta,
   TimeframeRating,
@@ -359,6 +360,56 @@ marketRouter.post("/analysis/:symbol/refresh", authRequired, async (req, res) =>
   setStrongRatio(strongRatio);
   const settings = await publicSettings();
   res.json(await analyzeSymbol(req.params.symbol, timeframe, await cachedCatalog(), settings, true));
+});
+
+// Compact all-timeframe verdict for the card ribbon. A wide watchlist costs ten
+// bar reads per symbol, so identical requests within a minute share one result
+// and concurrent callers share one in-flight promise.
+const CONFLUENCE_TTL_MS = 60_000;
+const confluenceCache = new Map<string, { at: number; value: ConfluenceResponse }>();
+const confluenceInFlight = new Map<string, Promise<ConfluenceResponse>>();
+
+async function confluenceFor(
+  meta: SymbolMeta,
+  catalog: CatalogEntry[],
+  settings: AnalysisSettings
+): Promise<ConfluenceResponse> {
+  const key = `${normalizeSymbol(meta.symbol)}|${settings.strongRatio}`;
+  const cached = confluenceCache.get(key);
+  if (cached && Date.now() - cached.at < CONFLUENCE_TTL_MS) return cached.value;
+  const running = confluenceInFlight.get(key);
+  if (running) return running;
+  const task = (async () => {
+    try {
+      const timeframes = await ratingsForAllTimeframes(meta.symbol, catalog, settings);
+      const value: ConfluenceResponse = { symbol: meta.symbol, updatedAt: Date.now(), timeframes };
+      confluenceCache.set(key, { at: Date.now(), value });
+      return value;
+    } finally {
+      confluenceInFlight.delete(key);
+    }
+  })();
+  confluenceInFlight.set(key, task);
+  return task;
+}
+
+marketRouter.get("/analysis/:symbol/confluence", async (req, res) => {
+  const symbol = req.params.symbol;
+  // The rating engine reads its sensitivity from module state.
+  const { strongRatio } = await getSettings();
+  setStrongRatio(strongRatio);
+  const settings = await publicSettings();
+  const { items: catalog, brokerError } = await cachedCatalogFull();
+  const meta = resolveMeta(symbol, catalog);
+  if (!meta) {
+    res.status(404).json({ error: unresolvableError(symbol, brokerError) });
+    return;
+  }
+  try {
+    res.json(await confluenceFor(meta, catalog, settings));
+  } catch (err) {
+    res.status(500).json({ error: message(err) });
+  }
 });
 
 marketRouter.get("/analysis/:symbol", async (req, res) => {

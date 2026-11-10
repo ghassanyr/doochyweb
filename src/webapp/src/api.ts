@@ -180,6 +180,13 @@ export const marketApi = {
         `?timeframe=${encodeURIComponent(timeframe)}${all ? "&all=1" : ""}`
     ),
 
+  // Compact all-timeframe verdict for the card's MTF ribbon. Cached server-side
+  // for 60s; independent of the selected timeframe.
+  confluence: (symbol: string) =>
+    request<import("./market/types").ConfluenceResponse>(
+      `/api/market/analysis/${encodeURIComponent(symbol)}/confluence`
+    ),
+
   // Force-refresh one market, bypassing the server's candle cache.
   refreshSymbol: (symbol: string, timeframe: string) =>
     request<import("./market/types").MarketResult>(

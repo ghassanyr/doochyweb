@@ -41,13 +41,39 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
   // one (switching timeframe mid-flight is common).
   const reqId = useRef(0);
 
+  // Confluence runs separately from the card grid: one request per symbol,
+  // three at a time. A batch id plus a per-symbol id stop an older reply from
+  // overwriting a newer one.
+  const confluenceBatch = useRef(0);
+  const confluenceSeq = useRef(0);
+  const confluenceSeqBySymbol = useRef(new Map<string, number>());
+  const symbolsRef = useRef<string[]>([]);
+
+  // Unique symbols drive both the confluence effect and its request pool.
+  const symbols = Array.from(new Set(results.map((r) => r.symbol)));
+  const symbolsKey = [...symbols].sort().join("|");
+  symbolsRef.current = symbols;
+
   const load = useCallback(async () => {
     const id = ++reqId.current;
     setLoading(true);
     try {
       const res = await marketApi.analysis(timeframe);
       if (id !== reqId.current) return;
-      setResults(res.results);
+      // The list endpoint does not carry the MTF strip. Keep the copy already
+      // merged in from the confluence endpoint so it does not flash a skeleton
+      // on every poll.
+      setResults((prev) => {
+        const previous = new Map(prev.map((r) => [r.symbol, r]));
+        return res.results.map((r) => {
+          if (!r.ok) return r;
+          const old = previous.get(r.symbol);
+          if (old?.ok && old.timeframeRatings && r.timeframeRatings === undefined) {
+            return { ...r, timeframeRatings: old.timeframeRatings };
+          }
+          return r;
+        });
+      });
       setUpdatedAt(res.updatedAt);
       setError(null);
       setSecondsLeft(refreshSeconds);
@@ -58,6 +84,37 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
       if (id === reqId.current) setLoading(false);
     }
   }, [timeframe, refreshSeconds]);
+
+  const applyConfluence = useCallback(async (symbol: string) => {
+    const seq = ++confluenceSeq.current;
+    confluenceSeqBySymbol.current.set(symbol, seq);
+    try {
+      const res = await marketApi.confluence(symbol);
+      if (confluenceSeqBySymbol.current.get(symbol) !== seq) return;
+      setResults((prev) => {
+        let changed = false;
+        const next = prev.map((r) => {
+          if (r.symbol !== symbol || !r.ok) return r;
+          changed = true;
+          return { ...r, timeframeRatings: res.timeframes };
+        });
+        return changed ? next : prev;
+      });
+    } catch {
+      // The strip is additive; a 404 or a provider failure must leave the card
+      // exactly as it was.
+    }
+  }, []);
+
+  const loadConfluence = useCallback(async () => {
+    const current = symbolsRef.current;
+    if (current.length === 0) return;
+    const batch = ++confluenceBatch.current;
+    await mapPool(current, 3, async (symbol) => {
+      if (batch !== confluenceBatch.current) return;
+      await applyConfluence(symbol);
+    });
+  }, [applyConfluence]);
 
   // One-shot bootstrap: config + watchlist drives the initial render.
   useEffect(() => {
@@ -89,6 +146,15 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
     const poll = window.setInterval(load, Math.max(10, refreshSeconds) * 1000);
     return () => window.clearInterval(poll);
   }, [load, refreshSeconds]);
+
+  // MTF confluence: deliberately NOT keyed to the selected timeframe. It
+  // restarts when the symbol set, sensitivity or cadence changes, and otherwise
+  // just polls alongside the main grid.
+  useEffect(() => {
+    void loadConfluence();
+    const poll = window.setInterval(() => void loadConfluence(), Math.max(10, refreshSeconds) * 1000);
+    return () => window.clearInterval(poll);
+  }, [loadConfluence, symbolsKey, strongRatio, refreshSeconds]);
 
   // Countdown ticker. Lives in StatusLine so a tick re-renders only that strip
   // and not the whole grid.
@@ -154,6 +220,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         // Splice just this card in, so the rest of the grid is untouched.
         setResults((prev) => prev.map((r) => (r.symbol === symbol ? result : r)));
         setError(null);
+        void applyConfluence(symbol);
       } catch (err) {
         setError(err instanceof Error ? err.message : `Failed to refresh ${symbol}`);
       } finally {
@@ -164,7 +231,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         });
       }
     },
-    [timeframe, canWrite]
+    [timeframe, canWrite, applyConfluence]
   );
 
   const okCount = results.filter((r) => r.ok).length;
@@ -309,6 +376,27 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
       )}
     </FadeRise>
   );
+}
+
+/** Run `fn` over `items` with bounded concurrency, preserving input order. */
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(concurrency, items.length)) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor++;
+        results[index] = await fn(items[index]);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 // Split out so the per-second countdown tick re-renders only this strip. It is

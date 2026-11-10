@@ -125,6 +125,13 @@ export interface AnalysisError {
   error: string;
 }
 
+/** Compact all-timeframe verdict used by the card's MTF confluence ribbon. */
+export interface ConfluenceResponse {
+  symbol: string;
+  updatedAt: number;
+  timeframes: Record<string, TimeframeRating>;
+}
+
 /** Compact per-timeframe verdict used by the detail view's rating strip. */
 export interface TimeframeRating {
   rating?: Rating;

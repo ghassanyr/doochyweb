@@ -2,6 +2,7 @@ import { memo } from "react";
 import { RefreshCw, X } from "lucide-react";
 
 import { Card, Skeleton } from "../components/ui";
+import { MtfConfluence, MtfConfluenceSkeleton } from "./MtfConfluence";
 import { RatingDial } from "./RatingDial";
 import { Sparkline } from "./Sparkline";
 import {
@@ -192,6 +193,12 @@ function MarketCardInner({ analysis, strongRatio, refreshing, canWrite, onOpen, 
         {ratingLabel(a.summary.rating)}
       </div>
 
+      {a.timeframeRatings === undefined ? (
+        <MtfConfluenceSkeleton />
+      ) : (
+        <MtfConfluence ratings={a.timeframeRatings} selected={a.timeframe} />
+      )}
+
       <div className="pointer-events-none relative grid grid-cols-2 gap-2">
         <SubSummary title="Oscillators" section={a.oscillators} />
         <SubSummary title="Moving avgs" section={a.movingAverages} />
@@ -219,6 +226,7 @@ export function MarketCardSkeleton() {
       <Skeleton className="h-6 w-28" />
       <Skeleton className="h-10 w-full" />
       <Skeleton className="h-24 w-full" />
+      <MtfConfluenceSkeleton />
       <div className="grid grid-cols-2 gap-2">
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-14 w-full" />
