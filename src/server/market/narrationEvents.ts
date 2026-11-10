@@ -12,7 +12,7 @@ import {
 } from "./narration";
 import { NARRATION_PROMPT_VERSION, modelNarration, narrationConfig, type NarrationConfig } from "./narrationModel";
 import { listNarrations, saveNarration } from "./narrationStore";
-import { loadCatalog, resolveMeta } from "./routes";
+import { loadCatalog, resolveMeta } from "./catalog";
 
 /** Analogue results for every symbol in one run. Missing symbols are explicit errors. */
 export async function loadAnaloguesForRun(run: RunRecord, k: number, days: number) {

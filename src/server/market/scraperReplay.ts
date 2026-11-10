@@ -17,7 +17,7 @@ import mongoose from "mongoose";
 import { connectDb } from "../db";
 import { analyze } from "./analysis";
 import { getCandles } from "./providers/index";
-import { loadCatalog, resolveMeta } from "./routes";
+import { loadCatalog, resolveMeta } from "./catalog";
 import { buildObs } from "./scraperCollect";
 import {
   buildCapture, diffObservations, isStale, isWeekendClosed, newNeedles, sessionLabel,

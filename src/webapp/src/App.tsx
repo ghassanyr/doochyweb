@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
+import SignalsPage from "./signals/SignalsPage";
 import BreakoutsPage from "./market/BreakoutsPage";
 import AdminPage from "./admin/AdminPage";
 import LearnPage from "./learn/LearnPage";
@@ -64,6 +65,10 @@ export default function App() {
       url.searchParams.delete("note");
       changed = true;
     }
+    if (next !== "signals" && url.searchParams.has("signal")) {
+      url.searchParams.delete("signal");
+      changed = true;
+    }
     if (next !== "learn" && url.searchParams.has("view")) {
       url.searchParams.delete("view");
       changed = true;
@@ -113,6 +118,8 @@ export default function App() {
         )
       ) : view === "analysis" ? (
         <AnalysisPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
+      ) : view === "signals" ? (
+        <SignalsPage canRefresh={signedIn} canManageSignals={isAdmin} />
       ) : view === "breakouts" ? (
         <BreakoutsPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
       ) : view === "learn" ? (

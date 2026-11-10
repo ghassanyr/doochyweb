@@ -1,9 +1,10 @@
 export function initialView(
   search: string,
   hostname: string
-): "trading" | "analysis" | "breakouts" | "learn" {
+): "trading" | "analysis" | "signals" | "breakouts" | "learn" {
   const params = new URLSearchParams(search);
   if (params.get("view") === "learn") return "learn";
+  if (params.get("view") === "signals") return "signals";
 
   const host = hostname.toLowerCase();
   if (host === "learn.doochy.net" || host.startsWith("learn.")) return "learn";

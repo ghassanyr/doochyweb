@@ -10,6 +10,7 @@ import { discoverAccounts } from "./ctrader/auth";
 import { reconcileAccount, listAccounts } from "./ctrader/reads";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
+import { signalsRouter } from "./signals/routes";
 import { promoteConfiguredAdmins } from "./admin/roles";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
@@ -398,6 +399,7 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 // Everything under /api/accounts and /api/credentials stays behind auth.
 // -----------------------------------------------------------------------
 app.use("/api/market", marketRouter);
+app.use("/api/signals", signalsRouter);
 app.use("/api/trainer", createTrainerRouter());
 
 // -----------------------------------------------------------------------

@@ -8,6 +8,7 @@ const JWT_TTL = "7d";
 
 export interface AuthedRequest extends Request {
   userId?: string;
+  username?: string;
   role?: UserRole;
 }
 
@@ -69,6 +70,7 @@ export async function adminRequired(req: AuthedRequest, res: Response, next: Nex
       return;
     }
     req.userId = token.userId;
+    req.username = typeof user.username === "string" ? user.username : undefined;
     req.role = role;
     next();
   } catch (err: any) {

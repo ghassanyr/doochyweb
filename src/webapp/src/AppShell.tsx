@@ -12,10 +12,11 @@ import { Button } from "./components/ui";
 // sticky translucent topbar, a segmented control for the primary nav, and the
 // 1600px page measure.
 
-export type ViewKey = "trading" | "analysis" | "breakouts" | "learn" | "admin";
+export type ViewKey = "trading" | "analysis" | "signals" | "breakouts" | "learn" | "admin";
 
 const NAV: { key: ViewKey; label: string }[] = [
   { key: "analysis", label: "Analysis" },
+  { key: "signals", label: "Signals" },
   { key: "breakouts", label: "Breakouts" },
   { key: "learn", label: "Learn" },
   { key: "trading", label: "Trading" },

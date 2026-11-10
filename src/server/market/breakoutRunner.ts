@@ -17,7 +17,7 @@ import { evaluateSymbol, H1_MS, type EngineBreakout } from "./breakoutEngine";
 import { backfillDone, breakoutsFile, firedIds, readRuns, type RunRecord, type SymbolDiagnostic } from "./breakoutFeed";
 import { describeError, getCandles } from "./providers/index";
 import { getWatchlist, publicSettings } from "./store";
-import { loadCatalog, resolveMeta } from "./routes";
+import { loadCatalog, resolveMeta } from "./catalog";
 import { publishRunNarrations } from "./narrationEvents";
 import type { Candle } from "./types";
 

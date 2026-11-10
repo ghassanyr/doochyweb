@@ -224,6 +224,74 @@ export const marketApi = {
     }),
 };
 
+// ---------------------------------------------------------------------------
+// Signals (public feed, admin-managed), see src/server/signals
+// ---------------------------------------------------------------------------
+
+export interface SignalInputPayload {
+  symbol: string;
+  direction: "buy" | "sell";
+  entry?: number | null;
+  target: number;
+  stop: number;
+  timeframe?: string | null;
+  note?: string;
+  expiresAt?: string | null;
+  /** Retry a create despite an existing active signal for the same pair. */
+  force?: boolean;
+}
+
+export const signalsApi = {
+  list: (params: { status?: string; symbol?: string; direction?: string; limit?: number; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+    return request<import("./signals/types").SignalListResponse>(`/api/signals?${qs.toString()}`);
+  },
+
+  get: (id: string) =>
+    request<{ signal: import("./signals/types").Signal }>(`/api/signals/${encodeURIComponent(id)}`),
+
+  stats: () => request<import("./signals/types").SignalStats>("/api/signals/stats"),
+
+  prices: (symbols: string[]) =>
+    request<{ prices: Record<string, import("./signals/types").PricePoint> }>(
+      `/api/signals/prices?symbols=${encodeURIComponent(symbols.join(","))}`
+    ),
+
+  create: (input: SignalInputPayload) =>
+    request<{ signal: import("./signals/types").Signal }>("/api/signals", {
+      method: "POST",
+      body: input,
+    }),
+
+  update: (id: string, patch: Partial<SignalInputPayload>) =>
+    request<{ signal: import("./signals/types").Signal }>(`/api/signals/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: patch,
+    }),
+
+  postUpdate: (id: string, note: string) =>
+    request<{ signal: import("./signals/types").Signal }>(
+      `/api/signals/${encodeURIComponent(id)}/updates`,
+      { method: "POST", body: { note } }
+    ),
+
+  invalidate: (id: string, reason: string) =>
+    request<{ signal: import("./signals/types").Signal }>(
+      `/api/signals/${encodeURIComponent(id)}/invalidate`,
+      { method: "POST", body: { reason } }
+    ),
+
+  restore: (id: string) =>
+    request<{ signal: import("./signals/types").Signal }>(
+      `/api/signals/${encodeURIComponent(id)}/restore`,
+      { method: "POST" }
+    ),
+
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/signals/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
 export const api = {
   register: (username: string, password: string) =>
     request<{ token: string }>("/api/auth/register", { method: "POST", body: { username, password } }),

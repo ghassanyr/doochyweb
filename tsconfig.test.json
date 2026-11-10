@@ -4,5 +4,11 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["test/**/*", "src/server/**/*", "src/webapp/src/learn/**/*.ts"]
+  "include": [
+    "test/**/*",
+    "src/server/**/*",
+    "src/webapp/src/learn/**/*.ts",
+    "src/webapp/src/time.ts",
+    "src/webapp/src/signals/signalFormat.ts"
+  ]
 }

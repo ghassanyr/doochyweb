@@ -17,7 +17,7 @@ import mongoose from "mongoose";
 import { connectDb } from "../db";
 import { getCandles } from "./providers/index";
 import { twelveData, resampleToGrid, supportsSymbol } from "./providers/twelveData";
-import { loadCatalog, resolveMeta } from "./routes";
+import { loadCatalog, resolveMeta } from "./catalog";
 import { closedBars } from "./scraperCollect";
 import { engulfClosed, structureClosed } from "./scraperRules";
 import { getWatchlist, publicSettings } from "./store";
