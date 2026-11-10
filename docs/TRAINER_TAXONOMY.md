@@ -1,9 +1,9 @@
 # Doochy Learn — Pattern Taxonomy
 
-**Status:** revised 2026-11-09 for the seven-tag pilot. This document is the contract for
-the trainer detectors in `src/server/trainer/detectors.ts` and the scanner in
-`src/server/trainer/scan.ts`. If a detector and this document disagree, the detector is wrong
-until this document is changed.
+**Status:** revised 2026-11-10 for detector accuracy; seven-tag pilot contract. This
+document is the contract for the trainer detectors in `src/server/trainer/detectors.ts` and
+the scanner in `src/server/trainer/scan.ts`. If a detector and this document disagree, the
+detector is wrong until this document is changed.
 
 The live analysis code in `src/server/market/patterns.ts` and
 `src/server/market/breakoutEngine.ts` is the reference for closed-bar handling, wicks,
@@ -33,8 +33,8 @@ but it must not change or reinterpret the live market behaviour.
 - **Range:** `high - low`.
 - **Doji:** `open === close` exactly, matching `patterns.ts`. An engulfing pattern with a
   doji on either bar has no direction and is not valid.
-- **Wick:** the part of the range outside the body. Wicks are ignored by engulfing, as in
-  `patterns.ts`. Sweeps use high/low, not body.
+- **Wick:** the part of the range outside the body. Engulfing uses the prior wick for the
+  close-clearance check; sweeps use high/low, not body.
 
 ### ATR and break thresholds
 
@@ -85,6 +85,10 @@ carried as a candidate note, but it is never silently promoted to a valid match.
 
 ## Engulfing
 
+Engulfing uses the prior bar's colour and body containment, a minimum body expansion, and a
+close that clears the prior wick. `ATR20(i)` must exist, so the earliest valid bar is
+`i >= 20` with at least 21 closed bars.
+
 ### Bullish engulfing
 
 - **Rule at bar `i`:** let `p = i - 1`.
@@ -92,12 +96,15 @@ carried as a candidate note, but it is never silently promoted to a valid match.
   - `body[i] > 0` (current bar green, non-doji)
   - `open[i] <= close[p]`
   - `close[i] >= open[p]`
-- **Wicks:** ignored. The engulfing test is body-only, exactly as `detectEngulfing`.
-- **Lookback:** 2 bars, `p .. i`. Minimum history is `i >= 1`.
-- **Valid:** all four conditions above.
-- **Near miss:** either containment test misses by at most `0.1 × ATR20(i)` while the
-  colour test still holds; or the current body covers the prior body but either bar is a
-  doji (direction is undefined, so it is not valid).
+  - `abs(body[i]) / abs(body[p]) >= 1.3` (body expansion)
+  - `close[i] >= high[p] - 0.1 × ATR20(i)` (wick clearance)
+- **Wicks:** the current open may sit inside the prior body or wick; only the close must clear
+  the prior high within the `0.1 × ATR20(i)` epsilon.
+- **Lookback:** 2 bars, `p .. i`. Minimum history is `i >= 20` because of `ATR20`.
+- **Valid:** all six conditions above.
+- **Near miss:** body containment misses by at most `0.1 × ATR20(i)` while colour still
+  holds; the close clears the prior body but not the prior wick; the body ratio is below
+  `1.3`; or either bar is a doji (direction is undefined, so it is not valid).
 - **Emit:** `bounds = { startIndex: p, endIndex: i }`; `levelUpper = null`,
   `levelLower = null`, `neckline = null`; `cutIndex = i`; `direction = "up"`.
 
@@ -107,53 +114,53 @@ Mirror of bullish:
 
 - `body[p] > 0`, `body[i] < 0`
 - `open[i] >= close[p]`, `close[i] <= open[p]`
-- Lookback and near-miss mirror the bullish case.
+- `abs(body[i]) / abs(body[p]) >= 1.3`
+- `close[i] <= low[p] + 0.1 × ATR20(i)`
+- Lookback, wick treatment and near-miss mirror the bullish case.
 - **Emit:** same bounds and null levels; `cutIndex = i`; `direction = "down"`.
 
 ---
 
 ## Sweep / false breakout
 
-A sweep is a failed break of the most recent confirmed swing, not a fixed five-bar
-range. The trainer uses its own swing lookback for this detector.
+A sweep is a failed break of the prior 20-bar range extreme, not a confirmed swing. The
+level is the highest high (sweep up) or lowest low (sweep down) in
+`bars[max(0, i - 20) .. i - 1]`. If several bars share the extreme, the most recent one is
+the level's `startIndex`. The candidate is bar `i`; `ATR20(i)` must exist.
 
-- `SWEEP_SWING_LOOKBACK = 60`
-- `SWEEP_MIN_GAP = 3`
+- `SWEEP_LEVEL_LOOKBACK = 20`
 - `SWEEP_PENETRATION_ATR = 0.1`
 
-The candidate is bar `i`; `ATR20(i)` must exist. Find the most recent confirmed swing at
-`s` in the last 60 bars with `i - s >= 3`. Evaluate only that swing, not older ones that
-were already broken. A close beyond the level by `0.1 × ATR20(i)` anywhere in `s+1 .. i-1`
-means the level was already broken and the sweep is rejected; use the same `isFirstBreak`
-check as the live break code.
+There is no separate prior-break check. The level is recomputed from the prior 20 bars on
+every candidate, and only the current sweep bar can clear it.
 
-### Sweep up (failed break above a swing high)
+### Sweep up (failed break above the prior 20-bar high)
 
-- **Level:** `high[s]` for the most recent eligible confirmed swing high.
-- **No prior break:** no close in `s+1 .. i-1` is above `level + 0.1 × ATR20(i)`.
+- **Level:** `level = max(high[j])` for `j = max(0, i - 20) .. i - 1`; `s` is the most recent
+  index with `high[s] === level`.
 - **Wick:** `high[i] > level + 0.1 × ATR20(i)`.
 - **Return:** `close[i] < level`.
 - **Rejection close:** `close[i] < (high[i] + low[i]) / 2` (lower half of the sweep bar).
 - **Emit:** `bounds = { startIndex: s, endIndex: i }`; `levelUpper = level`;
   `levelLower = min(low[s..i])`; `neckline = null`; `cutIndex = i`; `direction = "down"`.
-  The note records the swept swing index.
+  The note records the 20-bar high index.
 
-### Sweep down (failed break below a swing low)
+### Sweep down (failed break below the prior 20-bar low)
 
-Mirror against the most recent eligible confirmed swing low:
+Mirror against the prior 20-bar low:
 
-- **Level:** `low[s]`.
-- **No prior break:** no close in `s+1 .. i-1` is below `level - 0.1 × ATR20(i)`.
+- **Level:** `level = min(low[j])` for `j = max(0, i - 20) .. i - 1`; `s` is the most recent
+  index with `low[s] === level`.
 - **Wick:** `low[i] < level - 0.1 × ATR20(i)`.
 - **Return:** `close[i] > level`.
 - **Rejection close:** `close[i] > (high[i] + low[i]) / 2` (upper half of the sweep bar).
 - **Emit:** `bounds = { startIndex: s, endIndex: i }`; `levelLower = level`;
   `levelUpper = max(high[s..i])`; `neckline = null`; `cutIndex = i`; `direction = "up"`.
-  The note records the swept swing index.
+  The note records the 20-bar low index.
 
-Touch-only, close-through, prior-break and weak-rejection cases are not valid sweeps. The
-two mirrors cannot match the same bar: `sweep_up` needs a lower-half close while
-`sweep_down` needs an upper-half close.
+Touch-only, close-through and weak-rejection cases are not valid sweeps. The two mirrors
+cannot match the same bar: `sweep_up` needs a lower-half close while `sweep_down` needs an
+upper-half close.
 
 ---
 
@@ -203,10 +210,17 @@ Mirror:
 Both use confirmed swings, the 120-bar swing lookback, and the break threshold `thr(i)`.
 Trend is read from the last **two** confirmed swing highs (`H1` older, `H2` newer) and the
 last **two** confirmed swing lows (`L1` older, `L2` newer) before the candidate bar. All four
-swing indices must be `<= i - 2`.
+swing indices must be `<= i - 2`, and they must alternate in time:
 
-- **Uptrend:** `H2 > H1` and `L2 > L1` (higher highs and higher lows).
-- **Downtrend:** `H2 < H1` and `L2 < L1` (lower highs and lower lows).
+```
+(H1 < L1 && L1 < H2 && H2 < L2) || (L1 < H1 && H1 < L2 && L2 < H2)
+```
+
+A bar cannot be both a swing high and a swing low for this check. If the swing order does not
+alternate, trend is **range/unclear** and BOS/CHoCH do not fire.
+
+- **Uptrend:** alternating structure, `H2 > H1` and `L2 > L1` (higher highs and higher lows).
+- **Downtrend:** alternating structure, `H2 < H1` and `L2 < L1` (lower highs and lower lows).
 - Anything else is **range/unclear**; BOS and CHoCH do not fire.
 
 A break is a close beyond a level by at least `thr(i)`, and must be the first such break of
@@ -246,8 +260,8 @@ context chart has no filled pattern rectangle.
 Per-tag annotations are derived from the row and the stored bars:
 
 - **Engulfing:** highlight both candles in the pattern bounds.
-- **Sweep:** horizontal liquidity level from the swept swing to the sweep, markers at the
-  swing extreme and the sweep wick, and an arrow back toward the rejection close.
+- **Sweep:** horizontal liquidity level from the swept range extreme to the sweep, markers
+  at the 20-bar high/low and the sweep wick, and an arrow back toward the rejection close.
 - **S/R flip:** horizontal flipped level, marker at the original swing, the first break bar
   between `startIndex` and `endIndex`, and the retest bar at `endIndex`.
 - **BOS / CHoCH:** read structure with the existing confirmed-swing `readTrend` logic at

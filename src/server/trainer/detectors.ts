@@ -7,9 +7,10 @@
 import { ATR_PERIOD, MIN_PCT, SWING_LOOKBACK } from "../market/breakoutEngine";
 import type { Candle } from "../market/types";
 import {
-  SWEEP_MIN_GAP,
+  ENGULF_MIN_BODY_RATIO,
+  ENGULF_WICK_EPS_ATR,
+  SWEEP_LEVEL_LOOKBACK,
   SWEEP_PENETRATION_ATR,
-  SWEEP_SWING_LOOKBACK,
   TAG_FAMILY,
 } from "./config";
 import type {
@@ -122,21 +123,6 @@ function swingIndices(
   return out;
 }
 
-function latestSwing(
-  bars: readonly Candle[],
-  side: "high" | "low",
-  i: number,
-  lookback: number,
-  minGap: number
-): number | null {
-  const swings = swingIndices(bars, side, i, lookback);
-  for (let n = swings.length - 1; n >= 0; n--) {
-    const s = swings[n];
-    if (i - s >= minGap) return s;
-  }
-  return null;
-}
-
 // ---------------------------------------------------------------- candles
 
 export function detectBullishEngulfing(
@@ -144,6 +130,8 @@ export function detectBullishEngulfing(
   i: number
 ): DetectorMatch | null {
   if (!validIndex(bars, i) || i < 1) return null;
+  const atr = atrAt(bars, i);
+  if (atr === null) return null;
   const p = i - 1;
   const prior = bars[p];
   const current = bars[i];
@@ -151,11 +139,14 @@ export function detectBullishEngulfing(
   const currentBody = current.close - current.open;
   if (priorBody === 0 || currentBody === 0) return null;
 
+  const bodyRatio = Math.abs(currentBody) / Math.abs(priorBody);
   if (
     priorBody < 0 &&
     currentBody > 0 &&
     current.open <= prior.close &&
-    current.close >= prior.open
+    current.close >= prior.open &&
+    bodyRatio >= ENGULF_MIN_BODY_RATIO &&
+    current.close >= prior.high - atr * ENGULF_WICK_EPS_ATR
   ) {
     return makeMatch("bullish_engulfing", "up", i, p, i, levels());
   }
@@ -167,6 +158,8 @@ export function detectBearishEngulfing(
   i: number
 ): DetectorMatch | null {
   if (!validIndex(bars, i) || i < 1) return null;
+  const atr = atrAt(bars, i);
+  if (atr === null) return null;
   const p = i - 1;
   const prior = bars[p];
   const current = bars[i];
@@ -174,11 +167,14 @@ export function detectBearishEngulfing(
   const currentBody = current.close - current.open;
   if (priorBody === 0 || currentBody === 0) return null;
 
+  const bodyRatio = Math.abs(currentBody) / Math.abs(priorBody);
   if (
     priorBody > 0 &&
     currentBody < 0 &&
     current.open >= prior.close &&
-    current.close <= prior.open
+    current.close <= prior.open &&
+    bodyRatio >= ENGULF_MIN_BODY_RATIO &&
+    current.close <= prior.low + atr * ENGULF_WICK_EPS_ATR
   ) {
     return makeMatch("bearish_engulfing", "down", i, p, i, levels());
   }
@@ -187,34 +183,52 @@ export function detectBearishEngulfing(
 
 // ---------------------------------------------------------------- liquidity
 
+function priorRangeExtreme(
+  bars: readonly Candle[],
+  i: number,
+  side: "high" | "low"
+): { level: number; startIndex: number } | null {
+  const from = Math.max(0, i - SWEEP_LEVEL_LOOKBACK);
+  const to = i - 1;
+  if (to < from) return null;
+
+  let level = side === "high" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+  let startIndex = from;
+  for (let j = from; j <= to; j++) {
+    const value = side === "high" ? bars[j].high : bars[j].low;
+    if (side === "high" ? value >= level : value <= level) {
+      level = value;
+      startIndex = j;
+    }
+  }
+  return Number.isFinite(level) ? { level, startIndex } : null;
+}
+
 export function detectSweepUp(bars: readonly Candle[], i: number): DetectorMatch | null {
   if (!validIndex(bars, i)) return null;
   const atr = atrAt(bars, i);
   if (atr === null) return null;
 
-  const s = latestSwing(bars, "high", i, SWEEP_SWING_LOOKBACK, SWEEP_MIN_GAP);
-  if (s === null) return null;
-
-  const level = bars[s].high;
-  const penetration = atr * SWEEP_PENETRATION_ATR;
-  if (!isFirstBreak(bars, s, i, level, penetration, "up")) return null;
+  const range = priorRangeExtreme(bars, i, "high");
+  if (!range) return null;
 
   const current = bars[i];
-  if (current.high <= level + penetration) return null;
-  if (current.close >= level) return null;
+  const penetration = atr * SWEEP_PENETRATION_ATR;
+  if (current.high <= range.level + penetration) return null;
+  if (current.close >= range.level) return null;
   if (current.close >= (current.high + current.low) / 2) return null;
 
   let low = Number.POSITIVE_INFINITY;
-  for (let j = s; j <= i; j++) low = Math.min(low, bars[j].low);
+  for (let j = range.startIndex; j <= i; j++) low = Math.min(low, bars[j].low);
 
   return makeMatch(
     "sweep_up",
     "down",
     i,
-    s,
+    range.startIndex,
     i,
-    levels(level, low),
-    `swept swing high at index ${s}`
+    levels(range.level, low),
+    `20-bar high at index ${range.startIndex}`
   );
 }
 
@@ -223,29 +237,26 @@ export function detectSweepDown(bars: readonly Candle[], i: number): DetectorMat
   const atr = atrAt(bars, i);
   if (atr === null) return null;
 
-  const s = latestSwing(bars, "low", i, SWEEP_SWING_LOOKBACK, SWEEP_MIN_GAP);
-  if (s === null) return null;
-
-  const level = bars[s].low;
-  const penetration = atr * SWEEP_PENETRATION_ATR;
-  if (!isFirstBreak(bars, s, i, level, penetration, "down")) return null;
+  const range = priorRangeExtreme(bars, i, "low");
+  if (!range) return null;
 
   const current = bars[i];
-  if (current.low >= level - penetration) return null;
-  if (current.close <= level) return null;
+  const penetration = atr * SWEEP_PENETRATION_ATR;
+  if (current.low >= range.level - penetration) return null;
+  if (current.close <= range.level) return null;
   if (current.close <= (current.high + current.low) / 2) return null;
 
   let high = Number.NEGATIVE_INFINITY;
-  for (let j = s; j <= i; j++) high = Math.max(high, bars[j].high);
+  for (let j = range.startIndex; j <= i; j++) high = Math.max(high, bars[j].high);
 
   return makeMatch(
     "sweep_down",
     "up",
     i,
-    s,
+    range.startIndex,
     i,
-    levels(high, level),
-    `swept swing low at index ${s}`
+    levels(high, range.level),
+    `20-bar low at index ${range.startIndex}`
   );
 }
 
@@ -358,6 +369,11 @@ export function readTrend(bars: readonly Candle[], i: number): Trend | null {
   const h2 = highs[highs.length - 1];
   const l1 = lows[lows.length - 2];
   const l2 = lows[lows.length - 1];
+
+  const alternatingUp = h1 < l1 && l1 < h2 && h2 < l2;
+  const alternatingDown = l1 < h1 && h1 < l2 && l2 < h2;
+  if (!alternatingUp && !alternatingDown) return null;
+
   return {
     up: bars[h2].high > bars[h1].high && bars[l2].low > bars[l1].low,
     down: bars[h2].high < bars[h1].high && bars[l2].low < bars[l1].low,

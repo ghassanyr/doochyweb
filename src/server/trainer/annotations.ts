@@ -101,7 +101,7 @@ function sweepAnnotations(row: ReviewRow, bars: readonly Candle[]): PreviewAnnot
         index: start,
         price: up ? swing.high : swing.low,
         kind: "swing",
-        label: "swept swing",
+        label: up ? "swept high" : "swept low",
       },
       { index: end, price: wick, kind: "sweep", label: "sweep wick" },
       { index: end, price: sweep.close, kind: "close", label: "close" },

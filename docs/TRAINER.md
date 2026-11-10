@@ -70,8 +70,8 @@ it does not touch Mongo.
 `trainer:review preview` writes `<runId>.preview.html` next to the shortlist, or to `--out`.
 The page is a read-only gallery with inline CSS/JS and two SVG panels per card: a `--context`
 window (120 bars by default) and a magnified pattern zoom. Both panels end at `cutIndex` and
-never show a bar after the cut. Per-tag annotations mark the swept swing, rejection close,
-flipped level, retest, break bar or structure trend lines; BOS/CHoCH use the shared
+never show a bar after the cut. Per-tag annotations mark the swept range extreme, rejection
+close, flipped level, retest, break bar or structure trend lines; BOS/CHoCH use the shared
 `readTrend` at `row.endIndex`. The old filled pattern rectangle is gone. Missing bars render a
 placeholder card instead of stopping the run. The preview only reads the shortlist and
 `TrainerBars`; it does not import, publish or write Mongo. Open the HTML locally to review the
@@ -160,30 +160,45 @@ pnpm build
 process keeps its old code until it is restarted; restart is a deploy action and needs
 approval. See [`TRAINER_DEPLOY.md`](./TRAINER_DEPLOY.md).
 
-## Pilot snapshot (2026-11-09 revision)
+## Pilot snapshot (2026-11-09 revision; curated 2026-11-10)
 
 - Taxonomy revision: seven tags only. Removed `inside_bar`, `outside_bar`, `double_top` and
-  `double_bottom`; sweeps now use the most recent confirmed swing with the 60/3/0.1 rule.
+  `double_bottom`; `v1` was built with the confirmed-swing 60/3/0.1 sweep rule. The
+  2026-11-10 accuracy revision changes the detector code to 20-bar-range sweeps,
+  wick-clearing/body-expanding engulfing and alternating BOS/CHoCH structure; `v1` remains
+  unchanged until a future publish.
 - Mongo cleanup: purged 240 removed-tag reviews from `TrainerReviews`, leaving 420 valid
   reviews (60 each for the remaining tags). Valid existing reviews were not deleted.
 - Scan run `2026-11-09T14-47-12-487Z`: 420 candidates, 60 per tag, across all six
   `symbol:timeframe` series.
 - Export: `data/trainer/review/2026-11-09T14-47-12-487Z.review.csv`, 420 pending rows. It was
-  not imported into `TrainerReviews`, so existing review decisions remain intact.
-- Shortlist: `data/trainer/review/2026-11-09T14-47-12-487Z.shortlist.csv`, 56 rows, 8 per tag,
-  directions 28 up / 28 down / 0 blank, series split 10/10/9/9/9/9.
-- Preview: `data/trainer/review/2026-11-09T14-47-12-487Z.preview.html`, 56 cards, 0 missing
-  series, 120-bar context plus per-card zoom, inline annotations and no network assets.
-- Sweep audit: all 8 `sweep_up` and all 8 `sweep_down` shortlist cards had a recent swing gap
-  of 3–12 bars, penetration of 0.106–0.703 ATR, and a rejection close on the correct side.
-- No publish, dry run, DNS, nginx, certificate or pm2 change was made in this revision.
+  not imported wholesale, so existing review decisions remained intact.
+- First shortlist: `data/trainer/review/2026-11-09T14-47-12-487Z.shortlist.csv`, 56 rows,
+  8 per tag, 28 up / 28 down. It was superseded because accepting all 56 leaves only 42 rows
+  after the 20-bar overlap guard.
+- Curated fallback shortlist: `data/trainer/review/2026-11-09T14-47-12-487Z.shortlist10.csv`,
+  70 rows, 10 per tag, 35 up / 35 down. Curated to 66 accept / 4 reject; the existing
+  `SOL:15m:sr_flip:23-60:up` decision was carried forward as accept/ambiguity 3.
+- Preview: `data/trainer/review/2026-11-09T14-47-12-487Z.shortlist10.preview.html`, 70 cards,
+  0 missing series, 120-bar context plus per-card zoom, inline annotations and no network
+  assets.
+- Import: run with the explicit run id and candidate CSV; 70 valid rows, matched 50 and
+  upserted 20. The store now holds 440 reviews: 370 pending, 66 accept, 4 reject.
+- Publish: `v1`, accepted 66, kept 50, dropped 16 by overlap, 0 invalid, 0 balance issues.
+  Kept mix is 27 up / 23 down with no scratches: bullish engulfing 5, bearish engulfing 5,
+  sweep up 7, sweep down 8, SR flip 9, BOS 8, CHoCH 8.
+- Verification: `/api/trainer/batch` returns `200` with `itemCount=50` on both hosts;
+  `learn.doochy.net/` and `doochy.net/?view=learn` return `200`. A local
+  session -> answer -> reveal pass returned an anonymized context and a reveal with tag,
+  outcome and base rates.
+- No DNS, nginx, certificate or pm2 change was made. Any deploy/restart remains
+  approval-gated.
 - Certificate: the current origin cert covers both `doochy.net` and `learn.doochy.net`; the
   current nginx blocks live in `/etc/nginx/sites-enabled/default` and were not moved.
   [`TRAINER_DEPLOY.md`](./TRAINER_DEPLOY.md) records the verification commands.
 
 Historical `2026-11-08T16-24-40-459Z` files include removed tags and are superseded; do not
-use them as the current pilot snapshot. Human curation is still required before a 50-item
-`v1` publish.
+use them as the current pilot snapshot.
 
 ## Troubleshooting
 

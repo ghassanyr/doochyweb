@@ -25,6 +25,8 @@ shared `?note=` links still open Breakouts.
 - Cloudflare **Automatic** SSL/TLS works with this origin certificate.
 - `learn.doochy.net` is served by the same pm2 process as `doochy.net`.
 - No DNS, nginx, certificate or pm2 change was made for the trainer preview/docs work.
+- `v1` was published on 2026-11-10 with 50 items; publishing was a data/Mongo action, not a
+  code deploy. No pm2 restart was performed.
 
 Verify the certificate and active nginx configuration before any future deploy:
 
@@ -105,6 +107,7 @@ Expected:
 
 - `/` returns `200` and serves the SPA.
 - `/api/trainer/batch` returns `503 {"error":"no batch published"}` until `v1` is published.
+  `v1` was published on 2026-11-10, so the current API returns `200` with `itemCount=50`.
 - After a published batch, both hosts return the same batch metadata.
 - Opening `https://learn.doochy.net/` selects the Learn tab without signing in.
 - Opening `https://doochy.net/?view=learn` also selects Learn.

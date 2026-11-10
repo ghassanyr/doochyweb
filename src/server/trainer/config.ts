@@ -44,14 +44,17 @@ export const BALANCE_MAX_SHARE = 0.7;
  */
 export const SCAN_CAP_PER_TAG_PER_SERIES = 10;
 
-/** Most recent confirmed swing used by the trainer sweep detector. */
-export const SWEEP_SWING_LOOKBACK = 60;
+/** Prior bars used for the trainer sweep range extreme. */
+export const SWEEP_LEVEL_LOOKBACK = 20;
 
-/** Minimum distance from the swept swing to the candidate bar. */
-export const SWEEP_MIN_GAP = 3;
-
-/** Wick penetration beyond the swept level, in ATR20 units. */
+/** Wick penetration beyond the swept range extreme, in ATR20 units. */
 export const SWEEP_PENETRATION_ATR = 0.1;
+
+/** Minimum current/prior body-size ratio for an engulfing match. */
+export const ENGULF_MIN_BODY_RATIO = 1.3;
+
+/** Close clearance beyond the prior wick, in ATR20 units. */
+export const ENGULF_WICK_EPS_ATR = 0.1;
 
 /** Mechanical pattern tags, grouped in taxonomy order. */
 export const TAGS = [

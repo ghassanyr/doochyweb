@@ -9,9 +9,10 @@ import {
 } from "../src/server/market/breakoutEngine";
 import type { Candle } from "../src/server/market/types";
 import {
-  SWEEP_MIN_GAP,
+  ENGULF_MIN_BODY_RATIO,
+  ENGULF_WICK_EPS_ATR,
+  SWEEP_LEVEL_LOOKBACK,
   SWEEP_PENETRATION_ATR,
-  SWEEP_SWING_LOOKBACK,
 } from "../src/server/trainer/config";
 import {
   atrAt,
@@ -24,6 +25,7 @@ import {
   detectSrFlip,
   detectSweepDown,
   detectSweepUp,
+  readTrend,
   thresholdAt,
 } from "../src/server/trainer/detectors";
 
@@ -44,12 +46,25 @@ function flat(length: number, price = 100): Candle[] {
   );
 }
 
+function twoBarSetup(prior: Candle, current: Candle): Candle[] {
+  const bars = flat(19);
+  bars[19] = { ...prior, time: 19 };
+  bars[20] = { ...current, time: 20 };
+  return bars;
+}
+
 function bearishBars(): Candle[] {
-  return [bar(0, 100, 102.5, 98, 102), bar(1, 102, 102.5, 98.5, 99)];
+  return twoBarSetup(
+    bar(0, 99.5, 100.5, 98, 100),
+    bar(0, 100.5, 101, 97, 97.5)
+  );
 }
 
 function bullishBars(): Candle[] {
-  return [bar(0, 102, 103, 98.5, 99), bar(1, 99, 102.5, 98.5, 102)];
+  return twoBarSetup(
+    bar(0, 100.5, 102, 99.5, 100),
+    bar(0, 99.5, 103, 99, 102.5)
+  );
 }
 
 function trendSeries(up: boolean): Candle[] {
@@ -88,13 +103,13 @@ describe("ATR and thresholds", () => {
 });
 
 describe("candle patterns", () => {
-  test("bullish engulfing covers the prior red body and ignores wicks", () => {
-    const match = detectBullishEngulfing(bullishBars(), 1);
+  test("bullish engulfing clears the prior wick and expands the body", () => {
+    const match = detectBullishEngulfing(bullishBars(), 20);
     assert.ok(match);
     assert.equal(match.tag, "bullish_engulfing");
     assert.equal(match.direction, "up");
-    assert.equal(match.cutIndex, 1);
-    assert.deepEqual(match.bounds, { startIndex: 0, endIndex: 1 });
+    assert.equal(match.cutIndex, 20);
+    assert.deepEqual(match.bounds, { startIndex: 19, endIndex: 20 });
     assert.deepEqual(match.levels, {
       levelUpper: null,
       levelLower: null,
@@ -104,17 +119,48 @@ describe("candle patterns", () => {
 
   test("a doji next to the engulfing bar is not valid", () => {
     const bars = bullishBars();
-    bars[1] = bar(1, 99, 101, 98.5, 99);
-    assert.equal(detectBullishEngulfing(bars, 1), null);
+    bars[20] = bar(20, 99, 101, 98.5, 99);
+    assert.equal(detectBullishEngulfing(bars, 20), null);
   });
 
   test("bearish engulfing is the mirror", () => {
-    const match = detectBearishEngulfing(bearishBars(), 1);
+    const match = detectBearishEngulfing(bearishBars(), 20);
     assert.ok(match);
     assert.equal(match.tag, "bearish_engulfing");
     assert.equal(match.direction, "down");
   });
 
+  test("bullish close between the prior body and prior wick is not valid", () => {
+    const bars = twoBarSetup(
+      bar(0, 100.5, 104, 99.5, 100),
+      bar(0, 99.5, 103, 99, 102.5)
+    );
+    assert.equal(detectBullishEngulfing(bars, 20), null);
+  });
+
+  test("bearish close between the prior body and prior wick is not valid", () => {
+    const bars = twoBarSetup(
+      bar(0, 99.5, 100.5, 96, 100),
+      bar(0, 100.5, 101, 97, 97.5)
+    );
+    assert.equal(detectBearishEngulfing(bars, 20), null);
+  });
+
+  test("a bullish wick clearance without body expansion is not valid", () => {
+    const bars = twoBarSetup(
+      bar(0, 101, 101, 99.5, 100),
+      bar(0, 100, 101.5, 99.5, 101.2)
+    );
+    assert.equal(detectBullishEngulfing(bars, 20), null);
+  });
+
+  test("a bearish wick clearance without body expansion is not valid", () => {
+    const bars = twoBarSetup(
+      bar(0, 99, 100.5, 99, 100),
+      bar(0, 100, 100, 98.8, 98.8)
+    );
+    assert.equal(detectBearishEngulfing(bars, 20), null);
+  });
 });
 
 describe("liquidity sweeps", () => {
@@ -132,7 +178,7 @@ describe("liquidity sweeps", () => {
     return bars;
   }
 
-  test("a valid sweep-up rejects a recent swing high", () => {
+  test("a valid sweep-up rejects the prior 20-bar high", () => {
     const match = detectSweepUp(sweepUpBars(), 30);
     assert.ok(match);
     assert.equal(match.tag, "sweep_up");
@@ -140,10 +186,10 @@ describe("liquidity sweeps", () => {
     assert.deepEqual(match.bounds, { startIndex: 20, endIndex: 30 });
     assert.equal(match.levels.levelUpper, 104);
     assert.equal(match.levels.levelLower, 99.5);
-    assert.match(match.notes ?? "", /swing high at index 20/);
+    assert.match(match.notes ?? "", /20-bar high at index 20/);
   });
 
-  test("a valid sweep-down rejects a recent swing low", () => {
+  test("a valid sweep-down rejects the prior 20-bar low", () => {
     const match = detectSweepDown(sweepDownBars(), 30);
     assert.ok(match);
     assert.equal(match.tag, "sweep_down");
@@ -151,7 +197,7 @@ describe("liquidity sweeps", () => {
     assert.deepEqual(match.bounds, { startIndex: 20, endIndex: 30 });
     assert.equal(match.levels.levelLower, 96);
     assert.equal(match.levels.levelUpper, 100.5);
-    assert.match(match.notes ?? "", /swing low at index 20/);
+    assert.match(match.notes ?? "", /20-bar low at index 20/);
   });
 
   test("touch-only rejection is not a sweep", () => {
@@ -166,25 +212,38 @@ describe("liquidity sweeps", () => {
     assert.equal(detectSweepUp(bars, 30), null);
   });
 
-  test("a prior close beyond the level rejects the sweep", () => {
-    const bars = sweepUpBars();
-    bars[24] = bar(24, 100, 105.5, 99.5, 100);
-    bars[25] = bar(25, 100, 105.5, 99.5, 105);
-    bars[30] = bar(30, 101, 106, 100, 102);
-    assert.equal(detectSweepUp(bars, 30), null);
-  });
-
   test("a weak rejection close rejects the sweep", () => {
     const bars = sweepUpBars();
     bars[30] = bar(30, 101, 105, 99, 102.5);
     assert.equal(detectSweepUp(bars, 30), null);
   });
 
-  test("a swing closer than the minimum gap is not used", () => {
-    const bars = flat(100);
-    bars[28] = bar(28, 100, 104, 99.5, 100);
-    bars[30] = bar(30, 101, 105, 100, 102);
+  test("a higher high inside the 20-bar range raises the swept level", () => {
+    const bars = sweepUpBars();
+    bars[24] = bar(24, 100, 110, 99.5, 100);
     assert.equal(detectSweepUp(bars, 30), null);
+  });
+
+  test("an immediately preceding extreme is eligible", () => {
+    const bars = flat(100);
+    bars[29] = bar(29, 100, 104, 99.5, 100);
+    bars[30] = bar(30, 101, 105, 100, 102);
+    const match = detectSweepUp(bars, 30);
+    assert.ok(match);
+    assert.deepEqual(match.bounds, { startIndex: 29, endIndex: 30 });
+    assert.match(match.notes ?? "", /20-bar high at index 29/);
+  });
+
+  test("an older low outside the 20-bar window is ignored", () => {
+    const bars = flat(100);
+    bars[20] = bar(20, 100, 100.5, 90, 100);
+    bars[40] = bar(40, 100, 100.5, 96, 100);
+    bars[50] = bar(50, 99, 100, 94, 98);
+    const match = detectSweepDown(bars, 50);
+    assert.ok(match);
+    assert.deepEqual(match.bounds, { startIndex: 40, endIndex: 50 });
+    assert.equal(match.levels.levelLower, 96);
+    assert.match(match.notes ?? "", /20-bar low at index 40/);
   });
 });
 
@@ -254,6 +313,31 @@ describe("BOS and CHoCH", () => {
     assert.equal(match.levels.levelUpper, 104);
   });
 
+  test("non-alternating swing order does not establish a trend", () => {
+    const bars = flat(31);
+    bars[10] = bar(10, 100, 104, 99.5, 100);
+    bars[14] = bar(14, 100, 100.5, 97, 100);
+    bars[18] = bar(18, 100, 100.5, 98, 100);
+    bars[22] = bar(22, 100, 106, 99.5, 100);
+    bars[30] = bar(30, 101, 115, 100, 115);
+
+    assert.equal(readTrend(bars, 30), null);
+    assert.equal(detectBos(bars, 30), null);
+    assert.equal(detectChoch(bars, 30), null);
+  });
+
+  test("a bar that is both swing high and swing low does not establish a trend", () => {
+    const bars = flat(31);
+    bars[10] = bar(10, 100, 104, 99.5, 100);
+    bars[14] = bar(14, 100, 110, 90, 100);
+    bars[18] = bar(18, 100, 100.5, 96, 100);
+    bars[30] = bar(30, 101, 115, 100, 115);
+
+    assert.equal(readTrend(bars, 30), null);
+    assert.equal(detectBos(bars, 30), null);
+    assert.equal(detectChoch(bars, 30), null);
+  });
+
   test("mixed structure does not establish a trend", () => {
     const bars = trendSeries(true);
     bars[18] = bar(18, 100, 100.5, 97, 100);
@@ -288,19 +372,20 @@ describe("detector aggregation", () => {
   });
 
   test("detectAll returns a candle hit with the right family and id", () => {
-    const hits = detectAll("ETH", "1h", bullishBars(), 1);
+    const hits = detectAll("ETH", "1h", bullishBars(), 20);
     const hit = hits.find((h) => h.tag === "bullish_engulfing");
     assert.ok(hit);
     assert.equal(hit.family, "candle");
-    assert.equal(hit.id, "ETH:1h:bullish_engulfing:0-1:up");
+    assert.equal(hit.id, "ETH:1h:bullish_engulfing:19-20:up");
   });
 });
 
 describe("taxonomy constants stay aligned", () => {
-  test("detectors use the shared swing and sweep constants", () => {
+  test("detectors use the shared swing, sweep and engulfing constants", () => {
     assert.equal(SWING_LOOKBACK, 120);
-    assert.equal(SWEEP_SWING_LOOKBACK, 60);
-    assert.equal(SWEEP_MIN_GAP, 3);
+    assert.equal(SWEEP_LEVEL_LOOKBACK, 20);
     assert.equal(SWEEP_PENETRATION_ATR, 0.1);
+    assert.equal(ENGULF_MIN_BODY_RATIO, 1.3);
+    assert.equal(ENGULF_WICK_EPS_ATR, 0.1);
   });
 });

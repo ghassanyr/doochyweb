@@ -211,8 +211,8 @@ pass.
 **Goal:** validate the pilot end to end and ship it at `learn.doochy.net`.
 
 Tasks:
-- [ ] Curate the ~50-item pilot batch using the Phase 3 workflow.
-- [ ] End-to-end pass: ingest → scan → review → publish → play → reveal.
+- [x] Curate the ~50-item pilot batch using the Phase 3 workflow.
+- [x] End-to-end pass: ingest → scan → review → publish → play/reveal (API verified locally).
 - [x] Add `learn.doochy.net` host/query routing in the SPA and document nginx/DNS/certbot.
 - [x] Add the read-only HTML shortlist preview (`trainer:review preview`) and tests, including
       per-tag annotations and the magnified pattern zoom.
@@ -254,3 +254,4 @@ Add a dated line here when a phase starts, blocks, or completes.
 - 2026-11-09 — Phase 7A done: `trainer:review shortlist` emits a deterministic 88-row CSV (8/tag, alternating direction, all six series), Learn scoring disclosure, `initialView` for `learn.*` / `?view=learn`, and `docs/TRAINER.md` + `docs/TRAINER_DEPLOY.md`; dry-run `v1` kept the 1 accepted `sr_flip` and wrote nothing. `pnpm typecheck`, `pnpm test` (351) and `pnpm build` pass. Phase 7 remains in progress pending human curation; no publish, DNS/nginx change or pm2 restart.
 - 2026-11-09 — Phase 7B done: added the deterministic read-only `trainer:review preview` HTML gallery (`preview.ts`, inline SVG/candles, filters/search, no network, no Mongo writes) and preview tests; generated `data/trainer/review/2026-11-08T16-24-40-459Z.preview.html` with 88 cards and 0 missing series. Updated `TRAINER_DEPLOY.md` with the then-current certificate and nginx notes; the 2026-11-09 revision corrected these to the certificate covering both names and nginx staying in `sites-enabled/default`. Documented that no pm2 restart is needed while `/api/trainer/batch` is already live and 503. `pnpm typecheck`, `pnpm test` (357) and `pnpm build` pass. Curate, import, publish and apply DNS/nginx/certbot/deploy remain unchecked and approval-gated.
 - 2026-11-09 — Trainer revision: reduced the taxonomy to seven tags, replaced liquidity sweeps with the recent-confirmed-swing 60/3/0.1 rule, added per-tag preview annotations and a magnified zoom panel, and corrected the certificate/nginx docs. Purged 240 removed-tag reviews (660→420 valid); scan `2026-11-09T14-47-12-487Z` emitted 420 candidates; shortlist is 56 rows (8/tag) and preview is 56 cards with 0 missing. `pnpm typecheck`, `pnpm test` (357) and `pnpm build` pass. No publish, deploy, cert, nginx or pm2 changes were made.
+- 2026-11-10 — Phase 7 curation/publish: the 56-row shortlist would keep only 42 after the overlap guard, so generated the approved 70-row fallback (10/tag). Curated 66 accept / 4 reject, carried `SOL:15m:sr_flip:23-60:up` as accept/ambiguity 3, and imported with the explicit run id (70 valid; matched 50, upserted 20; store 440 = 370 pending + 66 accept + 4 reject). Dry-run and publish of `v1` kept 50/66 (16 overlap drops, 0 invalid, 0 balance) with 27 up / 23 down and no scratches. `/api/trainer/batch` returns 200 with `itemCount=50`; a local session -> answer -> reveal pass succeeded. No commit, DNS, nginx, certificate or pm2 change was made.
