@@ -62,17 +62,20 @@ pnpm trainer:review preview --file=data/trainer/review/<runId>.shortlist.csv
 
 `trainer:review shortlist` writes `<runId>.shortlist.csv` next to the review CSV. It keeps
 only pending rows, takes at most 8 per tag, alternates direction within a tag, round-robins
-across the six `symbol:timeframe` series, and targets the pilot review size of about 88 rows.
+across the six `symbol:timeframe` series, and targets the pilot review size of 56 rows
+(8 per tag across the seven tags).
 The output uses the normal review header with literal `status=pending` and blank `ambiguity`;
 it does not touch Mongo.
 
 `trainer:review preview` writes `<runId>.preview.html` next to the shortlist, or to `--out`.
-The page is a read-only gallery with inline CSS/JS and one SVG candle card per row. Each
-window ends at `cutIndex`, shows at least `--context` bars (120 by default) and never shows a
-bar after the cut. Pattern bounds, levels, the cut bar and all CSV metadata are included;
-missing bars render a placeholder card instead of stopping the run. The preview only reads the
-shortlist and `TrainerBars`; it does not import, publish or write Mongo. Open the HTML locally
-to review the shortlist before editing the CSV.
+The page is a read-only gallery with inline CSS/JS and two SVG panels per card: a `--context`
+window (120 bars by default) and a magnified pattern zoom. Both panels end at `cutIndex` and
+never show a bar after the cut. Per-tag annotations mark the swept swing, rejection close,
+flipped level, retest, break bar or structure trend lines; BOS/CHoCH use the shared
+`readTrend` at `row.endIndex`. The old filled pattern rectangle is gone. Missing bars render a
+placeholder card instead of stopping the run. The preview only reads the shortlist and
+`TrainerBars`; it does not import, publish or write Mongo. Open the HTML locally to review the
+shortlist before editing the CSV.
 
 A reviewer then edits the shortlist:
 
@@ -157,21 +160,30 @@ pnpm build
 process keeps its old code until it is restarted; restart is a deploy action and needs
 approval. See [`TRAINER_DEPLOY.md`](./TRAINER_DEPLOY.md).
 
-## Pilot snapshot (2026-11-09)
+## Pilot snapshot (2026-11-09 revision)
 
-- Review run `2026-11-08T16-24-40-459Z`: 660 candidates, 659 pending and 1 accepted in the
-  Mongo review store.
-- Shortlist: `data/trainer/review/2026-11-08T16-24-40-459Z.shortlist.csv`, 88 rows, 8 per tag,
-  directions 36 up / 36 down / 16 blank, series split 14–15 per series.
-- Preview: `data/trainer/review/2026-11-08T16-24-40-459Z.preview.html`, 88 cards, 0 missing
-  series, 120-bar context; read-only and generated without importing or publishing.
-- Dry run `pnpm trainer:publish --version=v1 --runId=2026-11-08T16-24-40-459Z --dry-run`:
-  accepted 1, kept 1, dropped 0; the accepted `sr_flip` resolved up 1.000; nothing written.
-- Certificate: the current origin cert covers only `doochy.net`, not `learn.doochy.net`; no
-  DNS, nginx, certbot or pm2 changes were made. The recommended expansion command and the
-  final nginx block are documented in [`TRAINER_DEPLOY.md`](./TRAINER_DEPLOY.md).
+- Taxonomy revision: seven tags only. Removed `inside_bar`, `outside_bar`, `double_top` and
+  `double_bottom`; sweeps now use the most recent confirmed swing with the 60/3/0.1 rule.
+- Mongo cleanup: purged 240 removed-tag reviews from `TrainerReviews`, leaving 420 valid
+  reviews (60 each for the remaining tags). Valid existing reviews were not deleted.
+- Scan run `2026-11-09T14-47-12-487Z`: 420 candidates, 60 per tag, across all six
+  `symbol:timeframe` series.
+- Export: `data/trainer/review/2026-11-09T14-47-12-487Z.review.csv`, 420 pending rows. It was
+  not imported into `TrainerReviews`, so existing review decisions remain intact.
+- Shortlist: `data/trainer/review/2026-11-09T14-47-12-487Z.shortlist.csv`, 56 rows, 8 per tag,
+  directions 28 up / 28 down / 0 blank, series split 10/10/9/9/9/9.
+- Preview: `data/trainer/review/2026-11-09T14-47-12-487Z.preview.html`, 56 cards, 0 missing
+  series, 120-bar context plus per-card zoom, inline annotations and no network assets.
+- Sweep audit: all 8 `sweep_up` and all 8 `sweep_down` shortlist cards had a recent swing gap
+  of 3–12 bars, penetration of 0.106–0.703 ATR, and a rejection close on the correct side.
+- No publish, dry run, DNS, nginx, certificate or pm2 change was made in this revision.
+- Certificate: the current origin cert covers both `doochy.net` and `learn.doochy.net`; the
+  current nginx blocks live in `/etc/nginx/sites-enabled/default` and were not moved.
+  [`TRAINER_DEPLOY.md`](./TRAINER_DEPLOY.md) records the verification commands.
 
-Human curation is still required before a 50-item `v1` publish.
+Historical `2026-11-08T16-24-40-459Z` files include removed tags and are superseded; do not
+use them as the current pilot snapshot. Human curation is still required before a 50-item
+`v1` publish.
 
 ## Troubleshooting
 

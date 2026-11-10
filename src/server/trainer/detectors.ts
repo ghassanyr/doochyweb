@@ -4,17 +4,14 @@
 // null. Definitions live in docs/TRAINER_TAXONOMY.md. Detectors never read past
 // the supplied index, so the reveal window cannot influence validity.
 
-import {
-  ATR_PERIOD,
-  MIN_PCT,
-  PATTERN_GAP_MAX,
-  PATTERN_GAP_MIN,
-  PATTERN_TOL_ATR,
-  SWEEP_WINDOW,
-  SWING_LOOKBACK,
-} from "../market/breakoutEngine";
+import { ATR_PERIOD, MIN_PCT, SWING_LOOKBACK } from "../market/breakoutEngine";
 import type { Candle } from "../market/types";
-import { TAG_FAMILY } from "./config";
+import {
+  SWEEP_MIN_GAP,
+  SWEEP_PENETRATION_ATR,
+  SWEEP_SWING_LOOKBACK,
+  TAG_FAMILY,
+} from "./config";
 import type {
   Candidate,
   Direction,
@@ -109,15 +106,35 @@ function isSwing(bars: readonly Candle[], side: "high" | "low", s: number, i: nu
     : v(s) < v(s - 2) && v(s) < v(s - 1) && v(s) < v(s + 1) && v(s) < v(s + 2);
 }
 
-/** Confirmed swing indices in the last 120-bar window, newest eligible at i-2. */
-function swingIndices(bars: readonly Candle[], side: "high" | "low", i: number): number[] {
-  const from = Math.max(2, i - SWING_LOOKBACK + 1);
+/** Confirmed swing indices in the requested window, newest eligible at i-2. */
+function swingIndices(
+  bars: readonly Candle[],
+  side: "high" | "low",
+  i: number,
+  lookback: number = SWING_LOOKBACK
+): number[] {
+  const from = Math.max(2, i - lookback + 1);
   const to = i - 2;
   const out: number[] = [];
   for (let s = from; s <= to; s++) {
     if (isSwing(bars, side, s, i)) out.push(s);
   }
   return out;
+}
+
+function latestSwing(
+  bars: readonly Candle[],
+  side: "high" | "low",
+  i: number,
+  lookback: number,
+  minGap: number
+): number | null {
+  const swings = swingIndices(bars, side, i, lookback);
+  for (let n = swings.length - 1; n >= 0; n--) {
+    const s = swings[n];
+    if (i - s >= minGap) return s;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------- candles
@@ -168,139 +185,68 @@ export function detectBearishEngulfing(
   return null;
 }
 
-export function detectInsideBar(bars: readonly Candle[], i: number): DetectorMatch | null {
-  if (!validIndex(bars, i) || i < 1) return null;
-  const p = i - 1;
-  const inside = bars[i].high <= bars[p].high && bars[i].low >= bars[p].low;
-  const strict = bars[i].high < bars[p].high || bars[i].low > bars[p].low;
-  if (!inside || !strict) return null;
-  return makeMatch("inside_bar", null, i, p, i, levels(bars[p].high, bars[p].low));
-}
-
-export function detectOutsideBar(bars: readonly Candle[], i: number): DetectorMatch | null {
-  if (!validIndex(bars, i) || i < 1) return null;
-  const p = i - 1;
-  if (bars[i].high > bars[p].high && bars[i].low < bars[p].low) {
-    return makeMatch("outside_bar", null, i, p, i, levels(bars[p].high, bars[p].low));
-  }
-  return null;
-}
-
 // ---------------------------------------------------------------- liquidity
 
 export function detectSweepUp(bars: readonly Candle[], i: number): DetectorMatch | null {
-  if (!validIndex(bars, i) || i < SWEEP_WINDOW) return null;
-  const ref = bars.slice(i - SWEEP_WINDOW, i);
-  const refHigh = Math.max(...ref.map((b) => b.high));
-  const refLow = Math.min(...ref.map((b) => b.low));
-  if (bars[i].high > refHigh && bars[i].close < refHigh) {
-    return makeMatch(
-      "sweep_up",
-      "down",
-      i,
-      i - SWEEP_WINDOW,
-      i,
-      levels(refHigh, refLow)
-    );
-  }
-  return null;
+  if (!validIndex(bars, i)) return null;
+  const atr = atrAt(bars, i);
+  if (atr === null) return null;
+
+  const s = latestSwing(bars, "high", i, SWEEP_SWING_LOOKBACK, SWEEP_MIN_GAP);
+  if (s === null) return null;
+
+  const level = bars[s].high;
+  const penetration = atr * SWEEP_PENETRATION_ATR;
+  if (!isFirstBreak(bars, s, i, level, penetration, "up")) return null;
+
+  const current = bars[i];
+  if (current.high <= level + penetration) return null;
+  if (current.close >= level) return null;
+  if (current.close >= (current.high + current.low) / 2) return null;
+
+  let low = Number.POSITIVE_INFINITY;
+  for (let j = s; j <= i; j++) low = Math.min(low, bars[j].low);
+
+  return makeMatch(
+    "sweep_up",
+    "down",
+    i,
+    s,
+    i,
+    levels(level, low),
+    `swept swing high at index ${s}`
+  );
 }
 
 export function detectSweepDown(bars: readonly Candle[], i: number): DetectorMatch | null {
-  if (!validIndex(bars, i) || i < SWEEP_WINDOW) return null;
-  const ref = bars.slice(i - SWEEP_WINDOW, i);
-  const refHigh = Math.max(...ref.map((b) => b.high));
-  const refLow = Math.min(...ref.map((b) => b.low));
-  if (bars[i].low < refLow && bars[i].close > refLow) {
-    return makeMatch(
-      "sweep_down",
-      "up",
-      i,
-      i - SWEEP_WINDOW,
-      i,
-      levels(refHigh, refLow)
-    );
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------- reversals
-
-export function detectDoubleTop(bars: readonly Candle[], i: number): DetectorMatch | null {
-  if (!validIndex(bars, i) || i < 2) return null;
+  if (!validIndex(bars, i)) return null;
   const atr = atrAt(bars, i);
   if (atr === null) return null;
 
-  const b = i - 2;
-  if (!isSwing(bars, "high", b, i)) return null;
-  const tolerance = PATTERN_TOL_ATR * atr;
+  const s = latestSwing(bars, "low", i, SWEEP_SWING_LOOKBACK, SWEEP_MIN_GAP);
+  if (s === null) return null;
 
-  for (let a = b - PATTERN_GAP_MIN; a >= Math.max(2, b - PATTERN_GAP_MAX); a--) {
-    if (!isSwing(bars, "high", a, i)) continue;
-    if (Math.abs(bars[a].high - bars[b].high) > tolerance) continue;
+  const level = bars[s].low;
+  const penetration = atr * SWEEP_PENETRATION_ATR;
+  if (!isFirstBreak(bars, s, i, level, penetration, "down")) return null;
 
-    let neckline = Infinity;
-    for (let k = a; k <= b; k++) neckline = Math.min(neckline, bars[k].low);
+  const current = bars[i];
+  if (current.low >= level - penetration) return null;
+  if (current.close <= level) return null;
+  if (current.close <= (current.high + current.low) / 2) return null;
 
-    let broken = false;
-    for (let j = b + 1; j <= b + 2; j++) {
-      if (bars[j].close < neckline) {
-        broken = true;
-        break;
-      }
-    }
-    if (broken) continue;
+  let high = Number.NEGATIVE_INFINITY;
+  for (let j = s; j <= i; j++) high = Math.max(high, bars[j].high);
 
-    return makeMatch(
-      "double_top",
-      "down",
-      b + 2,
-      a,
-      b,
-      levels(Math.max(bars[a].high, bars[b].high), neckline, neckline)
-    );
-  }
-  return null;
-}
-
-export function detectDoubleBottom(
-  bars: readonly Candle[],
-  i: number
-): DetectorMatch | null {
-  if (!validIndex(bars, i) || i < 2) return null;
-  const atr = atrAt(bars, i);
-  if (atr === null) return null;
-
-  const b = i - 2;
-  if (!isSwing(bars, "low", b, i)) return null;
-  const tolerance = PATTERN_TOL_ATR * atr;
-
-  for (let a = b - PATTERN_GAP_MIN; a >= Math.max(2, b - PATTERN_GAP_MAX); a--) {
-    if (!isSwing(bars, "low", a, i)) continue;
-    if (Math.abs(bars[a].low - bars[b].low) > tolerance) continue;
-
-    let neckline = -Infinity;
-    for (let k = a; k <= b; k++) neckline = Math.max(neckline, bars[k].high);
-
-    let broken = false;
-    for (let j = b + 1; j <= b + 2; j++) {
-      if (bars[j].close > neckline) {
-        broken = true;
-        break;
-      }
-    }
-    if (broken) continue;
-
-    return makeMatch(
-      "double_bottom",
-      "up",
-      b + 2,
-      a,
-      b,
-      levels(neckline, Math.min(bars[a].low, bars[b].low), neckline)
-    );
-  }
-  return null;
+  return makeMatch(
+    "sweep_down",
+    "up",
+    i,
+    s,
+    i,
+    levels(high, level),
+    `swept swing low at index ${s}`
+  );
 }
 
 // ---------------------------------------------------------------- structure
@@ -394,7 +340,7 @@ export function detectSrFlip(bars: readonly Candle[], i: number): DetectorMatch 
   );
 }
 
-interface Trend {
+export interface Trend {
   up: boolean;
   down: boolean;
   h1: number;
@@ -403,7 +349,7 @@ interface Trend {
   l2: number;
 }
 
-function readTrend(bars: readonly Candle[], i: number): Trend | null {
+export function readTrend(bars: readonly Candle[], i: number): Trend | null {
   const highs = swingIndices(bars, "high", i);
   const lows = swingIndices(bars, "low", i);
   if (highs.length < 2 || lows.length < 2) return null;
@@ -490,12 +436,8 @@ export function detectAll(
   const matches = [
     detectBullishEngulfing(bars, index),
     detectBearishEngulfing(bars, index),
-    detectInsideBar(bars, index),
-    detectOutsideBar(bars, index),
     detectSweepUp(bars, index),
     detectSweepDown(bars, index),
-    detectDoubleTop(bars, index),
-    detectDoubleBottom(bars, index),
     detectSrFlip(bars, index),
     detectBos(bars, index),
     detectChoch(bars, index),

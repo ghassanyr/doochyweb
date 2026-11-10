@@ -4,13 +4,15 @@ import { describe, test } from "node:test";
 import {
   ATR_PERIOD,
   MIN_PCT,
-  PATTERN_GAP_MAX,
-  PATTERN_GAP_MIN,
-  SWEEP_WINDOW,
   SWING_LOOKBACK,
   meanTrueRange,
 } from "../src/server/market/breakoutEngine";
 import type { Candle } from "../src/server/market/types";
+import {
+  SWEEP_MIN_GAP,
+  SWEEP_PENETRATION_ATR,
+  SWEEP_SWING_LOOKBACK,
+} from "../src/server/trainer/config";
 import {
   atrAt,
   candidateId,
@@ -18,11 +20,7 @@ import {
   detectBearishEngulfing,
   detectBos,
   detectChoch,
-  detectDoubleBottom,
-  detectDoubleTop,
   detectBullishEngulfing,
-  detectInsideBar,
-  detectOutsideBar,
   detectSrFlip,
   detectSweepDown,
   detectSweepUp,
@@ -117,113 +115,76 @@ describe("candle patterns", () => {
     assert.equal(match.direction, "down");
   });
 
-  test("inside bar requires a strictly smaller range", () => {
-    const inside = [bar(0, 100, 101, 99, 100), bar(1, 100, 100.5, 99.5, 100)];
-    const match = detectInsideBar(inside, 1);
-    assert.ok(match);
-    assert.deepEqual(match.levels, {
-      levelUpper: 101,
-      levelLower: 99,
-      neckline: null,
-    });
-
-    const equal = [bar(0, 100, 101, 99, 100), bar(1, 100, 101, 99, 100)];
-    assert.equal(detectInsideBar(equal, 1), null);
-  });
-
-  test("outside bar requires both edges to expand", () => {
-    const outside = [bar(0, 100, 101, 99, 100), bar(1, 100, 102, 98, 100)];
-    const match = detectOutsideBar(outside, 1);
-    assert.ok(match);
-    assert.deepEqual(match.levels, {
-      levelUpper: 101,
-      levelLower: 99,
-      neckline: null,
-    });
-
-    const oneSide = [bar(0, 100, 101, 99, 100), bar(1, 100, 102, 99, 100)];
-    assert.equal(detectOutsideBar(oneSide, 1), null);
-  });
 });
 
 describe("liquidity sweeps", () => {
-  function sweepBars(): Candle[] {
-    const bars = flat(SWEEP_WINDOW, 100);
-    bars.push(bar(SWEEP_WINDOW, 100, 102, 98, 100));
+  function sweepUpBars(): Candle[] {
+    const bars = flat(100);
+    bars[20] = bar(20, 100, 104, 99.5, 100);
+    bars[30] = bar(30, 101, 105, 100, 102);
     return bars;
   }
 
-  test("a bar can sweep both sides of the prior five-bar range", () => {
-    const bars = sweepBars();
-    const up = detectSweepUp(bars, SWEEP_WINDOW);
-    const down = detectSweepDown(bars, SWEEP_WINDOW);
-
-    assert.ok(up);
-    assert.equal(up.tag, "sweep_up");
-    assert.equal(up.direction, "down");
-    assert.equal(up.bounds.startIndex, 0);
-    assert.equal(up.bounds.endIndex, SWEEP_WINDOW);
-
-    assert.ok(down);
-    assert.equal(down.tag, "sweep_down");
-    assert.equal(down.direction, "up");
-  });
-
-  test("touching the prior extreme is not a sweep", () => {
-    const bars = Array.from({ length: SWEEP_WINDOW }, (_, i) =>
-      bar(i, 100, 101, 99, 100)
-    );
-    bars.push(bar(SWEEP_WINDOW, 100, 101, 99, 100));
-    assert.equal(detectSweepUp(bars, SWEEP_WINDOW), null);
-    assert.equal(detectSweepDown(bars, SWEEP_WINDOW), null);
-  });
-});
-
-describe("double tops and bottoms", () => {
-  function doubleTopBars(): Candle[] {
-    const bars = flat(31);
-    bars[20] = bar(20, 100, 105, 99.5, 100.5);
-    bars[28] = bar(28, 100, 105, 99.5, 100.5);
+  function sweepDownBars(): Candle[] {
+    const bars = flat(100);
+    bars[20] = bar(20, 100, 100.5, 96, 100);
+    bars[30] = bar(30, 99, 100, 94, 98);
     return bars;
   }
 
-  test("two equal confirmed swing highs leave the neckline intact", () => {
-    const match = detectDoubleTop(doubleTopBars(), 30);
+  test("a valid sweep-up rejects a recent swing high", () => {
+    const match = detectSweepUp(sweepUpBars(), 30);
     assert.ok(match);
-    assert.equal(match.tag, "double_top");
+    assert.equal(match.tag, "sweep_up");
     assert.equal(match.direction, "down");
-    assert.equal(match.cutIndex, 30);
-    assert.deepEqual(match.bounds, { startIndex: 20, endIndex: 28 });
-    assert.equal(match.levels.levelUpper, 105);
-    assert.equal(match.levels.neckline, 99.5);
+    assert.deepEqual(match.bounds, { startIndex: 20, endIndex: 30 });
+    assert.equal(match.levels.levelUpper, 104);
     assert.equal(match.levels.levelLower, 99.5);
+    assert.match(match.notes ?? "", /swing high at index 20/);
   });
 
-  test("a close through the neckline before the cut invalidates the pattern", () => {
-    const bars = doubleTopBars();
-    bars[29] = bar(29, 100, 100.5, 98, 98);
-    assert.equal(detectDoubleTop(bars, 30), null);
-  });
-
-  test("a gap below the minimum is not a double top", () => {
-    const bars = flat(31);
-    bars[24] = bar(24, 100, 105, 99.5, 100.5);
-    bars[28] = bar(28, 100, 105, 99.5, 100.5);
-    assert.equal(detectDoubleTop(bars, 30), null);
-  });
-
-  test("double bottom mirrors the top", () => {
-    const bars = flat(31);
-    bars[20] = bar(20, 100, 100.5, 95, 99.5);
-    bars[28] = bar(28, 100, 100.5, 95, 99.5);
-    const match = detectDoubleBottom(bars, 30);
-
+  test("a valid sweep-down rejects a recent swing low", () => {
+    const match = detectSweepDown(sweepDownBars(), 30);
     assert.ok(match);
-    assert.equal(match.tag, "double_bottom");
+    assert.equal(match.tag, "sweep_down");
     assert.equal(match.direction, "up");
+    assert.deepEqual(match.bounds, { startIndex: 20, endIndex: 30 });
+    assert.equal(match.levels.levelLower, 96);
     assert.equal(match.levels.levelUpper, 100.5);
-    assert.equal(match.levels.levelLower, 95);
-    assert.equal(match.levels.neckline, 100.5);
+    assert.match(match.notes ?? "", /swing low at index 20/);
+  });
+
+  test("touch-only rejection is not a sweep", () => {
+    const bars = sweepUpBars();
+    bars[30] = bar(30, 101, 104, 100, 102);
+    assert.equal(detectSweepUp(bars, 30), null);
+  });
+
+  test("a close through the level is not a sweep", () => {
+    const bars = sweepUpBars();
+    bars[30] = bar(30, 101, 105, 100, 104.5);
+    assert.equal(detectSweepUp(bars, 30), null);
+  });
+
+  test("a prior close beyond the level rejects the sweep", () => {
+    const bars = sweepUpBars();
+    bars[24] = bar(24, 100, 105.5, 99.5, 100);
+    bars[25] = bar(25, 100, 105.5, 99.5, 105);
+    bars[30] = bar(30, 101, 106, 100, 102);
+    assert.equal(detectSweepUp(bars, 30), null);
+  });
+
+  test("a weak rejection close rejects the sweep", () => {
+    const bars = sweepUpBars();
+    bars[30] = bar(30, 101, 105, 99, 102.5);
+    assert.equal(detectSweepUp(bars, 30), null);
+  });
+
+  test("a swing closer than the minimum gap is not used", () => {
+    const bars = flat(100);
+    bars[28] = bar(28, 100, 104, 99.5, 100);
+    bars[30] = bar(30, 101, 105, 100, 102);
+    assert.equal(detectSweepUp(bars, 30), null);
   });
 });
 
@@ -304,34 +265,26 @@ describe("BOS and CHoCH", () => {
 describe("detector aggregation", () => {
   test("candidateId is stable and encodes the pattern span", () => {
     assert.equal(
-      candidateId("BTC", "15m", "double_top", { startIndex: 20, endIndex: 28 }, "down"),
-      "BTC:15m:double_top:20-28:down"
+      candidateId("BTC", "15m", "sweep_up", { startIndex: 20, endIndex: 30 }, "down"),
+      "BTC:15m:sweep_up:20-30:down"
     );
     assert.equal(
-      candidateId("ETH", "1h", "inside_bar", { startIndex: 0, endIndex: 1 }, null),
-      "ETH:1h:inside_bar:0-1:none"
+      candidateId("ETH", "1h", "bos", { startIndex: 0, endIndex: 1 }, "up"),
+      "ETH:1h:bos:0-1:up"
     );
   });
 
-  test("detectAll attaches identity and can return both sweep tags", () => {
-    const bars = flat(SWEEP_WINDOW, 100);
-    bars.push(bar(SWEEP_WINDOW, 100, 102, 98, 100));
-    const hits = detectAll("BTC", "15m", bars, SWEEP_WINDOW);
+  test("detectAll attaches identity to sweep matches", () => {
+    const bars = flat(100);
+    bars[20] = bar(20, 100, 104, 99.5, 100);
+    bars[30] = bar(30, 101, 105, 100, 102);
+    const hits = detectAll("BTC", "15m", bars, 30);
 
-    assert.deepEqual(
-      hits.map((h) => h.tag).sort(),
-      ["outside_bar", "sweep_down", "sweep_up"]
-    );
-    for (const hit of hits) {
-      assert.equal(hit.symbol, "BTC");
-      assert.equal(hit.timeframe, "15m");
-    }
-
-    const sweeps = hits.filter((h) => h.family === "liquidity");
-    assert.equal(sweeps.length, 2);
-    for (const hit of sweeps) {
-      assert.match(hit.id, /^BTC:15m:sweep_(up|down):0-5:(up|down)$/);
-    }
+    assert.deepEqual(hits.map((h) => h.tag), ["sweep_up"]);
+    assert.equal(hits[0].symbol, "BTC");
+    assert.equal(hits[0].timeframe, "15m");
+    assert.equal(hits[0].family, "liquidity");
+    assert.match(hits[0].id, /^BTC:15m:sweep_up:20-30:down$/);
   });
 
   test("detectAll returns a candle hit with the right family and id", () => {
@@ -344,9 +297,10 @@ describe("detector aggregation", () => {
 });
 
 describe("taxonomy constants stay aligned", () => {
-  test("detectors use the shared breakout constants", () => {
-    assert.equal(PATTERN_GAP_MIN, 5);
-    assert.equal(PATTERN_GAP_MAX, 60);
+  test("detectors use the shared swing and sweep constants", () => {
     assert.equal(SWING_LOOKBACK, 120);
+    assert.equal(SWEEP_SWING_LOOKBACK, 60);
+    assert.equal(SWEEP_MIN_GAP, 3);
+    assert.equal(SWEEP_PENETRATION_ATR, 0.1);
   });
 });

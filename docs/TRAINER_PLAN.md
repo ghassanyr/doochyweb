@@ -19,7 +19,7 @@ short delivery note. The worker updates the checkboxes and status table in this 
 | Timeframes | 15m, 1h |
 | History mined | 2 years |
 | First batch | ~50 curated items (pilot) |
-| Pattern tags | Mechanical core: engulfing, inside/outside bar, sweep/false breakout, double top/bottom, S/R flip, BOS/CHoCH |
+| Pattern tags | Seven-tag core: bullish/bearish engulfing, sweep up/down, S/R flip, BOS, CHoCH |
 | Question types | Probability (upper barrier first) + trade/pass |
 | Triple barrier | `k = 1.0 × ATR`, `H = 20 bars` |
 | Review workflow | CLI + CSV (no labeling UI yet) |
@@ -52,8 +52,8 @@ changing existing market behaviour.
 
 Tasks:
 - [x] Add `docs/TRAINER_TAXONOMY.md`: one precise, testable definition per tag (engulfing,
-      inside bar, outside bar, sweep/false breakout, double top, double bottom, S/R flip,
-      BOS, CHoCH). State lookback windows, closed-bar rules, and what counts as a near-miss.
+      sweep/false breakout, S/R flip, BOS, CHoCH). State lookback windows, closed-bar rules,
+      and what counts as a near-miss. The 2026-11-09 revision reduced this to seven tags.
 - [x] Add `src/server/trainer/config.ts` with the locked values (symbols, timeframes,
       history days, `k`, `H`, batch size, tag list). Export typed constants.
 - [x] Add `src/server/trainer/types.ts`: `Candidate`, `ReviewRow`, `TrainerItem`,
@@ -214,9 +214,10 @@ Tasks:
 - [ ] Curate the ~50-item pilot batch using the Phase 3 workflow.
 - [ ] End-to-end pass: ingest → scan → review → publish → play → reveal.
 - [x] Add `learn.doochy.net` host/query routing in the SPA and document nginx/DNS/certbot.
-- [x] Add the read-only HTML shortlist preview (`trainer:review preview`) and tests.
-- [x] Document the verified origin certificate, the recommended expansion command, the
-      Cloudflare options and the final nginx block.
+- [x] Add the read-only HTML shortlist preview (`trainer:review preview`) and tests, including
+      per-tag annotations and the magnified pattern zoom.
+- [x] Document the current origin certificate, Cloudflare behavior and the existing nginx
+      reality without moving the active `/etc/nginx/sites-enabled/default` blocks.
 - [ ] Apply the approved DNS/nginx/certbot deploy and restart pm2.
 - [x] Add user-facing docs/disclaimer text; internal README for the trainer CLIs.
 - [x] Record known limitations and deferred work (placebos, calibration, accounts,
@@ -251,4 +252,5 @@ Add a dated line here when a phase starts, blocks, or completes.
 - 2026-11-08 — Phase 5 done: public `/api/trainer` router with lazy latest-batch loading, anonymous session selection, percent/volume-normalized context and reveal payloads, opaque item ids, in-memory first-answer-wins attempt store with TTL/session cap, and answer-gated reveal; `pnpm typecheck` and `pnpm test` (329) pass.
 - 2026-11-09 — Phase 6 done: public Learn tab with `lightweight-charts` anonymized candles/barriers, answer + reveal flow, daily 10-item localStorage queue, 50% directional grading and separate take/pass accuracy, tag/pooled base rates, reduced-motion reveal, mobile/a11y states, and scoring/reset tests; `pnpm typecheck`, `pnpm test` (340) and `pnpm build` pass.
 - 2026-11-09 — Phase 7A done: `trainer:review shortlist` emits a deterministic 88-row CSV (8/tag, alternating direction, all six series), Learn scoring disclosure, `initialView` for `learn.*` / `?view=learn`, and `docs/TRAINER.md` + `docs/TRAINER_DEPLOY.md`; dry-run `v1` kept the 1 accepted `sr_flip` and wrote nothing. `pnpm typecheck`, `pnpm test` (351) and `pnpm build` pass. Phase 7 remains in progress pending human curation; no publish, DNS/nginx change or pm2 restart.
-- 2026-11-09 — Phase 7B done: added the deterministic read-only `trainer:review preview` HTML gallery (`preview.ts`, inline SVG/candles, filters/search, no network, no Mongo writes) and preview tests; generated `data/trainer/review/2026-11-08T16-24-40-459Z.preview.html` with 88 cards and 0 missing series. Updated `TRAINER_DEPLOY.md` with the verified cert facts, certbot expansion command, Cloudflare options and final nginx block using `/etc/letsencrypt/live/doochy.net/*`; documented that no pm2 restart is needed while `/api/trainer/batch` is already live and 503. `pnpm typecheck`, `pnpm test` (357) and `pnpm build` pass. Curate, import, publish and apply DNS/nginx/certbot/deploy remain unchecked and approval-gated.
+- 2026-11-09 — Phase 7B done: added the deterministic read-only `trainer:review preview` HTML gallery (`preview.ts`, inline SVG/candles, filters/search, no network, no Mongo writes) and preview tests; generated `data/trainer/review/2026-11-08T16-24-40-459Z.preview.html` with 88 cards and 0 missing series. Updated `TRAINER_DEPLOY.md` with the then-current certificate and nginx notes; the 2026-11-09 revision corrected these to the certificate covering both names and nginx staying in `sites-enabled/default`. Documented that no pm2 restart is needed while `/api/trainer/batch` is already live and 503. `pnpm typecheck`, `pnpm test` (357) and `pnpm build` pass. Curate, import, publish and apply DNS/nginx/certbot/deploy remain unchecked and approval-gated.
+- 2026-11-09 — Trainer revision: reduced the taxonomy to seven tags, replaced liquidity sweeps with the recent-confirmed-swing 60/3/0.1 rule, added per-tag preview annotations and a magnified zoom panel, and corrected the certificate/nginx docs. Purged 240 removed-tag reviews (660→420 valid); scan `2026-11-09T14-47-12-487Z` emitted 420 candidates; shortlist is 56 rows (8/tag) and preview is 56 cards with 0 missing. `pnpm typecheck`, `pnpm test` (357) and `pnpm build` pass. No publish, deploy, cert, nginx or pm2 changes were made.

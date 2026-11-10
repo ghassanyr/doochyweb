@@ -44,16 +44,21 @@ export const BALANCE_MAX_SHARE = 0.7;
  */
 export const SCAN_CAP_PER_TAG_PER_SERIES = 10;
 
+/** Most recent confirmed swing used by the trainer sweep detector. */
+export const SWEEP_SWING_LOOKBACK = 60;
+
+/** Minimum distance from the swept swing to the candidate bar. */
+export const SWEEP_MIN_GAP = 3;
+
+/** Wick penetration beyond the swept level, in ATR20 units. */
+export const SWEEP_PENETRATION_ATR = 0.1;
+
 /** Mechanical pattern tags, grouped in taxonomy order. */
 export const TAGS = [
   "bullish_engulfing",
   "bearish_engulfing",
-  "inside_bar",
-  "outside_bar",
   "sweep_up",
   "sweep_down",
-  "double_top",
-  "double_bottom",
   "sr_flip",
   "bos",
   "choch",
@@ -63,12 +68,8 @@ export const TAGS = [
 export const TAG_FAMILY: Record<Tag, TagFamily> = {
   bullish_engulfing: "candle",
   bearish_engulfing: "candle",
-  inside_bar: "candle",
-  outside_bar: "candle",
   sweep_up: "liquidity",
   sweep_down: "liquidity",
-  double_top: "reversal",
-  double_bottom: "reversal",
   sr_flip: "structure",
   bos: "structure",
   choch: "structure",

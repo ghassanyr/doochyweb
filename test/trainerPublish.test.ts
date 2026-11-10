@@ -69,7 +69,7 @@ interface RowOptions {
 function makeRow(options: RowOptions = {}): ReviewRow {
   const symbol = options.symbol ?? "BTC";
   const timeframe = options.timeframe ?? "15m";
-  const tag = options.tag ?? "inside_bar";
+  const tag = options.tag ?? "bearish_engulfing";
   const cutIndex = options.cutIndex ?? 100;
   return {
     id: `${symbol}:${timeframe}:${tag}:${cutIndex}-${cutIndex}:${
@@ -258,9 +258,9 @@ describe("base rates", () => {
     };
     const bars = seriesWithOutcomes(400, outcomes);
     const rows = [
-      makeRow({ tag: "inside_bar", cutIndex: 100 }),
-      makeRow({ tag: "inside_bar", cutIndex: 120 }),
-      makeRow({ tag: "inside_bar", cutIndex: 140 }),
+      makeRow({ tag: "bearish_engulfing", cutIndex: 100 }),
+      makeRow({ tag: "bearish_engulfing", cutIndex: 120 }),
+      makeRow({ tag: "bearish_engulfing", cutIndex: 140 }),
       makeRow({ tag: "bullish_engulfing", cutIndex: 160 }),
       makeRow({ tag: "bullish_engulfing", cutIndex: 180 }),
     ];
@@ -270,7 +270,7 @@ describe("base rates", () => {
       now: 1,
     });
 
-    assert.deepEqual(batch.baseRateCounts.inside_bar, {
+    assert.deepEqual(batch.baseRateCounts.bearish_engulfing, {
       up: 2,
       down: 1,
       scratch: 0,
@@ -282,7 +282,7 @@ describe("base rates", () => {
     });
     assert.deepEqual(batch.baseRateCounts.all, { up: 2, down: 2, scratch: 1 });
 
-    for (const key of ["inside_bar", "bullish_engulfing", "all"]) {
+    for (const key of ["bearish_engulfing", "bullish_engulfing", "all"]) {
       const counts = batch.baseRateCounts[key];
       const rates = batch.baseRates[key];
       const n = counts.up + counts.down + counts.scratch;
@@ -294,8 +294,8 @@ describe("base rates", () => {
     }
 
     const byId = new Map(batch.items.map((item) => [item.id, item]));
-    assert.equal(byId.get(makeRow({ tag: "inside_bar", cutIndex: 100 }).id)?.outcomeIndex, 101);
-    assert.equal(byId.get(makeRow({ tag: "inside_bar", cutIndex: 140 }).id)?.outcomeIndex, 141);
+    assert.equal(byId.get(makeRow({ tag: "bearish_engulfing", cutIndex: 100 }).id)?.outcomeIndex, 101);
+    assert.equal(byId.get(makeRow({ tag: "bearish_engulfing", cutIndex: 140 }).id)?.outcomeIndex, 141);
     assert.equal(
       byId.get(makeRow({ tag: "bullish_engulfing", cutIndex: 160 }).id)?.outcomeIndex,
       null

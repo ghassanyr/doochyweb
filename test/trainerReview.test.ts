@@ -46,9 +46,6 @@ function defaultLevels(tag: string, direction: string): Row {
     case "sweep_up":
     case "sweep_down":
       return { levelUpper: "101", levelLower: "99", neckline: "" };
-    case "double_top":
-    case "double_bottom":
-      return { levelUpper: "101", levelLower: "99", neckline: "100.5" };
     case "sr_flip":
       return direction === "down"
         ? { levelUpper: "101", levelLower: "", neckline: "" }
@@ -142,9 +139,7 @@ function candidateOptions(options: {
   const levels =
     tag === "sweep_up" || tag === "sweep_down"
       ? { levelUpper: 101, levelLower: 99, neckline: null }
-      : tag === "double_top" || tag === "double_bottom"
-        ? { levelUpper: 101, levelLower: 99, neckline: 100.5 }
-        : { levelUpper: null, levelLower: null, neckline: null };
+      : { levelUpper: null, levelLower: null, neckline: null };
 
   return {
     id: `${symbol}:${timeframe}:${tag}:${startIndex}-${endIndex}:${
@@ -234,10 +229,10 @@ describe("import validation", () => {
   test("valid rows cover every status and report structured errors", () => {
     const rows = [
       makeRow(),
-      makeRow({ tag: "double_top", direction: "down" }),
+      makeRow({ tag: "bearish_engulfing", direction: "down" }),
       makeRow({ tag: "sr_flip", direction: "up" }),
       makeRow({ tag: "bos", direction: "down" }),
-      makeRow({ tag: "inside_bar", direction: "" }),
+      makeRow({ tag: "bullish_engulfing", direction: "" }),
       makeRow({ status: "reject" }),
       makeRow({ status: "reject", ambiguity: "5" }),
       makeRow({ status: "accept", ambiguity: "3" }),
@@ -306,7 +301,7 @@ describe("import validation", () => {
     const result = importReviewCsv(
       reviewCsv([
         makeRow({
-          tag: "inside_bar",
+          tag: "bullish_engulfing",
           direction: "",
           levelUpper: "null",
           levelLower: "",
@@ -343,8 +338,6 @@ describe("tag-specific required levels", () => {
     ["sweep_up needs lower", { tag: "sweep_up", levelLower: "" }, "levelLower"],
     ["sweep_down needs upper", { tag: "sweep_down", direction: "up", levelUpper: "" }, "levelUpper"],
     ["sweep_down needs lower", { tag: "sweep_down", direction: "up", levelLower: "" }, "levelLower"],
-    ["double_top needs neckline", { tag: "double_top", direction: "down", neckline: "" }, "neckline"],
-    ["double_bottom needs neckline", { tag: "double_bottom", direction: "up", neckline: "" }, "neckline"],
     ["sr_flip up needs lower", { tag: "sr_flip", direction: "up", levelLower: "" }, "levelLower"],
     ["sr_flip down needs upper", { tag: "sr_flip", direction: "down", levelUpper: "" }, "levelUpper"],
     ["bos up needs upper", { tag: "bos", direction: "up", levelUpper: "" }, "levelUpper"],
@@ -363,7 +356,7 @@ describe("tag-specific required levels", () => {
 
   test("candle tags may leave every level blank", () => {
     const result = importReviewCsv(
-      reviewCsv([makeRow({ tag: "outside_bar", direction: "" })])
+      reviewCsv([makeRow({ tag: "bearish_engulfing", direction: "" })])
     );
     assert.equal(result.errors.length, 0);
   });
@@ -373,7 +366,7 @@ describe("id and bounds are read-only", () => {
   test("a mismatched id is rejected even when all other fields are valid", () => {
     const result = importReviewCsv(
       reviewCsv([
-        makeRow({ id: "ETH:1h:double_top:10-20:down" }),
+        makeRow({ id: "ETH:1h:bearish_engulfing:10-20:down" }),
       ])
     );
     assert.equal(result.rows.length, 0);
@@ -410,8 +403,8 @@ describe("pending preservation", () => {
   test("export then import keeps every candidate as pending", () => {
     const candidates = [
       candidateOptions(),
-      candidateOptions({ symbol: "ETH", timeframe: "1h", tag: "double_top" }),
-      candidateOptions({ symbol: "SOL", tag: "inside_bar", direction: null }),
+      candidateOptions({ symbol: "ETH", timeframe: "1h", tag: "bearish_engulfing" }),
+      candidateOptions({ symbol: "SOL", tag: "bullish_engulfing", direction: null }),
     ];
     const result = importReviewCsv(exportReviewCsv(candidates));
 
@@ -427,7 +420,7 @@ describe("pending preservation", () => {
   test("importing the same review twice is idempotent", () => {
     const text = reviewCsv([
       makeRow({ status: "accept", ambiguity: "2" }),
-      makeRow({ tag: "double_top", direction: "down", status: "reject" }),
+      makeRow({ tag: "bearish_engulfing", direction: "down", status: "reject" }),
       makeRow(),
     ]);
     const first = importReviewCsv(text);
@@ -442,7 +435,7 @@ describe("stats", () => {
       reviewCsv([
         makeRow({ status: "accept", ambiguity: "1" }),
         makeRow({ status: "reject" }),
-        makeRow({ tag: "inside_bar", direction: "" }),
+        makeRow({ tag: "bullish_engulfing", direction: "" }),
       ])
     );
     assert.equal(result.errors.length, 0);
@@ -451,7 +444,7 @@ describe("stats", () => {
     assert.equal(stats.total, 3);
     assert.deepEqual(stats.byStatus, { pending: 1, accept: 1, reject: 1 });
     assert.equal(stats.byTag.sweep_up, 2);
-    assert.equal(stats.byTag.inside_bar, 1);
+    assert.equal(stats.byTag.bullish_engulfing, 1);
     assert.equal(stats.byAmbiguity["1"], 1);
     assert.equal(stats.byAmbiguity.blank, 2);
     assert.equal(stats.bySeries["BTC:15m"], 3);
@@ -479,7 +472,7 @@ describe("shortlist", () => {
       makeRow({ startIndex: "10", endIndex: "20" }),
       makeRow({ startIndex: "30", endIndex: "40", status: "accept", ambiguity: "3" }),
       makeRow({ startIndex: "50", endIndex: "60", status: "reject" }),
-      makeRow({ startIndex: "70", endIndex: "80", tag: "double_top", direction: "down" }),
+      makeRow({ startIndex: "70", endIndex: "80", tag: "bearish_engulfing", direction: "down" }),
     ]);
 
     const first = selectReviewShortlist(rows);
@@ -493,7 +486,7 @@ describe("shortlist", () => {
     assert.ok(first.every((row) => row.status === "pending"));
   });
 
-  test("caps each tag at eight rows and reaches the 88-row target", () => {
+  test("caps each tag at eight rows and reaches the 56-row target", () => {
     const rows = reviewRows(
       TAGS.flatMap((tag) =>
         Array.from({ length: 12 }, (_, index) =>
@@ -583,7 +576,7 @@ describe("shortlist", () => {
   test("does not mutate source rows", () => {
     const rows = reviewRows([
       makeRow({ startIndex: "10", endIndex: "20" }),
-      makeRow({ startIndex: "30", endIndex: "40", tag: "inside_bar", direction: "" }),
+      makeRow({ startIndex: "30", endIndex: "40", tag: "bullish_engulfing", direction: "" }),
       makeRow({ startIndex: "50", endIndex: "60", status: "accept", ambiguity: "2" }),
     ]);
     const before = rows.map((row) => ({ ...row }));

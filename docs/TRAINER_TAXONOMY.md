@@ -1,8 +1,9 @@
 # Doochy Learn — Pattern Taxonomy
 
-**Status:** Phase 0 baseline. This document is the contract for the trainer detectors in
-`src/server/trainer/detectors.ts` and the scanner in `src/server/trainer/scan.ts`. If a
-detector and this document disagree, the detector is wrong until this document is changed.
+**Status:** revised 2026-11-09 for the seven-tag pilot. This document is the contract for
+the trainer detectors in `src/server/trainer/detectors.ts` and the scanner in
+`src/server/trainer/scan.ts`. If a detector and this document disagree, the detector is wrong
+until this document is changed.
 
 The live analysis code in `src/server/market/patterns.ts` and
 `src/server/market/breakoutEngine.ts` is the reference for closed-bar handling, wicks,
@@ -31,10 +32,9 @@ but it must not change or reinterpret the live market behaviour.
 - **Body top / bottom:** `max(open, close)` / `min(open, close)`.
 - **Range:** `high - low`.
 - **Doji:** `open === close` exactly, matching `patterns.ts`. An engulfing pattern with a
-  doji on either bar has no direction and is not valid. Neutral patterns (inside bar,
-  outside bar) do not reject dojis.
+  doji on either bar has no direction and is not valid.
 - **Wick:** the part of the range outside the body. Wicks are ignored by engulfing, as in
-  `patterns.ts`. Range patterns (inside/outside/sweep) use high/low, not body.
+  `patterns.ts`. Sweeps use high/low, not body.
 
 ### ATR and break thresholds
 
@@ -42,9 +42,8 @@ but it must not change or reinterpret the live market behaviour.
   `meanTrueRange(bars, 20)` in `breakoutEngine.ts`. It requires at least 21 closed bars.
 - `thr(i) = max(close[i] * 0.002, ATR20(i))`, matching `MIN_PCT` and the ATR threshold in
   `breakoutEngine.ts`. A **break** is a close strictly beyond a level by at least `thr(i)`.
-- `0.5 × ATR20(i)` is the double-top/bottom price tolerance, matching `PATTERN_TOL_ATR`.
-- `0.1 × ATR20(i)` is the near-miss epsilon used below. A near-miss is a review label, not
-  a valid detector match.
+- `0.1 × ATR20(i)` is the sweep penetration epsilon and the near-miss epsilon used below.
+  A near-miss is a review label, not a valid detector match.
 
 ### Confirmed swings
 
@@ -65,19 +64,16 @@ at bar `i` when `s <= i - 2`. The trainer uses no other swing definition.
 |---|---|---|
 | `bullish_engulfing` | candle | up |
 | `bearish_engulfing` | candle | down |
-| `inside_bar` | candle | none |
-| `outside_bar` | candle | none |
 | `sweep_up` | liquidity | down |
 | `sweep_down` | liquidity | up |
-| `double_top` | reversal | down |
-| `double_bottom` | reversal | up |
 | `sr_flip` | structure | up or down |
 | `bos` | structure | up or down |
 | `choch` | structure | up or down |
 
 `Direction` is the directional implication of the setup, not the side of the candle or
 break. For example, `sweep_up` swept a high and failed above it, so its implication is
-`down`. Neutral patterns leave direction `null`.
+`down`. Every remaining tag has a direction; the pilot has no neutral tag and no `reversal`
+family.
 
 ### Near-miss policy
 
@@ -116,112 +112,48 @@ Mirror of bullish:
 
 ---
 
-## Inside bar
-
-- **Rule at bar `i`:** let `p = i - 1`.
-  - `high[i] <= high[p]`
-  - `low[i] >= low[p]`
-  - at least one inequality is strict, so the current range is strictly smaller.
-- **Doji:** allowed; inside bar is a range pattern, not a directional candle.
-- **Lookback:** 2 bars, `p .. i`. Minimum history is `i >= 1`.
-- **Valid:** both range containment tests pass and at least one is strict.
-- **Near miss:** equal ranges (`high[i] === high[p]` and `low[i] === low[p]`); or exactly
-  one edge misses containment by at most `0.1 × ATR20(i)` while the other edge is
-  contained.
-- **Emit:** `bounds = { startIndex: p, endIndex: i }`; `levelUpper = high[p]`,
-  `levelLower = low[p]`, `neckline = null`; `cutIndex = i`; `direction = null`.
-
----
-
-## Outside bar
-
-- **Rule at bar `i`:** let `p = i - 1`.
-  - `high[i] > high[p]`
-  - `low[i] < low[p]`
-- **Doji:** allowed; outside bar is a range-expansion pattern.
-- **Lookback:** 2 bars, `p .. i`. Minimum history is `i >= 1`.
-- **Valid:** both edges strictly exceed the prior bar's range.
-- **Near miss:** exactly one edge strictly exceeds the prior range while the other is equal
-  or misses by at most `0.1 × ATR20(i)`.
-- **Emit:** `bounds = { startIndex: p, endIndex: i }`; `levelUpper = high[p]`,
-  `levelLower = low[p]`, `neckline = null`; `cutIndex = i`; `direction = null`.
-
----
-
 ## Sweep / false breakout
 
-The reference window is the **5 closed bars before the candidate bar**, matching
-`SWEEP_LOOKBACK = 5` in `patterns.ts`.
+A sweep is a failed break of the most recent confirmed swing, not a fixed five-bar
+range. The trainer uses its own swing lookback for this detector.
 
-- `refHigh = max(high[i-5] .. high[i-1])`
-- `refLow = min(low[i-5] .. low[i-1])`
+- `SWEEP_SWING_LOOKBACK = 60`
+- `SWEEP_MIN_GAP = 3`
+- `SWEEP_PENETRATION_ATR = 0.1`
 
-### Sweep up (failed break above `refHigh`)
+The candidate is bar `i`; `ATR20(i)` must exist. Find the most recent confirmed swing at
+`s` in the last 60 bars with `i - s >= 3`. Evaluate only that swing, not older ones that
+were already broken. A close beyond the level by `0.1 × ATR20(i)` anywhere in `s+1 .. i-1`
+means the level was already broken and the sweep is rejected; use the same `isFirstBreak`
+check as the live break code.
 
-- **Rule at bar `i`:**
-  - `high[i] > refHigh` (wick trades strictly above the prior extreme)
-  - `close[i] < refHigh` (close returns strictly below the level)
-- **Lookback:** 6 bars, `i-5 .. i`. Minimum history is `i >= 5`.
-- **Valid:** both strict inequalities above. Touching the level is not enough.
-- **Near miss:** `high[i] === refHigh` with `close[i] < refHigh` (touch only); or
-  `high[i] > refHigh` with `close[i] === refHigh` (failed return). A valid match whose
-  penetration is less than `0.1 × ATR20(i)` should be flagged ambiguous in notes.
-- **Emit:** `bounds = { startIndex: i - 5, endIndex: i }`; `levelUpper = refHigh`,
-  `levelLower = refLow`, `neckline = null`; `cutIndex = i`; `direction = "down"`.
+### Sweep up (failed break above a swing high)
 
-### Sweep down (failed break below `refLow`)
+- **Level:** `high[s]` for the most recent eligible confirmed swing high.
+- **No prior break:** no close in `s+1 .. i-1` is above `level + 0.1 × ATR20(i)`.
+- **Wick:** `high[i] > level + 0.1 × ATR20(i)`.
+- **Return:** `close[i] < level`.
+- **Rejection close:** `close[i] < (high[i] + low[i]) / 2` (lower half of the sweep bar).
+- **Emit:** `bounds = { startIndex: s, endIndex: i }`; `levelUpper = level`;
+  `levelLower = min(low[s..i])`; `neckline = null`; `cutIndex = i`; `direction = "down"`.
+  The note records the swept swing index.
 
-- **Rule at bar `i`:**
-  - `low[i] < refLow`
-  - `close[i] > refLow`
-- **Lookback:** 6 bars, `i-5 .. i`. Minimum history is `i >= 5`.
-- **Valid:** both strict inequalities.
-- **Near miss:** `low[i] === refLow` with `close[i] > refLow`; or `low[i] < refLow` with
-  `close[i] === refLow`.
-- **Emit:** same bounds and levels as sweep up; `cutIndex = i`; `direction = "up"`.
+### Sweep down (failed break below a swing low)
 
-A single bar can satisfy both sweep rules. Emit both tags, each with its own direction;
-do not collapse them into one match.
+Mirror against the most recent eligible confirmed swing low:
 
----
+- **Level:** `low[s]`.
+- **No prior break:** no close in `s+1 .. i-1` is below `level - 0.1 × ATR20(i)`.
+- **Wick:** `low[i] < level - 0.1 × ATR20(i)`.
+- **Return:** `close[i] > level`.
+- **Rejection close:** `close[i] > (high[i] + low[i]) / 2` (upper half of the sweep bar).
+- **Emit:** `bounds = { startIndex: s, endIndex: i }`; `levelLower = level`;
+  `levelUpper = max(high[s..i])`; `neckline = null`; `cutIndex = i`; `direction = "up"`.
+  The note records the swept swing index.
 
-## Double top
-
-Uses the confirmed-swing, gap and tolerance rules from `breakoutEngine.ts`.
-
-- **Lookback:** confirmed swing highs in the last **120 closed bars**, with the newest
-  eligible swing at `i - 2`. Minimum history is 21 bars for ATR20.
-- **Pattern:** two confirmed swing highs `a < b` with:
-  - gap `b - a` in `5 .. 60` bars inclusive (`PATTERN_GAP_MIN` / `PATTERN_GAP_MAX`)
-  - price tolerance `abs(high[a] - high[b]) <= 0.5 × ATR20(i)`
-- **Neckline:** `min(low[a] .. low[b])`, the lowest low between the two tops.
-- **Validity at the cut:** the cut is `cutIndex = b + 2`, the first bar at which the second
-  swing is confirmed. Require no close strictly below the neckline in `b + 1 .. b + 2`;
-  otherwise the neckline has already broken and this is a completed pattern break, not a
-  pending double top.
-- **Valid:** both swings confirmed, gap and tolerance pass, and the neckline is intact at
-  the cut.
-- **Near miss:** exactly one criterion fails within the relaxed range:
-  - gap is `4` or `61 .. 90`, or
-  - tolerance is `> 0.5 ×` and `<= 1.0 × ATR20(i)`,
-  while both swings remain confirmed and the neckline is intact.
-- **Emit:** `bounds = { startIndex: a, endIndex: b }`;
-  `levelUpper = max(high[a], high[b])`, `levelLower = neckline`,
-  `neckline = neckline`; `cutIndex = b + 2`; `direction = "down"`.
-
-## Double bottom
-
-Mirror of double top:
-
-- Two confirmed swing lows `a < b`, gap `5 .. 60`, tolerance
-  `abs(low[a] - low[b]) <= 0.5 × ATR20(i)`.
-- **Neckline:** `max(high[a] .. high[b])`, the highest high between the two bottoms.
-- **Validity at the cut:** `cutIndex = b + 2`; no close strictly above the neckline in
-  `b + 1 .. b + 2`.
-- **Near miss:** same relaxed gap/tolerance rule as double top.
-- **Emit:** `bounds = { startIndex: a, endIndex: b }`;
-  `levelUpper = neckline`, `levelLower = min(low[a], low[b])`,
-  `neckline = neckline`; `cutIndex = b + 2`; `direction = "up"`.
+Touch-only, close-through, prior-break and weak-rejection cases are not valid sweeps. The
+two mirrors cannot match the same bar: `sweep_up` needs a lower-half close while
+`sweep_down` needs an upper-half close.
 
 ---
 
@@ -302,6 +234,34 @@ that level since the swing: no close in `(s, i)` may already be beyond the level
 - **Near miss:** close beyond the opposing level but by less than `thr(i)`; or a qualifying
   break without an established opposing trend (fewer than two confirmed highs or lows, or
   mixed structure).
+
+---
+
+## Preview annotations
+
+The local HTML preview is a review aid; it must not invent a new pattern definition. It
+draws a 120-bar context chart ending at `cutIndex` and a magnified pattern panel. The
+context chart has no filled pattern rectangle.
+
+Per-tag annotations are derived from the row and the stored bars:
+
+- **Engulfing:** highlight both candles in the pattern bounds.
+- **Sweep:** horizontal liquidity level from the swept swing to the sweep, markers at the
+  swing extreme and the sweep wick, and an arrow back toward the rejection close.
+- **S/R flip:** horizontal flipped level, marker at the original swing, the first break bar
+  between `startIndex` and `endIndex`, and the retest bar at `endIndex`.
+- **BOS / CHoCH:** read structure with the existing confirmed-swing `readTrend` logic at
+  `row.endIndex`, not at `cutIndex`, so the preview reproduces the detector context. Draw
+  diagonal trend lines `H1->H2` and `L1->L2`. Highlight the line relevant to the setup,
+  mark the broken swing and the break bar, and show the broken swing level only as a short
+  dashed horizontal reference. BOS shows the continuation break through `H2`/`L2`; CHoCH
+  down highlights the failed rising support `L1->L2`; CHoCH up highlights the failed
+  falling resistance `H1->H2`.
+- If structure cannot be read for a BOS/CHoCH row, fall back to the row's horizontal level
+  instead of throwing.
+
+Both preview panels end at or before `cutIndex`, are clipped to stored bars, and are drawn
+from inline SVG only. Missing bars render a placeholder card.
 
 ---
 

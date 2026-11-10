@@ -11,18 +11,14 @@ export type Direction = "up" | "down";
 export type Outcome = "up" | "down" | "scratch";
 
 /** Coarse grouping used to keep drills and base rates balanced. */
-export type TagFamily = "candle" | "liquidity" | "reversal" | "structure";
+export type TagFamily = "candle" | "liquidity" | "structure";
 
 /** Every mechanical pattern tag the pilot can mine. */
 export type Tag =
   | "bullish_engulfing"
   | "bearish_engulfing"
-  | "inside_bar"
-  | "outside_bar"
   | "sweep_up"
   | "sweep_down"
-  | "double_top"
-  | "double_bottom"
   | "sr_flip"
   | "bos"
   | "choch";

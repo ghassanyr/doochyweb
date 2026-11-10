@@ -40,11 +40,11 @@ function flatBars(length: number): Candle[] {
 function makeItem(overrides: Partial<TrainerItem> = {}): TrainerItem {
   const cutIndex = 60;
   return {
-    id: "BTC:15m:inside_bar:55-60:none",
+    id: "BTC:15m:bearish_engulfing:55-60:none",
     batchVersion: "test-v1",
     symbol: "BTC" as TrainerSymbol,
     timeframe: "15m" as TrainerTimeframe,
-    tag: "inside_bar",
+    tag: "bearish_engulfing",
     family: "candle",
     direction: null,
     contextStartIndex: 50,
@@ -67,7 +67,7 @@ function makeItem(overrides: Partial<TrainerItem> = {}): TrainerItem {
     maeAtr: 1,
     mfeR: 2,
     maeR: 1,
-    why: "inside_bar: upper barrier reached after 1 bar(s).",
+    why: "bearish_engulfing: upper barrier reached after 1 bar(s).",
     ...overrides,
   };
 }
@@ -81,11 +81,11 @@ function makeBatch(item: TrainerItem): TrainerBatch {
     barrierAtrMult: 1,
     barrierHorizon: 20,
     baseRates: {
-      inside_bar: { up: 0.5, down: 0.25, scratch: 0.25 },
+      bearish_engulfing: { up: 0.5, down: 0.25, scratch: 0.25 },
       all: { up: 0.4, down: 0.4, scratch: 0.2 },
     },
     baseRateCounts: {
-      inside_bar: { up: 2, down: 1, scratch: 1 },
+      bearish_engulfing: { up: 2, down: 1, scratch: 1 },
       all: { up: 4, down: 4, scratch: 2 },
     },
     items: [item],
@@ -188,7 +188,7 @@ describe("anonymizeItem", () => {
     const json = JSON.stringify(payload);
     assert.equal(json.includes("BTC"), false);
     assert.equal(json.includes("15m"), false);
-    assert.equal(json.includes("inside_bar"), false);
+    assert.equal(json.includes("bearish_engulfing"), false);
     assert.equal(json.includes("1700000000000"), false);
     assert.equal(json.includes('"time"'), false);
   });
@@ -215,7 +215,7 @@ describe("revealItem", () => {
     assert.equal(payload.maeAtr, 1);
     assert.equal(payload.mfeR, 2);
     assert.equal(payload.maeR, 1);
-    assert.equal(payload.tag, "inside_bar");
+    assert.equal(payload.tag, "bearish_engulfing");
     assert.deepEqual(payload.bounds, { startOffset: -5, endOffset: 0 });
     assert.deepEqual(payload.levels, {
       levelUpperPct: 1,
@@ -270,7 +270,7 @@ describe("revealItem", () => {
     const item = makeItem({
       outcome: "scratch",
       outcomeIndex: null,
-      why: "inside_bar: neither barrier reached within 20 bars.",
+      why: "bearish_engulfing: neither barrier reached within 20 bars.",
     });
     const payload = revealItem(item, pricedBars(), makeBatch(item));
     assert.equal(payload.outcome, "scratch");

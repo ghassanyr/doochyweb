@@ -1,7 +1,8 @@
 # Deploying Doochy Learn
 
-Phase 7B documents the deploy; it does **not** edit DNS or nginx, obtain certificates,
-publish a batch or restart pm2. Those remain approval-gated actions after human curation.
+This document records the verified deploy state. It does **not** edit DNS, nginx or
+certificates, publish a batch, or restart pm2. Those remain approval-gated actions after
+human curation.
 
 ## Topology
 
@@ -15,159 +16,66 @@ There is no second Node process, database or build. The SPA chooses the initial 
 hostname (`learn.*`) or `?view=learn`; `doochy.net` keeps its existing Analysis default and
 shared `?note=` links still open Breakouts.
 
-## Verified certificate state (2026-11-09)
+## Verified state (2026-11-09)
 
-The existing origin certificate is **not valid for `learn.doochy.net`**:
+- The existing origin certificate covers **both** `doochy.net` and `learn.doochy.net`.
+- The active nginx server blocks live in `/etc/nginx/sites-enabled/default`.
+- Do **not** move those blocks into a new site file or create a duplicate
+  `learn.doochy.net` server block.
+- Cloudflare **Automatic** SSL/TLS works with this origin certificate.
+- `learn.doochy.net` is served by the same pm2 process as `doochy.net`.
+- No DNS, nginx, certificate or pm2 change was made for the trainer preview/docs work.
 
-- Origin certificate: `CN=doochy.net`, `SAN DNS:doochy.net` only.
-- The default SNI certificate on this host is `CN=doochy.route07.com`.
-- Reusing the current origin certificate directly for `learn.doochy.net` will produce a
-  hostname mismatch.
-- The planned path is to expand the existing `doochy.net` lineage with
-  `learn.doochy.net`, then reuse `/etc/letsencrypt/live/doochy.net/*` in the new nginx block.
-
-Check the current certificate before changing anything:
+Verify the certificate and active nginx configuration before any future deploy:
 
 ```bash
-sudo certbot certificates
 sudo openssl x509 -in /etc/letsencrypt/live/doochy.net/fullchain.pem \
   -noout -subject -ext subjectAltName
+sudo nginx -T
 ```
 
-Expected after expansion:
+Expected certificate output includes both names:
 
 ```text
-subject=CN = doochy.net
-X509v3 Subject Alternative Name:
-    DNS:doochy.net, DNS:learn.doochy.net
+DNS:doochy.net, DNS:learn.doochy.net
 ```
 
-## Prerequisites
+If that output is missing `learn.doochy.net`, stop and get approval before running certbot.
+Do not replace the certificate or rewrite nginx to work around a stale local command output.
 
-- A DNS `A` record for `learn.doochy.net` pointing at this host. Add an `AAAA` record only if
-  the host and nginx are configured for IPv6.
-- Inbound TCP 80 and 443 open.
-- nginx and certbot already installed, as used by `doochy.net`.
-- The current app builds and runs on `127.0.0.1:9111`.
-- `ecosystem.config.cjs` runs `doochyweb` from `dist/server/index.js` in this repo.
-- Do not edit `/etc/nginx/sites-enabled/default`; add a separate site file and symlink it.
+## Cloudflare
 
-Check DNS before touching nginx or requesting a certificate:
-
-```bash
-dig +short learn.doochy.net
-```
-
-The result must be the public address of this host. If Cloudflare proxying is enabled, turn
-the record grey-cloud (DNS-only) for the HTTP-01 challenge, then re-enable the proxy.
-
-## Certificate options
-
-### Option 1: Expand the existing `doochy.net` certificate (recommended)
-
-This keeps one lineage and one renewal job for both hostnames.
-
-1. Add the HTTP-only `learn.doochy.net` nginx server block first so certbot can answer the
-   challenge, or confirm an existing HTTP server block serves this hostname.
-2. Run the exact expansion command:
-
-```bash
-sudo certbot certonly --nginx -d doochy.net -d learn.doochy.net \
-  --cert-name doochy.net --expand
-```
-
-3. Confirm both names are in the SAN:
-
-```bash
-sudo certbot certificates
-sudo openssl x509 -in /etc/letsencrypt/live/doochy.net/fullchain.pem \
-  -noout -subject -ext subjectAltName
-```
-
-4. Use `/etc/letsencrypt/live/doochy.net/fullchain.pem` and `privkey.pem` in the final
-   `learn.doochy.net` block below. Existing `doochy.net` blocks can keep the same paths.
-
-`certbot renew` keeps both names because they belong to the same lineage.
-
-### Option 2: Separate certificate for `learn.doochy.net`
-
-Use this if the existing `doochy.net` certificate must not change.
-
-```bash
-sudo certbot certonly --nginx -d learn.doochy.net
-```
-
-Then use `/etc/letsencrypt/live/learn.doochy.net/fullchain.pem` and `privkey.pem` in the
-nginx block. The `doochy.net` certificate stays untouched, but there are two lineages and two
-renewal checks.
-
-### Option 3: Cloudflare proxy with “Full” (non-strict), no origin SAN change
-
-This is a fallback, not the recommended origin setup:
-
-- Add a proxied `CNAME` `learn` -> `doochy.net`, or a proxied `A` record pointing at the
-  public address.
-- Use grey-cloud/DNS-only during the HTTP-01 challenge, then turn the proxy back on.
-- Cloudflare Universal SSL covers the edge certificate for `learn.doochy.net`.
-- Set SSL/TLS mode to **Full** (non-strict), not **Full (strict)**, because the origin
-  certificate does not contain `learn.doochy.net`.
-- **Full (strict)** requires the expanded origin certificate from Option 1 or the separate
-  certificate from Option 2.
-- Direct, grey-cloud HTTPS to the origin will still fail certificate validation unless the
-  origin certificate covers `learn.doochy.net`.
+- With the record proxied, **Automatic** SSL/TLS is sufficient because the origin certificate
+  covers both hostnames.
+- **Full (strict)** is also valid when the origin certificate check above includes both names.
+- Grey-cloud/DNS-only is only needed for an HTTP-01 certificate challenge. It is not part of
+  the current operating setup.
+- Do not switch to Full (strict) or reissue a certificate without verifying the SAN first.
 
 ## nginx
 
-Create a separate site file. Do not edit `/etc/nginx/sites-enabled/default`.
+The current configuration is in `/etc/nginx/sites-enabled/default`. Keep it there.
+
+- Do not move the file, split the server blocks, or add a second `learn.doochy.net` block.
+- Do not edit nginx as part of preview or documentation work.
+- If a future approved change is required, back up the current file first, then run:
 
 ```bash
-sudo tee /etc/nginx/sites-available/learn.doochy.net >/dev/null <<'EOF'
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    server_name learn.doochy.net;
-
-    ssl_certificate /etc/letsencrypt/live/doochy.net/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/doochy.net/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:9111;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-
-server {
-    listen 80;
-    listen [::]:80;
-    server_name learn.doochy.net;
-    return 301 https://$host$request_uri;
-}
-EOF
-
-sudo ln -sfn /etc/nginx/sites-available/learn.doochy.net \
-  /etc/nginx/sites-enabled/learn.doochy.net
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-If Option 2 was chosen, replace both certificate paths with
-`/etc/letsencrypt/live/learn.doochy.net/...`.
-
-Run `sudo nginx -t` before every reload. Never copy the `doochy.net` certificate paths for the
-subdomain unless the certificate actually covers `learn.doochy.net`.
+Never reload nginx when `nginx -t` fails. The app listens on `127.0.0.1:${PORT}` (`9111` by
+default) and must stay behind nginx.
 
 ## pm2 and runtime changes
 
-No pm2 restart is needed for Phase 7B preview/docs work.
+No pm2 restart is needed for preview HTML, CSV, documentation, DNS, nginx or certificate
+changes. No restart was performed for this revision.
 
-`/api/trainer/batch` is already live on `doochy.net` and returns `503` (no batch published);
-that is the expected state. Restart pm2 only if the **runtime server code** changes, not for
-preview HTML, documentation, DNS, nginx or certificate changes.
-
-If a future change does modify server code:
+`/api/trainer/batch` is already live and returns `503 {"error":"no batch published"}` until a
+batch is published; that is the expected state. Restart pm2 only when runtime server code
+changes and the deploy is approved:
 
 ```bash
 pnpm build
@@ -176,18 +84,16 @@ sudo -u san pm2 restart doochyweb
 sudo -u san pm2 status
 ```
 
-The build also runs typecheck, tests and the Vite production build. Run the restart only
-after explicit approval. Check the process log if it fails:
+The build runs typecheck, tests and the Vite production build. Check logs if the restart
+fails:
 
 ```bash
 sudo -u san pm2 logs doochyweb --lines 100
 ```
 
-The server binds to `127.0.0.1:${PORT}` (`9111` by default) and must stay behind nginx.
-
 ## Verification
 
-After an approved DNS/nginx/certificate change:
+After an approved deploy:
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' https://learn.doochy.net/
@@ -210,24 +116,25 @@ approved; use the existing route/payload tests and local dry runs instead.
 
 ## Rollback
 
-If the subdomain must be withdrawn:
+If the Learn deploy must be withdrawn:
 
-1. Remove the `learn.doochy.net` symlink or restore the previous nginx config from backup.
+1. Restore the last approved nginx configuration from backup.
 2. Run `sudo nginx -t && sudo systemctl reload nginx`.
-3. Leave DNS in place or remove the `learn` record per the DNS provider.
-4. If the certificate was expanded, it is valid for both names; no rollback is required
-   unless the extra SAN must be removed by reissuing the certificate with approval.
+3. Leave DNS and the shared certificate unchanged unless a separate approved change requires
+   otherwise.
+4. If the app build is faulty, redeploy the last approved commit, run `pnpm build`, then
+   restart pm2 with approval.
+5. If the batch is faulty, follow the publish rollback procedure in
+   [`TRAINER.md`](./TRAINER.md#rollback).
 
-If the app build is faulty, redeploy the last approved commit, run `pnpm build`, then restart
-pm2 with approval. If the batch is faulty, follow the publish rollback procedure in
-[`TRAINER.md`](./TRAINER.md#rollback). No rollback step deletes review or bar data.
+No rollback step deletes review or bar data.
 
 ## Operational notes
 
 - The Learn UI and `/api/trainer` are public; the existing account APIs keep their auth.
 - The trainer client never sends an Authorization header.
-- There are no new environment variables required for deploy. `TRAINER_ITEM_SECRET` is
-  optional and recommended if stable public item ids across restarts are desired.
+- No new environment variables are required for deploy. `TRAINER_ITEM_SECRET` is optional and
+  recommended if stable public item ids across restarts are desired.
 - The Express SPA fallback serves `webapp/dist/index.html`; nginx must proxy all paths,
   including `/api/trainer`, to `127.0.0.1:9111`.
 - No CORS changes are needed because the SPA and API share the same origin.

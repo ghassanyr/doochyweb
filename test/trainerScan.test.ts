@@ -47,13 +47,13 @@ function engulfSeries(length: number): Candle[] {
 
 function sampleCandidate(): Candidate {
   return {
-    id: "BTC:15m:inside_bar:0-1:none",
+    id: "BTC:15m:sweep_up:0-1:down",
     symbol: "BTC",
     timeframe: "15m",
     cutIndex: 1,
-    tag: "inside_bar",
-    family: "candle",
-    direction: null,
+    tag: "sweep_up",
+    family: "liquidity",
+    direction: "down",
     bounds: { startIndex: 0, endIndex: 1 },
     levels: { levelUpper: 100, levelLower: 90, neckline: null },
     notes: 'tricky, "quoted" note',
@@ -171,13 +171,13 @@ describe("candidates CSV", () => {
 
 function sampleCandidateRow(): string {
   return [
-    "BTC:15m:inside_bar:0-1:none",
+    "BTC:15m:sweep_up:0-1:down",
     "BTC",
     "15m",
     "1",
-    "inside_bar",
-    "candle",
-    "",
+    "sweep_up",
+    "liquidity",
+    "down",
     "0",
     "1",
     "100",

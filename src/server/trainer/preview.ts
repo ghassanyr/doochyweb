@@ -1,8 +1,11 @@
 import type { Candle } from "../market/types";
+import type { AnnotationLine, PreviewAnnotations } from "./annotations";
+import { deriveAnnotations } from "./annotations";
 import type { ReviewRow } from "./types";
 
 export const PREVIEW_CONTEXT_DEFAULT = 120;
 export const PREVIEW_PADDING = 10;
+export const PREVIEW_ZOOM_MIN_BARS = 12;
 
 export interface PreviewWindow {
   startIndex: number;
@@ -65,6 +68,37 @@ export function previewWindow(
   return { startIndex: start, endIndex: safeCut };
 }
 
+export function zoomWindow(
+  anchors: readonly number[],
+  cutIndex: number,
+  barCount: number,
+  minBars: number = PREVIEW_ZOOM_MIN_BARS,
+  padding: number = 3
+): PreviewWindow {
+  if (barCount <= 0) return { startIndex: 0, endIndex: -1 };
+  const safeCut = Math.max(0, Math.min(cutIndex, barCount - 1));
+  const safeAnchors = anchors
+    .filter((value) => Number.isInteger(value))
+    .map((value) => Math.max(0, Math.min(value, safeCut)));
+
+  let start: number;
+  let end: number;
+  if (safeAnchors.length === 0) {
+    end = safeCut;
+    start = Math.max(0, end - minBars + 1);
+  } else {
+    start = Math.max(0, Math.min(...safeAnchors) - padding);
+    end = Math.min(safeCut, Math.max(...safeAnchors) + padding);
+    if (end - start + 1 < minBars) {
+      start = Math.max(0, end - minBars + 1);
+    }
+    if (end - start + 1 < minBars) {
+      end = Math.min(safeCut, start + minBars - 1);
+    }
+  }
+  return { startIndex: start, endIndex: end };
+}
+
 export function scalePreviewY(
   price: number,
   min: number,
@@ -99,21 +133,27 @@ function formatCell(value: unknown): string {
 
 function priceRange(
   bars: readonly Candle[],
-  row: ReviewRow
+  row: ReviewRow,
+  annotations: PreviewAnnotations
 ): { min: number; max: number } {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
+  const include = (value: number | null | undefined): void => {
+    if (value == null || !Number.isFinite(value)) return;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  };
 
   for (const bar of bars) {
-    if (Number.isFinite(bar.low)) min = Math.min(min, bar.low);
-    if (Number.isFinite(bar.high)) max = Math.max(max, bar.high);
+    include(bar.low);
+    include(bar.high);
   }
-
-  for (const level of [row.levelUpper, row.levelLower, row.neckline]) {
-    if (level == null || !Number.isFinite(level)) continue;
-    min = Math.min(min, level);
-    max = Math.max(max, level);
+  for (const level of [row.levelUpper, row.levelLower, row.neckline]) include(level);
+  for (const line of annotations.lines) {
+    include(line.fromPrice);
+    include(line.toPrice);
   }
+  for (const marker of annotations.markers) include(marker.price);
 
   if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 1 };
   if (min === max) {
@@ -124,60 +164,134 @@ function priceRange(
   return { min: min - pad, max: max + pad };
 }
 
-function levelMarkup(row: ReviewRow, min: number, max: number): string {
-  const plotHeight = SVG_HEIGHT - SVG_TOP - SVG_BOTTOM;
-  const x1 = SVG_LEFT;
-  const x2 = SVG_WIDTH - SVG_RIGHT;
-  const levels: { label: string; value: number; cls: string }[] = [];
-  if (row.levelUpper != null) {
-    levels.push({ label: "upper", value: row.levelUpper, cls: "level-upper" });
-  }
-  if (row.levelLower != null) {
-    levels.push({ label: "lower", value: row.levelLower, cls: "level-lower" });
-  }
-  if (row.neckline != null) {
-    levels.push({ label: "neckline", value: row.neckline, cls: "level-neckline" });
+function arrowHead(x1: number, y1: number, x2: number, y2: number): string {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const size = 7;
+  const left = {
+    x: x2 - size * Math.cos(angle - Math.PI / 6),
+    y: y2 - size * Math.sin(angle - Math.PI / 6),
+  };
+  const right = {
+    x: x2 - size * Math.cos(angle + Math.PI / 6),
+    y: y2 - size * Math.sin(angle + Math.PI / 6),
+  };
+  return (
+    `<polygon class="annotation-arrowhead" points="` +
+    `${x2.toFixed(2)},${y2.toFixed(2)} ` +
+    `${left.x.toFixed(2)},${left.y.toFixed(2)} ` +
+    `${right.x.toFixed(2)},${right.y.toFixed(2)}"/>`
+  );
+}
+
+function clipLine(
+  line: AnnotationLine,
+  window: PreviewWindow
+): { fromIndex: number; toIndex: number; fromPrice: number; toPrice: number } | null {
+  if (line.fromIndex === line.toIndex) {
+    if (line.fromIndex < window.startIndex || line.fromIndex > window.endIndex) return null;
+    return line;
   }
 
-  return levels
-    .map(({ label, value, cls }) => {
-      const y = scalePreviewY(value, min, max, plotHeight, SVG_TOP);
+  const low = Math.min(line.fromIndex, line.toIndex);
+  const high = Math.max(line.fromIndex, line.toIndex);
+  const start = Math.max(window.startIndex, low);
+  const end = Math.min(window.endIndex, high);
+  if (start > end) return null;
+
+  const span = line.toIndex - line.fromIndex;
+  const priceAt = (index: number): number =>
+    line.fromPrice + ((index - line.fromIndex) / span) * (line.toPrice - line.fromPrice);
+
+  return {
+    fromIndex: start,
+    toIndex: end,
+    fromPrice: priceAt(start),
+    toPrice: priceAt(end),
+  };
+}
+
+function renderAnnotations(
+  annotations: PreviewAnnotations,
+  window: PreviewWindow,
+  min: number,
+  max: number,
+  plotHeight: number,
+  barIndex: (index: number) => number,
+  markerMode: "lines" | "markers"
+): string {
+  if (markerMode === "lines") {
+    return annotations.lines
+      .map((line) => {
+        const clipped = clipLine(line, window);
+        if (!clipped) return "";
+        const x1 = barIndex(clipped.fromIndex);
+        const y1 = scalePreviewY(clipped.fromPrice, min, max, plotHeight, SVG_TOP);
+        const x2 = barIndex(clipped.toIndex);
+        const y2 = scalePreviewY(clipped.toPrice, min, max, plotHeight, SVG_TOP);
+        const classes = [
+          "annotation-line",
+          line.kind,
+          line.highlight ? "highlight" : "",
+          line.dashed ? "dashed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const label =
+          line.label && Math.abs(x2 - x1) > 45
+            ? `<text class="annotation-label" x="${((x1 + x2) / 2).toFixed(2)}" ` +
+              `y="${((y1 + y2) / 2 - 4).toFixed(2)}">${escapeHtml(line.label)}</text>`
+            : "";
+        const head =
+          line.kind === "arrow" ? arrowHead(x1, y1, x2, y2) : "";
+        return (
+          `<g class="${classes}">` +
+          `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" ` +
+          `x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>` +
+          head +
+          label +
+          `</g>`
+        );
+      })
+      .join("");
+  }
+
+  return annotations.markers
+    .filter(
+      (marker) =>
+        marker.index >= window.startIndex && marker.index <= window.endIndex
+    )
+    .map((marker) => {
+      const x = barIndex(marker.index);
+      const y = scalePreviewY(marker.price, min, max, plotHeight, SVG_TOP);
+      const radius = marker.kind === "anchor" ? 3 : 4;
       return (
-        `<g class="${cls}">` +
-        `<line x1="${x1}" y1="${y.toFixed(2)}" x2="${x2}" y2="${y.toFixed(2)}"/>` +
-        `<text x="${x2 + 5}" y="${(y + 3).toFixed(2)}">${label} ${formatPrice(value)}</text>` +
+        `<g class="annotation-marker ${marker.kind}">` +
+        `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${radius}"/>` +
+        `<text class="annotation-label" x="${(x + 5).toFixed(2)}" ` +
+        `y="${(y - 5).toFixed(2)}">${escapeHtml(marker.label)}</text>` +
         `</g>`
       );
     })
     .join("");
 }
 
-function renderSvg(
+function renderChart(
   row: ReviewRow,
   bars: readonly Candle[],
-  window: PreviewWindow
+  window: PreviewWindow,
+  annotations: PreviewAnnotations,
+  className: string,
+  label: string
 ): string {
   const visible = bars.slice(window.startIndex, window.endIndex + 1);
-  const { min, max } = priceRange(visible, row);
+  const { min, max } = priceRange(visible, row, annotations);
   const plotWidth = SVG_WIDTH - SVG_LEFT - SVG_RIGHT;
   const plotHeight = SVG_HEIGHT - SVG_TOP - SVG_BOTTOM;
   const slot = plotWidth / Math.max(1, visible.length);
-  const bodyWidth = Math.max(1.5, Math.min(10, slot * 0.62));
+  const bodyWidth = Math.max(1.5, Math.min(12, slot * 0.62));
   const barIndex = (index: number): number =>
     SVG_LEFT + (index - window.startIndex + 0.5) * slot;
-
-  const clippedStart = Math.max(window.startIndex, row.startIndex);
-  const clippedEnd = Math.min(window.endIndex, row.endIndex);
-  let bounds = "";
-  if (clippedStart <= clippedEnd) {
-    const x = SVG_LEFT + (clippedStart - window.startIndex) * slot;
-    const width = Math.max(slot, (clippedEnd - clippedStart + 1) * slot);
-    bounds =
-      `<rect class="pattern" x="${x.toFixed(2)}" y="${SVG_TOP}" ` +
-      `width="${width.toFixed(2)}" height="${plotHeight}"/>` +
-      `<text class="pattern-label" x="${(x + 4).toFixed(2)}" ` +
-      `y="${SVG_TOP + 13}">pattern</text>`;
-  }
+  const highlight = new Set(annotations.highlightBars);
 
   const candles = visible
     .map((bar, offset) => {
@@ -189,9 +303,11 @@ function renderSvg(
       const lowY = scalePreviewY(bar.low, min, max, plotHeight, SVG_TOP);
       const top = Math.min(openY, closeY);
       const height = Math.max(1, Math.abs(closeY - openY));
-      const cls = bar.close >= bar.open ? "up" : "down";
+      const cls =
+        `candle ${bar.close >= bar.open ? "up" : "down"}` +
+        (highlight.has(index) ? " highlight" : "");
       return (
-        `<g class="candle ${cls}">` +
+        `<g class="${cls}">` +
         `<line x1="${x.toFixed(2)}" y1="${highY.toFixed(2)}" ` +
         `x2="${x.toFixed(2)}" y2="${lowY.toFixed(2)}"/>` +
         `<rect x="${(x - bodyWidth / 2).toFixed(2)}" y="${top.toFixed(2)}" ` +
@@ -211,11 +327,10 @@ function renderSvg(
       : "";
 
   return (
-    `<svg class="chart" viewBox="0 0 ${SVG_WIDTH} ${SVG_HEIGHT}" ` +
-    `role="img" aria-label="${escapeHtml(`${seriesKey(row)} ${row.tag} preview`)}">` +
+    `<svg class="${escapeHtml(className)}" viewBox="0 0 ${SVG_WIDTH} ${SVG_HEIGHT}" ` +
+    `role="img" aria-label="${escapeHtml(`${seriesKey(row)} ${row.tag} ${label}`)}">` +
     `<rect class="plot" x="${SVG_LEFT}" y="${SVG_TOP}" width="${plotWidth}" ` +
     `height="${plotHeight}"/>` +
-    bounds +
     `<line class="axis" x1="${SVG_LEFT}" y1="${SVG_TOP + plotHeight}" ` +
     `x2="${SVG_LEFT + plotWidth}" y2="${SVG_TOP + plotHeight}"/>` +
     `<text class="axis-label" x="${SVG_LEFT - 6}" y="${SVG_TOP + 4}" ` +
@@ -226,9 +341,26 @@ function renderSvg(
     `${window.startIndex}</text>` +
     `<text class="axis-label" x="${SVG_LEFT + plotWidth}" y="${SVG_HEIGHT - 12}" ` +
     `text-anchor="end">${window.endIndex}</text>` +
+    renderAnnotations(
+      annotations,
+      window,
+      min,
+      max,
+      plotHeight,
+      barIndex,
+      "lines"
+    ) +
     candles +
+    renderAnnotations(
+      annotations,
+      window,
+      min,
+      max,
+      plotHeight,
+      barIndex,
+      "markers"
+    ) +
     cut +
-    levelMarkup(row, min, max) +
     `</svg>`
   );
 }
@@ -253,16 +385,24 @@ function renderCard(
         `${escapeHtml(series)}.</span></div>`
       );
     }
-    const window = previewWindow(
+    const mainWindow = previewWindow(
       row.startIndex,
       row.cutIndex,
       bars.length,
       context
     );
-    if (window.endIndex < window.startIndex) {
+    if (mainWindow.endIndex < mainWindow.startIndex) {
       return `<div class="missing"><strong>The preview window is empty.</strong></div>`;
     }
-    return renderSvg(row, bars, window);
+    const annotations = deriveAnnotations(row, bars);
+    const zoom = zoomWindow(annotations.anchors, row.cutIndex, bars.length);
+    return (
+      `<div class="chart-label">Context ${mainWindow.startIndex}–` +
+      `${mainWindow.endIndex}</div>` +
+      renderChart(row, bars, mainWindow, annotations, "chart", "context") +
+      `<div class="chart-label">Pattern zoom ${zoom.startIndex}–${zoom.endIndex}</div>` +
+      renderChart(row, bars, zoom, annotations, "chart chart-zoom", "pattern zoom")
+    );
   })();
 
   const metadata: [string, unknown][] = [
@@ -372,7 +512,9 @@ main { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 5
 .meta dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
 .meta dd { margin: 1px 0 0; overflow-wrap: anywhere; font-size: 12px; }
 .chart-wrap { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #0e151d; }
+.chart-label { padding: 7px 14px; border-top: 1px solid var(--line); background: #111a23; color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .chart { display: block; width: 100%; height: auto; }
+.chart-zoom { background: #0b1219; }
 .plot { fill: #101923; stroke: #1f2a37; }
 .axis { stroke: #344154; }
 .axis-label { fill: #8492a6; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -380,16 +522,25 @@ main { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 5
 .candle.down line, .candle.down rect { stroke: var(--down); fill: var(--down); }
 .candle line { stroke-width: 1; }
 .candle rect { stroke-width: 0; opacity: .9; }
-.pattern { fill: rgba(20,184,166,.08); stroke: rgba(20,184,166,.55); stroke-dasharray: 5 4; }
-.pattern-label, .cut-label { fill: #7dd3c7; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.candle.highlight line { stroke: #fbbf24; stroke-width: 1.6; }
+.candle.highlight rect { stroke: #fbbf24; stroke-width: 2; }
 .cut-line { stroke: #fbbf24; stroke-width: 1.2; stroke-dasharray: 3 3; }
-.cut-label { fill: #fbbf24; }
-.level-upper line { stroke: var(--upper); stroke-width: 1; stroke-dasharray: 6 3; }
-.level-upper text { fill: var(--upper); font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.level-lower line { stroke: var(--lower); stroke-width: 1; stroke-dasharray: 6 3; }
-.level-lower text { fill: var(--lower); font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.level-neckline line { stroke: var(--neck); stroke-width: 1; stroke-dasharray: 2 3; }
-.level-neckline text { fill: var(--neck); font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cut-label { fill: #fbbf24; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.annotation-line { fill: none; stroke: #7dd3c7; stroke-width: 1.3; }
+.annotation-line.level { stroke: #fbbf24; stroke-dasharray: 6 3; }
+.annotation-line.trend { stroke: #60a5fa; stroke-width: 1.5; opacity: .55; }
+.annotation-line.trend.highlight { stroke: #a78bfa; stroke-width: 2.4; opacity: 1; }
+.annotation-line.reference { stroke: #f59e0b; stroke-width: 1; stroke-dasharray: 2 4; opacity: .8; }
+.annotation-line.arrow { stroke: #f472b6; stroke-width: 1.7; }
+.annotation-arrowhead { fill: #f472b6; }
+.annotation-marker { fill: #fbbf24; stroke: #0b1016; stroke-width: 1; }
+.annotation-marker.anchor { fill: #60a5fa; }
+.annotation-marker.swing { fill: #a78bfa; }
+.annotation-marker.sweep { fill: #f472b6; }
+.annotation-marker.close { fill: var(--fg); }
+.annotation-marker.break { fill: #f97316; }
+.annotation-marker.retest { fill: #22c55e; }
+.annotation-label { fill: #cbd5e1; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .notes { margin: 0; padding: 11px 14px 14px; color: var(--muted); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .missing { display: grid; gap: 5px; padding: 28px 18px; color: var(--muted); text-align: center; }
 .missing strong { color: #fca5a5; }
@@ -402,7 +553,7 @@ code { color: var(--fg); }
 <body>
 <header class="top">
   <h1>Doochy Learn review preview</h1>
-  <p>Read-only gallery. Edit the shortlist CSV, not this page. Context ends at the cut bar; no future bars are shown.</p>
+  <p>Read-only gallery. Edit the shortlist CSV, not this page. Context and zoom end at the cut bar; no future bars are shown.</p>
   <div class="controls">
     <label>Tag<select id="tag-filter"><option value="">All tags</option>${tagOptions}</select></label>
     <label>Series<select id="series-filter"><option value="">All series</option>${seriesOptions}</select></label>

@@ -45,11 +45,11 @@ function makeBars(length = 120): Candle[] {
 function makeItem(overrides: Partial<TrainerItem> = {}): TrainerItem {
   const cutIndex = 60;
   return {
-    id: "BTC:15m:inside_bar:55-60:none",
+    id: "BTC:15m:bearish_engulfing:55-60:none",
     batchVersion: "test-v1",
     symbol: "BTC" as TrainerSymbol,
     timeframe: "15m" as TrainerTimeframe,
-    tag: "inside_bar",
+    tag: "bearish_engulfing",
     family: "candle",
     direction: null,
     contextStartIndex: 50,
@@ -72,7 +72,7 @@ function makeItem(overrides: Partial<TrainerItem> = {}): TrainerItem {
     maeAtr: 1,
     mfeR: 2,
     maeR: 1,
-    why: "inside_bar: upper barrier reached after 1 bar(s).",
+    why: "bearish_engulfing: upper barrier reached after 1 bar(s).",
     ...overrides,
   };
 }
@@ -89,12 +89,12 @@ function makeBatch(
     barrierAtrMult: 1,
     barrierHorizon: 20,
     baseRates: {
-      inside_bar: { up: 0.5, down: 0.25, scratch: 0.25 },
+      bearish_engulfing: { up: 0.5, down: 0.25, scratch: 0.25 },
       bullish_engulfing: { up: 0.25, down: 0.5, scratch: 0.25 },
       all: { up: 0.4, down: 0.4, scratch: 0.2 },
     },
     baseRateCounts: {
-      inside_bar: { up: 2, down: 1, scratch: 1 },
+      bearish_engulfing: { up: 2, down: 1, scratch: 1 },
       bullish_engulfing: { up: 1, down: 2, scratch: 1 },
       all: { up: 4, down: 4, scratch: 2 },
     },
@@ -189,7 +189,7 @@ describe("trainer API: batch metadata", () => {
         barrierHorizon: 20,
       });
       assert.equal(JSON.stringify(body).includes("BTC"), false);
-      assert.equal(JSON.stringify(body).includes("inside_bar"), false);
+      assert.equal(JSON.stringify(body).includes("bearish_engulfing"), false);
     });
   });
 });
@@ -234,7 +234,7 @@ describe("trainer API: session and item payloads", () => {
       const json = JSON.stringify(first.body);
       assert.equal(json.includes("BTC"), false);
       assert.equal(json.includes("15m"), false);
-      assert.equal(json.includes("inside_bar"), false);
+      assert.equal(json.includes("bearish_engulfing"), false);
       assert.equal(json.includes("outcome"), false);
       assert.equal(json.includes('"time"'), false);
 
@@ -260,8 +260,8 @@ describe("trainer API: session and item payloads", () => {
 
   test("excludes answered items and round-robins across tags", async () => {
     const items = [
-      makeItem({ id: "inside-1", tag: "inside_bar" }),
-      makeItem({ id: "inside-2", tag: "inside_bar" }),
+      makeItem({ id: "inside-1", tag: "bearish_engulfing" }),
+      makeItem({ id: "inside-2", tag: "bearish_engulfing" }),
       makeItem({ id: "engulf-1", tag: "bullish_engulfing", family: "candle" }),
       makeItem({ id: "engulf-2", tag: "bullish_engulfing", family: "candle" }),
     ];
@@ -435,7 +435,7 @@ describe("trainer API: answer and reveal", () => {
       assert.equal(payload.itemId, publicItemId(item.id));
       assert.equal(payload.outcome, "up");
       assert.equal(payload.outcomeOffset, 1);
-      assert.equal(payload.tag, "inside_bar");
+      assert.equal(payload.tag, "bearish_engulfing");
       assert.equal(payload.reveal.length, 20);
       assert.equal(payload.reveal[0].offset, 1);
       assert.equal(payload.reveal.at(-1).offset, 20);

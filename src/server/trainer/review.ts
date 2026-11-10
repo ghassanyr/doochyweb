@@ -425,8 +425,6 @@ export function importReviewCsv(
     if (tag === "sweep_up" || tag === "sweep_down") {
       if (levelUpper.value === null) addError("levelUpper", `required for ${tag}`);
       if (levelLower.value === null) addError("levelLower", `required for ${tag}`);
-    } else if (tag === "double_top" || tag === "double_bottom") {
-      if (neckline.value === null) addError("neckline", `required for ${tag}`);
     } else if (tag === "sr_flip") {
       if (direction === "up" && levelLower.value === null) {
         addError("levelLower", "required for sr_flip up");
