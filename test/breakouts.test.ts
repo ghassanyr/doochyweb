@@ -23,7 +23,7 @@ import {
   noneSelected,
   pageCount,
   typesParam,
-} from "../src/webapp/src/market/breakouts";
+} from "../src/webapp/src/market/breakoutFormat";
 
 const SAMPLE = {
   symbol: "EURJPY",

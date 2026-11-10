@@ -8,7 +8,7 @@ import {
   breakoutMeterPct,
   fmtPct,
   fmtPrice,
-} from "./breakouts";
+} from "./breakoutFormat";
 import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
 import type { Breakout } from "./types";
 

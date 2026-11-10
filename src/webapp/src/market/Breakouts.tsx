@@ -13,7 +13,7 @@ import {
   pageCount,
   typesParam,
   type TypeSelection,
-} from "./breakouts";
+} from "./breakoutFormat";
 import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
 import { BreakoutCard, BreakoutCardSkeleton } from "./BreakoutCard";
 import { BreakoutNoteModal } from "./BreakoutNoteModal";

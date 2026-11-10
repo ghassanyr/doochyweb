@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, marketApi } from "../api";
 import { AnimatedModal } from "../components/Modal";
-import { BREAKOUT_STYLE, breakPct, breakoutDirection, fmtPct, fmtPrice } from "./breakouts";
+import { BREAKOUT_STYLE, breakPct, breakoutDirection, fmtPct, fmtPrice } from "./breakoutFormat";
 import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
 import type { Breakout, NarrationBrief, NarrationNote } from "./types";
 
