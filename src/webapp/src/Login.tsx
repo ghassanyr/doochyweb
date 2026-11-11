@@ -18,14 +18,19 @@ export default function Login({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function doAuth() {
+    if (!ready || busy) return;
     setError(null);
+    setBusy(true);
     try {
       const res = mode === "login" ? await api.login(username, password) : await api.register(username, password);
       onAuthed(res.token, mode);
     } catch (err: any) {
       setError(err instanceof ApiError ? err.message : "Request failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -70,15 +75,14 @@ export default function Login({
         {error && <Flash tone="danger">{error}</Flash>}
 
         <Button
-          type="button"
+          type="submit"
           size="lg"
           variant="primary"
           className="w-full"
-          disabled={!ready}
+          disabled={!ready || busy}
           icon={mode === "login" ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-          onClickAsync={doAuth}
         >
-          {mode === "login" ? "Sign in" : "Create account"}
+          {busy ? (mode === "login" ? "Signing in…" : "Creating account…") : mode === "login" ? "Sign in" : "Create account"}
         </Button>
       </form>
 

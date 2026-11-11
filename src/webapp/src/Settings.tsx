@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, ArrowLeft, KeyRound, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, KeyRound, RefreshCw, Save } from "lucide-react";
 import { api, ApiError, AccountView, ConnectInput } from "./api";
 import ConnectPanel from "./ConnectPanel";
 import { fmtMoney } from "./Dashboard";
-import { ACCOUNT_COLORS, Button, Card, inputCls } from "./components/ui";
+import { ACCOUNT_COLORS, Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
 
 type AccountPrefs = { nickname: string; color: string | null };
@@ -29,6 +29,7 @@ export default function SettingsPage({
   const [showConnect, setShowConnect] = useState(false);
   const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
   const [oauthAvailable, setOauthAvailable] = useState(false);
+  const [reconnectErr, setReconnectErr] = useState<string | null>(null);
 
   useEffect(() => {
     setPrefs(prefsFrom(accounts));
@@ -63,6 +64,23 @@ export default function SettingsPage({
       .filter((x): x is { ctid: number; nickname: string; color: string | null } => x != null);
   }
   const anyDirty = dirtyPairs().length > 0;
+
+  // Re-run consent so the user can refresh the session or change the accounts
+  // cTrader shares. Without a platform OAuth app, fall back to the manual
+  // credential form (where new tokens are generated).
+  async function reconnectCtrader() {
+    setReconnectErr(null);
+    if (!oauthAvailable) {
+      setShowConnect(true);
+      return;
+    }
+    try {
+      const { url } = await api.ctraderOAuthStart();
+      window.location.assign(url);
+    } catch (err: any) {
+      setReconnectErr(err instanceof ApiError ? err.message : "Could not start cTrader sign-in");
+    }
+  }
 
   async function saveAll() {
     const pairs = dirtyPairs();
@@ -214,6 +232,32 @@ export default function SettingsPage({
                 onClickAsync={saveAll}
               >
                 Save changes
+              </Button>
+            </div>
+          </Card>
+        </FadeRise>
+
+        <FadeRise>
+          <Card className="p-4">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold tracking-tight text-fg">cTrader access</h2>
+              <p className="text-sm text-fg-muted">
+                Reconnect to refresh the cTrader session or change which accounts are available here.
+                {oauthAvailable ? " You'll approve access on cTrader and come straight back." : ""}
+              </p>
+            </div>
+            {reconnectErr && (
+              <div className="mt-3">
+                <Flash tone="danger">{reconnectErr}</Flash>
+              </div>
+            )}
+            <div className="mt-3">
+              <Button
+                variant="secondary"
+                icon={<RefreshCw className="h-4 w-4" />}
+                onClickAsync={reconnectCtrader}
+              >
+                Reconnect cTrader
               </Button>
             </div>
           </Card>
