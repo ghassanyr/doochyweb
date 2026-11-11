@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, ArrowLeft, KeyRound, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, KeyRound, RefreshCw, Save } from "lucide-react";
 import { api, ApiError, AccountView, ConnectInput } from "./api";
 import ConnectPanel from "./ConnectPanel";
 import { fmtMoney } from "./Dashboard";
-import { ACCOUNT_COLORS, Button, Card, inputCls } from "./components/ui";
+import { ACCOUNT_COLORS, Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
 
 type AccountPrefs = { nickname: string; color: string | null };
@@ -28,6 +28,8 @@ export default function SettingsPage({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showConnect, setShowConnect] = useState(false);
   const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
+  const [oauthAvailable, setOauthAvailable] = useState(false);
+  const [reconnectErr, setReconnectErr] = useState<string | null>(null);
 
   useEffect(() => {
     setPrefs(prefsFrom(accounts));
@@ -40,7 +42,9 @@ export default function SettingsPage({
     api
       .me()
       .then((r) => {
-        if (alive) setClientIdMasked(r.clientIdMasked ?? null);
+        if (!alive) return;
+        setClientIdMasked(r.clientIdMasked ?? null);
+        setOauthAvailable(Boolean(r.ctraderOAuth));
       })
       .catch(() => {});
     return () => {
@@ -60,6 +64,23 @@ export default function SettingsPage({
       .filter((x): x is { ctid: number; nickname: string; color: string | null } => x != null);
   }
   const anyDirty = dirtyPairs().length > 0;
+
+  // Re-run consent so the user can refresh the session or change the accounts
+  // cTrader shares. Without a platform OAuth app, fall back to the manual
+  // credential form (where new tokens are generated).
+  async function reconnectCtrader() {
+    setReconnectErr(null);
+    if (!oauthAvailable) {
+      setShowConnect(true);
+      return;
+    }
+    try {
+      const { url } = await api.ctraderOAuthStart();
+      window.location.assign(url);
+    } catch (err: any) {
+      setReconnectErr(err instanceof ApiError ? err.message : "Could not start cTrader sign-in");
+    }
+  }
 
   async function saveAll() {
     const pairs = dirtyPairs();
@@ -81,6 +102,7 @@ export default function SettingsPage({
     return (
       <ConnectPanel
         storedClientId={clientIdMasked}
+        oauthAvailable={oauthAvailable}
         onConnected={async (creds) => {
           await onConnected(creds);
           const { accounts: fresh } = await api.accounts();
@@ -104,6 +126,15 @@ export default function SettingsPage({
             aria-label="Back"
           />
           <div className="flex items-center gap-2">
+            <img
+              src="/doochy-mark-64.png"
+              srcSet="/doochy-mark-32.png 1x, /doochy-mark-64.png 2x, /doochy-mark-96.png 3x"
+              alt=""
+              width={24}
+              height={24}
+              className="h-6 w-6 shrink-0"
+              aria-hidden="true"
+            />
             <div className="text-[15px] font-semibold tracking-tight text-fg">DoochyWeb</div>
             <span className="mt-0.5 rounded bg-surface px-1 py-px text-[11px] font-medium text-fg-faint">settings</span>
           </div>
@@ -210,6 +241,32 @@ export default function SettingsPage({
                 onClickAsync={saveAll}
               >
                 Save changes
+              </Button>
+            </div>
+          </Card>
+        </FadeRise>
+
+        <FadeRise>
+          <Card className="p-4">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold tracking-tight text-fg">cTrader access</h2>
+              <p className="text-sm text-fg-muted">
+                Reconnect to refresh the cTrader session or change which accounts are available here.
+                {oauthAvailable ? " You'll approve access on cTrader and come straight back." : ""}
+              </p>
+            </div>
+            {reconnectErr && (
+              <div className="mt-3">
+                <Flash tone="danger">{reconnectErr}</Flash>
+              </div>
+            )}
+            <div className="mt-3">
+              <Button
+                variant="secondary"
+                icon={<RefreshCw className="h-4 w-4" />}
+                onClickAsync={reconnectCtrader}
+              >
+                Reconnect cTrader
               </Button>
             </div>
           </Card>

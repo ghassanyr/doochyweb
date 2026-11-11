@@ -8,8 +8,8 @@ import {
   breakoutMeterPct,
   fmtPct,
   fmtPrice,
-} from "./breakouts";
-import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
+} from "./breakoutFormat";
+import { SESSION_LABEL, fmtCaptureTime, relativeTime } from "./captures";
 import type { Breakout } from "./types";
 
 export function BreakoutCard({
@@ -26,7 +26,7 @@ export function BreakoutCard({
   const arrow = direction === "above" ? ArrowUpRight : ArrowDownRight;
   const Arrow = arrow;
   const level = b.level_type.replace(/_/g, " ");
-  const atr = b.break_atr_mult == null ? "—" : `${Math.abs(b.break_atr_mult).toFixed(2)} ATR`;
+  const atr = b.break_atr_mult == null ? "-" : `${Math.abs(b.break_atr_mult).toFixed(2)} ATR`;
   const pct = breakPct(b);
   const meter = breakoutMeterPct(b);
   const summary = `${b.symbol} ${style.label} break`;
@@ -98,7 +98,7 @@ export function BreakoutCard({
           </span>
           <span className="shrink-0 text-fg-faint">{relativeTime(b.timestamp_utc)}</span>
         </div>
-        <div className="mt-0.5 text-[10px] text-fg-faint">{fmtUtc3(b.timestamp_utc)}</div>
+        <div className="mt-0.5 text-[10px] text-fg-faint">{fmtCaptureTime(b.timestamp_utc)}</div>
       </div>
 
       <div className="relative z-10 flex items-center gap-1.5">

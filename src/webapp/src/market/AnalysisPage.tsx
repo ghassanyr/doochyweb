@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, AlertTriangle, RefreshCw, Settings2 } from "lucide-react";
 
 import { marketApi } from "../api";
 import { FadeRise } from "../components/motion";
 import { Card } from "../components/ui";
+import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
 import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
@@ -11,9 +12,17 @@ import { SortableGrid } from "./SortableGrid";
 import { applyOrder } from "./order";
 import { SymbolSearch } from "./SymbolSearch";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes";
-import type { CatalogEntry, MarketResult, MarketSettings } from "./types";
+import type { CatalogEntry, MarketResult, MarketSettings, SymbolType } from "./types";
 
-export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
+export default function AnalysisPage({
+  canRefresh,
+  canManageWatchlist,
+}: {
+  /** Signed-in users can force a broker read; anonymous visitors cannot. */
+  canRefresh: boolean;
+  /** Only admins can change the shared watchlist. */
+  canManageWatchlist: boolean;
+}) {
   const [config, setConfig] = useState<{
     timeframes: { id: string; label: string }[];
     settings: MarketSettings;
@@ -28,6 +37,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(new Set());
   const [order, setOrder] = useState<string[]>([]);
+  const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
 
   const [detail, setDetail] = useState<{ symbol: string; timeframe: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -37,9 +47,55 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
   const strongRatio = settings?.strongRatio ?? 0.25;
   const refreshSeconds = settings?.refreshSeconds ?? 60;
 
+  // Failed analyses may omit the type (an unresolvable symbol never reaches the
+  // resolver), so fall back to the catalog the config request already sent.
+  const catalogTypes = useMemo(() => {
+    const map = new Map<string, SymbolType>();
+    for (const entry of config?.catalog ?? []) map.set(entry.symbol, entry.type);
+    return map;
+  }, [config?.catalog]);
+
+  const assetCounts = useMemo(() => {
+    const counts: Record<AssetFilter, number> = {
+      all: results.length,
+      crypto: 0,
+      forex: 0,
+      metals: 0,
+      indices: 0,
+    };
+    for (const r of results) {
+      const bucket = assetClass(r.type ?? catalogTypes.get(r.symbol));
+      if (bucket) counts[bucket] += 1;
+    }
+    return counts;
+  }, [results, catalogTypes]);
+
+  // Filtering is purely visual: the full result set keeps polling and feeding
+  // the MTF confluence strip, so switching filters is instant.
+  const visibleResults = useMemo(
+    () =>
+      assetFilter === "all"
+        ? results
+        : results.filter((r) => assetClass(r.type ?? catalogTypes.get(r.symbol)) === assetFilter),
+    [results, assetFilter, catalogTypes]
+  );
+
   // Guards against a slow response from an earlier request overwriting a newer
   // one (switching timeframe mid-flight is common).
   const reqId = useRef(0);
+
+  // Confluence runs separately from the card grid: one request per symbol,
+  // three at a time. A batch id plus a per-symbol id stop an older reply from
+  // overwriting a newer one.
+  const confluenceBatch = useRef(0);
+  const confluenceSeq = useRef(0);
+  const confluenceSeqBySymbol = useRef(new Map<string, number>());
+  const symbolsRef = useRef<string[]>([]);
+
+  // Unique symbols drive both the confluence effect and its request pool.
+  const symbols = Array.from(new Set(results.map((r) => r.symbol)));
+  const symbolsKey = [...symbols].sort().join("|");
+  symbolsRef.current = symbols;
 
   const load = useCallback(async () => {
     const id = ++reqId.current;
@@ -47,7 +103,20 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
     try {
       const res = await marketApi.analysis(timeframe);
       if (id !== reqId.current) return;
-      setResults(res.results);
+      // The list endpoint does not carry the MTF strip. Keep the copy already
+      // merged in from the confluence endpoint so it does not flash a skeleton
+      // on every poll.
+      setResults((prev) => {
+        const previous = new Map(prev.map((r) => [r.symbol, r]));
+        return res.results.map((r) => {
+          if (!r.ok) return r;
+          const old = previous.get(r.symbol);
+          if (old?.ok && old.timeframeRatings && r.timeframeRatings === undefined) {
+            return { ...r, timeframeRatings: old.timeframeRatings };
+          }
+          return r;
+        });
+      });
       setUpdatedAt(res.updatedAt);
       setError(null);
       setSecondsLeft(refreshSeconds);
@@ -58,6 +127,37 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
       if (id === reqId.current) setLoading(false);
     }
   }, [timeframe, refreshSeconds]);
+
+  const applyConfluence = useCallback(async (symbol: string) => {
+    const seq = ++confluenceSeq.current;
+    confluenceSeqBySymbol.current.set(symbol, seq);
+    try {
+      const res = await marketApi.confluence(symbol);
+      if (confluenceSeqBySymbol.current.get(symbol) !== seq) return;
+      setResults((prev) => {
+        let changed = false;
+        const next = prev.map((r) => {
+          if (r.symbol !== symbol || !r.ok) return r;
+          changed = true;
+          return { ...r, timeframeRatings: res.timeframes };
+        });
+        return changed ? next : prev;
+      });
+    } catch {
+      // The strip is additive; a 404 or a provider failure must leave the card
+      // exactly as it was.
+    }
+  }, []);
+
+  const loadConfluence = useCallback(async () => {
+    const current = symbolsRef.current;
+    if (current.length === 0) return;
+    const batch = ++confluenceBatch.current;
+    await mapPool(current, 3, async (symbol) => {
+      if (batch !== confluenceBatch.current) return;
+      await applyConfluence(symbol);
+    });
+  }, [applyConfluence]);
 
   // One-shot bootstrap: config + watchlist drives the initial render.
   useEffect(() => {
@@ -90,6 +190,15 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
     return () => window.clearInterval(poll);
   }, [load, refreshSeconds]);
 
+  // MTF confluence: deliberately NOT keyed to the selected timeframe. It
+  // restarts when the symbol set, sensitivity or cadence changes, and otherwise
+  // just polls alongside the main grid.
+  useEffect(() => {
+    void loadConfluence();
+    const poll = window.setInterval(() => void loadConfluence(), Math.max(10, refreshSeconds) * 1000);
+    return () => window.clearInterval(poll);
+  }, [loadConfluence, symbolsKey, strongRatio, refreshSeconds]);
+
   // Countdown ticker. Lives in StatusLine so a tick re-renders only that strip
   // and not the whole grid.
   useEffect(() => {
@@ -100,7 +209,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
   const addSymbol = useCallback(
     async (raw: string) => {
       const symbol = raw.trim();
-      if (!symbol || !canWrite) return;
+      if (!symbol || !canManageWatchlist) return;
       try {
         await marketApi.addSymbol(symbol);
         await load();
@@ -108,12 +217,12 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         setError(err instanceof Error ? err.message : "Failed to add market");
       }
     },
-    [load, canWrite]
+    [load, canManageWatchlist]
   );
 
   const removeSymbol = useCallback(
     async (symbol: string) => {
-      if (!canWrite) return;
+      if (!canManageWatchlist) return;
       setResults((prev) => prev.filter((r) => r.symbol !== symbol));
       try {
         await marketApi.removeSymbol(symbol);
@@ -122,7 +231,7 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         setError(err instanceof Error ? err.message : "Failed to remove market");
       }
     },
-    [load, canWrite]
+    [load, canManageWatchlist]
   );
 
   // Stable per-card handlers: the cards are memoised, so handing them a fresh
@@ -147,13 +256,14 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
 
   const refreshOne = useCallback(
     async (symbol: string) => {
-      if (!canWrite) return;
+      if (!canRefresh) return;
       setRefreshing((prev) => new Set(prev).add(symbol));
       try {
         const result = await marketApi.refreshSymbol(symbol, timeframe);
         // Splice just this card in, so the rest of the grid is untouched.
         setResults((prev) => prev.map((r) => (r.symbol === symbol ? result : r)));
         setError(null);
+        void applyConfluence(symbol);
       } catch (err) {
         setError(err instanceof Error ? err.message : `Failed to refresh ${symbol}`);
       } finally {
@@ -164,10 +274,10 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
         });
       }
     },
-    [timeframe, canWrite]
+    [timeframe, canRefresh, applyConfluence]
   );
 
-  const okCount = results.filter((r) => r.ok).length;
+  const okCount = visibleResults.filter((r) => r.ok).length;
   // Cards whose read fell back to a cached set because cTrader is throttling.
   const throttled = results.filter((r) => r.ok && (r.warnings?.length ?? 0) > 0).length;
 
@@ -194,19 +304,54 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
             ))}
           </div>
 
-          {canWrite ? (
-            <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
-          ) : (
+          <div
+            role="group"
+            aria-label="Filter by asset class"
+            className="flex flex-wrap items-center gap-1 border-t border-hairline pt-2.5"
+          >
+            <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
+              Asset class
+            </span>
+            {ASSET_FILTERS.map((f) => {
+              const active = f.id === assetFilter;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setAssetFilter(f.id)}
+                  className={
+                    "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                    (active
+                      ? "border border-accent/20 bg-accent-soft text-accent"
+                      : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
+                  }
+                >
+                  {f.label}
+                  <span
+                    className={
+                      "tabular-nums text-[10px] " + (active ? "opacity-70" : "text-fg-faint")
+                    }
+                  >
+                    {assetCounts[f.id]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+           {canManageWatchlist ? (
+             <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
+           ) : (
             <p className="flex-1 self-center px-1 text-sm text-fg-faint">
-              Viewing a shared watchlist. Sign in to add markets.
             </p>
-          )}
+         )}
         </Card>
 
         <StatusLine
           loading={loading}
           okCount={okCount}
-          total={results.length}
+          total={visibleResults.length}
           secondsLeft={secondsLeft}
           onOpenSettings={() => setShowSettings(true)}
           onRefresh={() => void load()}
@@ -247,11 +392,24 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
             <div className="text-sm text-fg-muted">Your watchlist is empty.</div>
             <div className="mt-1 text-xs text-fg-faint">Add a market above to start analysing.</div>
           </Card>
+        ) : visibleResults.length === 0 ? (
+          <Card className="p-8 text-center">
+            <div className="text-sm text-fg-muted">No markets match this filter.</div>
+            <button
+              type="button"
+              onClick={() => setAssetFilter("all")}
+              className="mt-2 text-xs font-medium text-accent hover:underline"
+            >
+              Show all markets
+            </button>
+          </Card>
         ) : (
           <SortableGrid
-            items={applyOrder(results, order)}
+            items={applyOrder(visibleResults, order)}
             onReorder={persistOrder}
-            canReorder={canWrite}
+            // A filtered grid is only part of the watchlist, so a drag would
+            // have no well-defined place for the hidden cards. Reorder on All.
+            canReorder={canManageWatchlist && assetFilter === "all"}
             className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]"
             renderItem={(r) =>
               r.ok ? (
@@ -259,7 +417,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
                   analysis={r}
                   strongRatio={strongRatio}
                   refreshing={refreshing.has(r.symbol)}
-                  canWrite={canWrite}
+                  canRefresh={canRefresh}
+                  canRemove={canManageWatchlist}
                   onOpen={openDetail}
                   onRefresh={refreshOne}
                   onRemove={removeSymbol}
@@ -269,7 +428,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
                   symbol={r.symbol}
                   error={r.error}
                   refreshing={refreshing.has(r.symbol)}
-                  canWrite={canWrite}
+                  canRefresh={canRefresh}
+                  canRemove={canManageWatchlist}
                   onRefresh={refreshOne}
                   onRemove={removeSymbol}
                 />
@@ -290,7 +450,8 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
           timeframe={detail.timeframe}
           strongRatio={strongRatio}
           timeframes={timeframes}
-          canWrite={canWrite}
+          canRefresh={canRefresh}
+          canRemove={canManageWatchlist}
           onClose={() => setDetail(null)}
           onRemove={(s) => void removeSymbol(s)}
           onTimeframeChange={(tf) => setDetail((d) => (d ? { ...d, timeframe: tf } : d))}
@@ -309,6 +470,27 @@ export default function AnalysisPage({ canWrite }: { canWrite: boolean }) {
       )}
     </FadeRise>
   );
+}
+
+/** Run `fn` over `items` with bounded concurrency, preserving input order. */
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(concurrency, items.length)) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor++;
+        results[index] = await fn(items[index]);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 // Split out so the per-second countdown tick re-renders only this strip. It is
@@ -333,7 +515,7 @@ function StatusLine({
       <span className="text-fg-muted">
         {loading
           ? "Updating…"
-          : `${okCount}/${total} markets analysed from cTrader`}
+          : `${okCount}/${total} markets analyzed`}
       </span>
       <span className="flex items-center gap-2 text-fg-faint">
         {secondsLeft > 0 && !loading && <span>Next refresh in {secondsLeft}s</span>}

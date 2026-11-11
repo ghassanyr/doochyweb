@@ -7,7 +7,15 @@ import { MarketDetail } from "./MarketDetail";
 import { MarketSnapshots } from "./MarketSnapshots";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes";
 
-export default function BreakoutsPage({ canWrite }: { canWrite: boolean }) {
+export default function BreakoutsPage({
+  canRefresh,
+  canManageWatchlist,
+}: {
+  /** Signed-in users can force a broker read; anonymous visitors cannot. */
+  canRefresh: boolean;
+  /** Only admins can change the shared watchlist. */
+  canManageWatchlist: boolean;
+}) {
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const [timeframes, setTimeframes] = useState(staticTimeframes);
   const [strongRatio, setStrongRatio] = useState(0.25);
@@ -49,7 +57,8 @@ export default function BreakoutsPage({ canWrite }: { canWrite: boolean }) {
           timeframe={detail.timeframe}
           strongRatio={strongRatio}
           timeframes={timeframes}
-          canWrite={canWrite}
+          canRefresh={canRefresh}
+          canRemove={canManageWatchlist}
           onClose={() => setDetail(null)}
           onRemove={(symbol) => {
             void marketApi.removeSymbol(symbol).catch(() => {});

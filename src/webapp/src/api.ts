@@ -1,5 +1,7 @@
 const TOKEN_KEY = "doochyweb_token";
 
+export type UserRole = "user" | "admin";
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -180,11 +182,19 @@ export const marketApi = {
         `?timeframe=${encodeURIComponent(timeframe)}${all ? "&all=1" : ""}`
     ),
 
-  // Force-refresh one market, bypassing the server's candle cache.
-  refreshSymbol: (symbol: string, timeframe: string) =>
+  // Compact all-timeframe verdict for the card's MTF ribbon. Cached server-side
+  // for 60s; independent of the selected timeframe.
+  confluence: (symbol: string) =>
+    request<import("./market/types").ConfluenceResponse>(
+      `/api/market/analysis/${encodeURIComponent(symbol)}/confluence`
+    ),
+
+  // Force-refresh one market, bypassing the server's candle cache. `all` also
+  // attaches the per-timeframe strip the detail sheet shows.
+  refreshSymbol: (symbol: string, timeframe: string, all = false) =>
     request<import("./market/types").MarketResult>(
       `/api/market/analysis/${encodeURIComponent(symbol)}/refresh` +
-        `?timeframe=${encodeURIComponent(timeframe)}`,
+        `?timeframe=${encodeURIComponent(timeframe)}${all ? "&all=1" : ""}`,
       { method: "POST" }
     ),
 
@@ -214,6 +224,74 @@ export const marketApi = {
     }),
 };
 
+// ---------------------------------------------------------------------------
+// Signals (public feed, admin-managed), see src/server/signals
+// ---------------------------------------------------------------------------
+
+export interface SignalInputPayload {
+  symbol: string;
+  direction: "buy" | "sell";
+  entry?: number | null;
+  target: number;
+  stop: number;
+  timeframe?: string | null;
+  note?: string;
+  expiresAt?: string | null;
+  /** Retry a create despite an existing active signal for the same pair. */
+  force?: boolean;
+}
+
+export const signalsApi = {
+  list: (params: { status?: string; symbol?: string; direction?: string; limit?: number; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+    return request<import("./signals/types").SignalListResponse>(`/api/signals?${qs.toString()}`);
+  },
+
+  get: (id: string) =>
+    request<{ signal: import("./signals/types").Signal }>(`/api/signals/${encodeURIComponent(id)}`),
+
+  stats: () => request<import("./signals/types").SignalStats>("/api/signals/stats"),
+
+  prices: (symbols: string[]) =>
+    request<{ prices: Record<string, import("./signals/types").PricePoint> }>(
+      `/api/signals/prices?symbols=${encodeURIComponent(symbols.join(","))}`
+    ),
+
+  create: (input: SignalInputPayload) =>
+    request<{ signal: import("./signals/types").Signal }>("/api/signals", {
+      method: "POST",
+      body: input,
+    }),
+
+  update: (id: string, patch: Partial<SignalInputPayload>) =>
+    request<{ signal: import("./signals/types").Signal }>(`/api/signals/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: patch,
+    }),
+
+  postUpdate: (id: string, note: string) =>
+    request<{ signal: import("./signals/types").Signal }>(
+      `/api/signals/${encodeURIComponent(id)}/updates`,
+      { method: "POST", body: { note } }
+    ),
+
+  invalidate: (id: string, reason: string) =>
+    request<{ signal: import("./signals/types").Signal }>(
+      `/api/signals/${encodeURIComponent(id)}/invalidate`,
+      { method: "POST", body: { reason } }
+    ),
+
+  restore: (id: string) =>
+    request<{ signal: import("./signals/types").Signal }>(
+      `/api/signals/${encodeURIComponent(id)}/restore`,
+      { method: "POST" }
+    ),
+
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/signals/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
 export const api = {
   register: (username: string, password: string) =>
     request<{ token: string }>("/api/auth/register", { method: "POST", body: { username, password } }),
@@ -222,19 +300,28 @@ export const api = {
     request<{ token: string }>("/api/auth/login", { method: "POST", body: { username, password } }),
 
   me: (token?: string) =>
-    request<{ hasCredentials: boolean; clientIdMasked: string | null; accounts: AccountView[] }>(
-      "/api/me",
-      { token }
-    ),
+    request<{
+      username: string;
+      role: UserRole;
+      hasCredentials: boolean;
+      clientIdMasked: string | null;
+      ctraderOAuth: boolean;
+      accounts: AccountView[];
+    }>("/api/me", { token }),
 
   connect: (creds: ConnectInput, token?: string) =>
     request<{ accounts: AccountView[] }>("/api/connect", { method: "POST", body: creds, token }),
+
+  ctraderOAuthStart: () =>
+    request<{ url: string }>("/api/ctrader/oauth/start", { method: "POST" }),
 
   accounts: () => request<{ accounts: AccountView[] }>("/api/accounts"),
 
   positions: (ctid: number) => request<{ positions: PositionRow[] }>(`/api/accounts/${ctid}/positions`),
 
   orders: (ctid: number) => request<{ orders: OrderRow[] }>(`/api/accounts/${ctid}/orders`),
+
+  accountSymbols: (ctid: number) => request<{ symbols: string[] }>(`/api/accounts/${ctid}/symbols`),
 
   setPrefs: (ctid: number, prefs: { nickname?: string; color?: string | null }, token?: string) =>
     request<{ ok: boolean }>(`/api/accounts/${ctid}/prefs`, {

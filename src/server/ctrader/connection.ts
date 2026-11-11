@@ -301,6 +301,30 @@ export class UserSockets {
     return this.channelOrNull(env)?.getQuote(symId) ?? null;
   }
 
+  /**
+   * Quote for a symbol, subscribing and waiting briefly when it is not cached.
+   * The order ticket needs a live entry reference to compute market-order risk;
+   * the first SpotEvent usually arrives well within this window. Best-effort:
+   * a subscription or timeout failure returns null and the caller degrades to a
+   * warning instead of failing the preview.
+   */
+  async waitForQuote(env: CtraderEnv, ctid: number, symId: number, timeoutMs = 1500): Promise<SpotQuote | null> {
+    const cached = this.getQuote(env, symId);
+    if (cached) return cached;
+    try {
+      await this.ensureSpots(env, ctid, [symId]);
+    } catch {
+      return null;
+    }
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const q = this.getQuote(env, symId);
+      if (q) return q;
+    }
+    return this.getQuote(env, symId);
+  }
+
   private closeChannels(): void {
     this.demo?.close();
     this.demo = null;

@@ -36,6 +36,12 @@ export interface TimeframeRating {
   error?: string;
 }
 
+export interface ConfluenceResponse {
+  symbol: string;
+  updatedAt: number;
+  timeframes: Record<string, TimeframeRating>;
+}
+
 export interface MarketAnalysis {
   ok: true;
   symbol: string;

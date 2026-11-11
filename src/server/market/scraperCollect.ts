@@ -4,7 +4,7 @@
 
 import { analyze } from "./analysis";
 import { getCandles, describeError } from "./providers/index";
-import { loadCatalog, resolveMeta } from "./routes";
+import { loadCatalog, resolveMeta } from "./catalog";
 import { engulfClosed, isStale, signalFromRating, structureClosed, type Obs } from "./scraperRules";
 import { getWatchlist, publicSettings } from "./store";
 import { getTimeframe } from "./timeframes";

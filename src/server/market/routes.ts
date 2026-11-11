@@ -3,13 +3,14 @@
 // src/server/market/providers/ctrader.
 //
 // Mounted at /api/market by index.ts. The page is public, so the read routes are
-// deliberately open. Anything that mutates shared state, or forces a fresh
-// broker request, sits behind authRequired: the watchlist and settings are ONE
-// global document, and a forced refresh spends the shared account's rate limit.
+// deliberately open. The watchlist and card layout are curated by an admin and
+// sit behind adminRequired. Analysis settings remain open to signed-in users,
+// and a forced refresh sits behind authRequired because it spends the shared
+// account's rate limit.
 
 import { Router } from "express";
 
-import { analyze, setStrongRatio } from "./analysis";
+import { analyze, applyLatestPrice, setStrongRatio } from "./analysis";
 import { readCaptures } from "./captures";
 import {
   BREAKOUT_TYPES,
@@ -25,10 +26,15 @@ import { latestRun, readRuns } from "./breakoutFeed";
 import { TEMPLATE_MODEL } from "./narration";
 import { listNarrations } from "./narrationStore";
 import { detectSweep, isLastBarForming, type Sweep } from "./patterns";
-import { authRequired } from "../auth";
+import { authRequired, adminRequired } from "../auth";
 import { resolveMarketAccount } from "./account";
-import { clearCache, cTraderCatalog, getCandles } from "./providers/index";
-import { cryptoPairs } from "./crypto";
+import {
+  cachedCatalog,
+  cachedCatalogFull,
+  resolveMeta,
+  unresolvableError,
+} from "./catalog";
+import { clearCache, getCandles } from "./providers/index";
 import { buildCatalog, normalizeSymbol, resolveAgainstBroker, searchCatalog, toSymbolMeta } from "./symbols";
 import {
   addToWatchlist,
@@ -45,6 +51,7 @@ import type {
   AnalysisSettings,
   AnalysisResponse,
   CatalogEntry,
+  ConfluenceResponse,
   ProviderWarning,
   SymbolMeta,
   TimeframeRating,
@@ -61,84 +68,7 @@ const SWEEP_CONCURRENCY = 6;
 // each is a separate payload type.
 const MAX_SWEEP = 4;
 
-/**
- * The full catalog: every symbol the account can trade, with the Binance crypto
- * universe merged in.
- *
- * Each source is optional. Without an account the crypto list still serves, so
- * the page is not blank just because cTrader credentials are missing.
- *
- * `brokerError` is kept because a missing broker catalog must not be reported as
- * "that symbol is not tradable": with an expired cTrader token the whole list
- * comes back empty, and every forex and metals symbol would otherwise claim it
- * does not exist.
- */
-export async function loadCatalog(): Promise<{ items: CatalogEntry[]; brokerError: string | null }> {
-  const crypto = await cryptoPairs();
-  let broker: string[] = [];
-  let brokerError: string | null = null;
-  try {
-    broker = await cTraderCatalog();
-  } catch (err) {
-    brokerError = message(err);
-  }
-  return { items: buildCatalog(broker, crypto), brokerError };
-}
-
-/**
- * Resolve a requested symbol to the sources that can serve it.
- *
- * The two universes are kept apart on purpose. A crypto catalog entry carries the
- * Binance pair as its `name`, so handing the whole catalog to the broker
- * resolver would let it match "SOLUSDT" as though it were a broker symbol.
- */
-export function resolveMeta(symbol: string, catalog: CatalogEntry[]): SymbolMeta | null {
-  const short = normalizeSymbol(symbol);
-  const entry = catalog.find((c) => c.symbol === short);
-  const pair = entry?.provider === "binance" ? entry.name : null;
-  const brokerNames = catalog.filter((c) => c.provider !== "binance").map((c) => c.name);
-  const brokerName = resolveAgainstBroker(symbol, brokerNames);
-  if (!brokerName && !pair) return null;
-  return toSymbolMeta(brokerName, symbol, pair);
-}
-
-/**
- * Why a symbol could not be resolved. Distinguishes "the broker is unreachable"
- * from "this symbol genuinely is not offered", which look identical when the
- * catalog is empty but call for very different fixes.
- */
-function unresolvableError(symbol: string, brokerError: string | null): string {
-  if (brokerError) {
-    return (
-      `Could not read the cTrader symbol list, so "${symbol}" cannot be checked. ` +
-      `${brokerError.slice(0, 200)}`
-    );
-  }
-  return `"${symbol}" is neither tradable on the connected cTrader account nor listed on Binance`;
-}
-
 // ---------------------------------------------------------------- config
-
-let catalogCache: { at: number; items: CatalogEntry[]; brokerError: string | null } | null = null;
-const CATALOG_TTL_MS = 60_000;
-
-async function cachedCatalog(): Promise<CatalogEntry[]> {
-  return (await cachedCatalogFull()).items;
-}
-
-/** The catalog plus whatever went wrong reading the broker half. */
-async function cachedCatalogFull(): Promise<{ items: CatalogEntry[]; brokerError: string | null }> {
-  if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache;
-  const loaded = await loadCatalog();
-  catalogCache = { at: Date.now(), ...loaded };
-  return catalogCache;
-}
-
-/** Force the catalog to be re-read, e.g. after credentials change. */
-export function clearCatalogCache(): void {
-  catalogCache = null;
-  clearCache();
-}
 
 marketRouter.get("/config", async (_req, res) => {
   const settings = await publicSettings();
@@ -171,8 +101,8 @@ marketRouter.get("/watchlist", async (_req, res) => {
   res.json({ symbols: watchlist, order: cardOrder });
 });
 
-// Saved drag-and-drop layout. Auth required: the layout is shared state.
-marketRouter.post("/watchlist/order", authRequired, async (req, res) => {
+// Saved drag-and-drop layout. Admin only: the layout is shared state.
+marketRouter.post("/watchlist/order", adminRequired, async (req, res) => {
   const order = req.body?.order;
   if (!Array.isArray(order)) {
     res.status(400).json({ error: "order must be an array of symbols" });
@@ -181,7 +111,7 @@ marketRouter.post("/watchlist/order", authRequired, async (req, res) => {
   res.json({ order: await saveCardOrder(order) });
 });
 
-marketRouter.post("/watchlist", authRequired, async (req, res) => {
+marketRouter.post("/watchlist", adminRequired, async (req, res) => {
   const symbol = req.body?.symbol;
   if (!symbol) {
     res.status(400).json({ error: "symbol is required" });
@@ -198,7 +128,7 @@ marketRouter.post("/watchlist", authRequired, async (req, res) => {
   res.json({ symbols: await addToWatchlist(meta.symbol) });
 });
 
-marketRouter.delete("/watchlist", authRequired, async (req, res) => {
+marketRouter.delete("/watchlist", adminRequired, async (req, res) => {
   const symbol = req.query.symbol;
   if (!symbol) {
     res.status(400).json({ error: "symbol is required" });
@@ -352,13 +282,69 @@ marketRouter.get("/narrations", async (req, res) => {
 });
 
 // Force-refresh a single symbol, bypassing the bar cache. Gated: it spends the
-// shared account's cTrader rate limit.
+// shared account's cTrader rate limit. `all=1` also attaches the per-timeframe
+// strip the detail sheet renders, so opening a card is one request.
 marketRouter.post("/analysis/:symbol/refresh", authRequired, async (req, res) => {
   const timeframe = req.query.timeframe ? String(req.query.timeframe) : DEFAULT_TIMEFRAME;
   const { strongRatio } = await getSettings();
   setStrongRatio(strongRatio);
   const settings = await publicSettings();
-  res.json(await analyzeSymbol(req.params.symbol, timeframe, await cachedCatalog(), settings, true));
+  const catalog = await cachedCatalog();
+  const result = await analyzeSymbol(req.params.symbol, timeframe, catalog, settings, true);
+  if (result.ok && (req.query.all === "1" || req.query.all === "true")) {
+    result.timeframeRatings = await ratingsForAllTimeframes(req.params.symbol, catalog, settings);
+  }
+  res.json(result);
+});
+
+// Compact all-timeframe verdict for the card ribbon. A wide watchlist costs ten
+// bar reads per symbol, so identical requests within a minute share one result
+// and concurrent callers share one in-flight promise.
+const CONFLUENCE_TTL_MS = 60_000;
+const confluenceCache = new Map<string, { at: number; value: ConfluenceResponse }>();
+const confluenceInFlight = new Map<string, Promise<ConfluenceResponse>>();
+
+async function confluenceFor(
+  meta: SymbolMeta,
+  catalog: CatalogEntry[],
+  settings: AnalysisSettings
+): Promise<ConfluenceResponse> {
+  const key = `${normalizeSymbol(meta.symbol)}|${settings.strongRatio}`;
+  const cached = confluenceCache.get(key);
+  if (cached && Date.now() - cached.at < CONFLUENCE_TTL_MS) return cached.value;
+  const running = confluenceInFlight.get(key);
+  if (running) return running;
+  const task = (async () => {
+    try {
+      const timeframes = await ratingsForAllTimeframes(meta.symbol, catalog, settings);
+      const value: ConfluenceResponse = { symbol: meta.symbol, updatedAt: Date.now(), timeframes };
+      confluenceCache.set(key, { at: Date.now(), value });
+      return value;
+    } finally {
+      confluenceInFlight.delete(key);
+    }
+  })();
+  confluenceInFlight.set(key, task);
+  return task;
+}
+
+marketRouter.get("/analysis/:symbol/confluence", async (req, res) => {
+  const symbol = req.params.symbol;
+  // The rating engine reads its sensitivity from module state.
+  const { strongRatio } = await getSettings();
+  setStrongRatio(strongRatio);
+  const settings = await publicSettings();
+  const { items: catalog, brokerError } = await cachedCatalogFull();
+  const meta = resolveMeta(symbol, catalog);
+  if (!meta) {
+    res.status(404).json({ error: unresolvableError(symbol, brokerError) });
+    return;
+  }
+  try {
+    res.json(await confluenceFor(meta, catalog, settings));
+  } catch (err) {
+    res.status(500).json({ error: message(err) });
+  }
 });
 
 marketRouter.get("/analysis/:symbol", async (req, res) => {
@@ -411,6 +397,19 @@ async function analyzeSymbol(
   try {
     const { bars, provider, warnings, cached } = await getCandles(meta, timeframe, settings, { force });
     const result = analyze(bars, meta, timeframe);
+    // cTrader bars stop at the last closed bar, so the newest close can be a
+    // full timeframe old. Show the latest 1-minute close instead, which is at
+    // most a minute old; the rating and patterns above still come from the
+    // selected timeframe's closed bars only.
+    if (provider === "ctrader" && timeframe !== "1m") {
+      try {
+        const minute = await getCandles(meta, "1m", settings, { force });
+        const latest = minute.bars[minute.bars.length - 1]?.close;
+        if (latest != null) applyLatestPrice(result, latest);
+      } catch {
+        // A missing minute bar must not blank the card: the bar close is valid.
+      }
+    }
     return {
       ok: true,
       ...result,

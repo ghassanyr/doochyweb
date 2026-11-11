@@ -4,7 +4,7 @@ import { LogIn, LogOut, RefreshCw, Settings } from "lucide-react";
 import { Button } from "./components/ui";
 
 // Top-level shell: brand, primary navigation, and the account-level actions
-// (settings / sign out). The Analysis, Breakouts and Trading views render
+// (settings / sign out). The Analysis, Breakouts, Learn and Trading views render
 // inside it, so switching between them never remounts the chrome.
 //
 // The header used to live inside Dashboard; it was lifted here so more
@@ -12,19 +12,24 @@ import { Button } from "./components/ui";
 // sticky translucent topbar, a segmented control for the primary nav, and the
 // 1600px page measure.
 
-export type ViewKey = "trading" | "analysis" | "breakouts";
+export type ViewKey = "trading" | "analysis" | "signals" | "breakouts" | "learn" | "admin";
 
 const NAV: { key: ViewKey; label: string }[] = [
   { key: "analysis", label: "Analysis" },
+  { key: "signals", label: "Signals" },
   { key: "breakouts", label: "Breakouts" },
+  { key: "learn", label: "Learn" },
   { key: "trading", label: "Trading" },
 ];
+
+const ADMIN_NAV: { key: ViewKey; label: string } = { key: "admin", label: "Admin" };
 
 export function AppShell({
   view,
   onViewChange,
   onRefresh,
   signedIn,
+  isAdmin,
   onOpenSettings,
   onSignIn,
   onLogout,
@@ -38,19 +43,30 @@ export function AppShell({
   // The Analysis and Breakouts pages are public; the account-level actions
   // only appear once there is a session.
   signedIn: boolean;
+  /** Shows the Admin tab; the API still enforces the role. */
+  isAdmin: boolean;
   onOpenSettings: () => void;
   onSignIn: () => void;
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const nav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
   return (
     <div className="min-h-screen bg-transparent text-fg">
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-page items-center gap-5 px-4 sm:px-6">
           <div className="flex shrink-0 items-center gap-2.5">
-            <GaugeMark />
+            <img
+              src="/doochy-mark-80.png"
+              srcSet="/doochy-mark-40.png 1x, /doochy-mark-80.png 2x, /doochy-mark-120.png 3x, /doochy-mark-160.png 4x"
+              alt=""
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0"
+              aria-hidden="true"
+            />
             <div className="leading-tight">
-              <div className="text-[17px] font-bold tracking-tight text-fg">DoochyWeb</div>
+              <div className="text-[17px] font-bold tracking-tight text-fg">Doochy</div>
               <div className="hidden text-[11px] text-fg-muted sm:block">
                 Market analysis &amp; trading
               </div>
@@ -58,10 +74,10 @@ export function AppShell({
           </div>
 
           <nav
-            className="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg border border-hairline bg-soft p-[3px]"
+            className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-soft p-[3px]"
             aria-label="Primary"
           >
-            {NAV.map((n) => {
+            {nav.map((n) => {
               const active = view === n.key;
               return (
                 <button
@@ -70,7 +86,7 @@ export function AppShell({
                   onClick={() => onViewChange(n.key)}
                   aria-current={active ? "page" : undefined}
                   className={
-                    "rounded-md px-3 py-1.5 text-[13px] transition duration-150 " +
+                    "rounded-md whitespace-nowrap px-3 py-1.5 text-[13px] transition duration-150 " +
                     (active
                       ? "bg-accent font-semibold text-accent-fg"
                       : "font-medium text-fg-muted hover:text-fg")
@@ -132,29 +148,6 @@ export function AppShell({
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
     </div>
-  );
-}
-
-// Gauge's dial mark, kept as the app logo so the branding matches the project
-// the Analysis page came from.
-function GaugeMark() {
-  return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center" aria-hidden="true">
-      <svg viewBox="0 0 32 32" width="30" height="30">
-        <circle cx="16" cy="16" r="15" fill="#14b8a6" />
-        <path d="M7 20a9 9 0 0 1 18 0" stroke="#e7edf5" strokeWidth="2.5" fill="none" />
-        <line
-          x1="16"
-          y1="20"
-          x2="21.5"
-          y2="11"
-          stroke="#e7edf5"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-        <circle cx="16" cy="20" r="1.8" fill="#e7edf5" />
-      </svg>
-    </span>
   );
 }
 

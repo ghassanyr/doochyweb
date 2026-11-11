@@ -13,8 +13,8 @@ import {
   pageCount,
   typesParam,
   type TypeSelection,
-} from "./breakouts";
-import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
+} from "./breakoutFormat";
+import { SESSION_LABEL, fmtCaptureTime, relativeTime } from "./captures";
 import { BreakoutCard, BreakoutCardSkeleton } from "./BreakoutCard";
 import { BreakoutNoteModal } from "./BreakoutNoteModal";
 import type { Breakout, BreakoutRunStatus } from "./types";
@@ -312,7 +312,7 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
                 <table className="w-full text-left text-[12px]">
                   <thead className="text-fg-faint">
                     <tr>
-                      <th className="py-1 pr-2 font-medium">Time (UTC+3)</th>
+                      <th className="py-1 pr-2 font-medium">Time (local)</th>
                       <th className="py-1 pr-2 font-medium">Symbol</th>
                       <th className="py-1 pr-2 font-medium">Type</th>
                       <th className="py-1 pr-2 font-medium">Level</th>
@@ -325,7 +325,7 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
                   <tbody className="divide-y divide-hairline">
                     {logRows.map((b) => (
                       <tr key={rowKey(b)}>
-                        <td className="py-1 pr-2 text-fg-muted">{fmtUtc3(b.timestamp_utc)}</td>
+                        <td className="py-1 pr-2 text-fg-muted">{fmtCaptureTime(b.timestamp_utc)}</td>
                         <td className="py-1 pr-2">
                           <button
                             type="button"

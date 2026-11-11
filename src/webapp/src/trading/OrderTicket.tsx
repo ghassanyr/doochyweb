@@ -45,8 +45,27 @@ export default function OrderTicket({
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirm, setConfirm] = useState(false);
   const debounce = useRef<number | null>(null);
-  const symbolsRef = useRef(symbols);
-  symbolsRef.current = symbols;
+  // Previews can overlap now that a market quote may take a moment to arrive;
+  // only the newest response may update the panel.
+  const previewSeq = useRef(0);
+  // The account's full tradable universe comes from the broker. The `symbols`
+  // prop only covers symbols already held as positions/orders, so on a fresh
+  // account it is empty and cannot drive the ticket.
+  const [accountSymbols, setAccountSymbols] = useState<string[] | null>(null);
+  const [symbolsLoading, setSymbolsLoading] = useState(false);
+  const [symbolsErr, setSymbolsErr] = useState<string | null>(null);
+
+  const availableSymbols = useMemo(() => {
+    if (accountSymbols && accountSymbols.length > 0) {
+      // Keep held/resting symbols too, in case one is no longer in the broker's
+      // current list (archived but still open).
+      return [...new Set([...accountSymbols, ...symbols])].sort((a, b) => a.localeCompare(b));
+    }
+    return symbols;
+  }, [accountSymbols, symbols]);
+
+  const symbolsRef = useRef(availableSymbols);
+  symbolsRef.current = availableSymbols;
 
   const [symOpen, setSymOpen] = useState(false);
   const [symQuery, setSymQuery] = useState("");
@@ -63,8 +82,8 @@ export default function OrderTicket({
 
   const symMatches = useMemo(() => {
     const q = symQuery.trim().toUpperCase();
-    return (q ? symbols.filter((s) => s.toUpperCase().includes(q)) : symbols).slice(0, 50);
-  }, [symbols, symQuery]);
+    return (q ? availableSymbols.filter((s) => s.toUpperCase().includes(q)) : availableSymbols).slice(0, 50);
+  }, [availableSymbols, symQuery]);
 
   function pickSymbol(s: string): void {
     setSymbol(s);
@@ -111,6 +130,38 @@ export default function OrderTicket({
     }
   }, [open]);
 
+  // Load the broker's symbol list when the ticket opens. The server caches it
+  // per account, so reopen is cheap; the first call may take a socket round-trip.
+  useEffect(() => {
+    if (!open || ctid <= 0) return;
+    let alive = true;
+    setAccountSymbols(null);
+    setSymbolsLoading(true);
+    setSymbolsErr(null);
+    api
+      .accountSymbols(ctid)
+      .then(({ symbols: list }) => {
+        if (alive) setAccountSymbols(list);
+      })
+      .catch((e: any) => {
+        if (!alive) return;
+        setAccountSymbols(null);
+        setSymbolsErr(e?.message || "Could not load symbols");
+      })
+      .finally(() => {
+        if (alive) setSymbolsLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, ctid]);
+
+  // Once the list arrives (or changes), keep the selection valid.
+  useEffect(() => {
+    if (!open) return;
+    setSymbol((cur) => (availableSymbols.includes(cur) ? cur : availableSymbols[0] ?? ""));
+  }, [open, availableSymbols]);
+
   useEffect(() => {
     return () => {
       if (debounce.current) window.clearTimeout(debounce.current);
@@ -125,9 +176,11 @@ export default function OrderTicket({
 
   useEffect(() => {
     if (debounce.current) window.clearTimeout(debounce.current);
+    const seq = ++previewSeq.current;
     if (!ready) {
       setPreview(null);
       setPreviewErr(null);
+      setPreviewing(false);
       return;
     }
     setPreviewing(true);
@@ -142,13 +195,15 @@ export default function OrderTicket({
           sl: slNum,
           tp: tpNum,
         });
+        if (seq !== previewSeq.current) return;
         setPreview(p);
         setPreviewErr(null);
       } catch (e: any) {
+        if (seq !== previewSeq.current) return;
         setPreview(null);
         setPreviewErr(e?.message || "Could not price this order");
       } finally {
-        setPreviewing(false);
+        if (seq === previewSeq.current) setPreviewing(false);
       }
     }, PREVIEW_MS);
     return () => {
@@ -189,10 +244,13 @@ export default function OrderTicket({
 
   return (
     <ModalShell open={open} onClose={onClose} title="New order" subtitle={accountLabel}>
-      {symbols.length === 0 ? (
+      {availableSymbols.length === 0 ? (
         <div className="text-sm text-fg-muted">
-          No symbols available for this account yet. Open a position or pending order first, then place new orders
-          here.
+          {symbolsLoading
+            ? "Loading this account's symbols…"
+            : symbolsErr
+              ? `Could not load this account's symbols: ${symbolsErr}`
+              : "This account has no tradable symbols."}
         </div>
       ) : (
         <div className="space-y-4">

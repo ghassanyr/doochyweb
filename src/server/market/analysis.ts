@@ -6,7 +6,7 @@
 import * as ti from "./indicators";
 import { detectEngulfing, isLastBarForming } from "./patterns";
 import { getTimeframe } from "./timeframes";
-import type { Candle, IndicatorRow, Rating, Section, Signal, SymbolMeta } from "./types";
+import type { Analysis, Candle, IndicatorRow, Rating, Section, Signal, SymbolMeta } from "./types";
 
 export const RATINGS: Rating[] = ["strong_sell", "sell", "neutral", "buy", "strong_buy"];
 
@@ -178,4 +178,27 @@ export function analyze(candles: Candle[], meta: Partial<SymbolMeta> = {}, timef
     engulfing: detectEngulfing(candles, timeframe, isLastBarForming(candles, getTimeframe(timeframe).ms)),
     updatedAt: Date.now(),
   };
+}
+
+/**
+ * Swap the displayed price for a fresher one.
+ *
+ * cTrader trendbars stop at the last CLOSED bar, so `analyze`'s price can be a
+ * full timeframe behind the market (a 4H card can be four hours old). The route
+ * feeds this the latest 1-minute close instead, which is at most a minute old.
+ * Only the display fields move: indicators, ratings and patterns must keep using
+ * the selected timeframe's closed bars, because a partial bar would make them
+ * flicker intra-bar.
+ *
+ * `change` is measured from the last closed bar's close, so it reads as the
+ * current bar's move. `previousClose` is updated to match.
+ */
+export function applyLatestPrice(result: Analysis, latest: number): void {
+  if (!Number.isFinite(latest) || latest <= 0) return;
+  const lastClose = result.price;
+  if (!Number.isFinite(lastClose) || lastClose <= 0) return;
+  result.previousClose = lastClose;
+  result.change = latest - lastClose;
+  result.changePct = (result.change / lastClose) * 100;
+  result.price = latest;
 }

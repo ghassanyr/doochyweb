@@ -8,9 +8,13 @@ export async function connectDb(): Promise<void> {
   console.log(`[DB] Connected to ${MONGO_DB()}`);
 }
 
+export type UserRole = "user" | "admin";
+
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
   passwordHash: { type: String, required: true },
+  // Existing accounts predate this field; a missing value is read as "user".
+  role: { type: String, enum: ["user", "admin"], default: "user", index: true },
   createdAt: { type: Date, default: Date.now },
 });
 

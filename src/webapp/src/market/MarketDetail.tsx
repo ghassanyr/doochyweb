@@ -22,7 +22,8 @@ export function MarketDetail({
   timeframe,
   strongRatio,
   timeframes,
-  canWrite,
+  canRefresh,
+  canRemove,
   onClose,
   onRemove,
   onTimeframeChange,
@@ -31,7 +32,10 @@ export function MarketDetail({
   timeframe: string;
   strongRatio: number;
   timeframes: { id: string; label: string }[];
-  canWrite: boolean;
+  /** Signed-in users can force a broker read; anonymous visitors cannot. */
+  canRefresh: boolean;
+  /** Only admins can change the shared watchlist. */
+  canRemove: boolean;
   onClose: () => void;
   onRemove: (symbol: string) => void;
   onTimeframeChange: (tf: string) => void;
@@ -41,13 +45,25 @@ export function MarketDetail({
   const [seq, setSeq] = useState(0);
 
   // `seq` re-runs the fetch (used by the refresh button); symbol/timeframe
-  // changes replace the sheet rather than refetching in place.
+  // changes replace the sheet rather than refetching in place. Signed-in users
+  // force a broker read every time, so opening a card never shows the grid's
+  // last poll; a throttled force falls back to the cached detail.
   useEffect(() => {
     let alive = true;
     setData(null);
     setBusy(true);
-    marketApi
-      .detail(symbol, timeframe, true)
+    const load = async (): Promise<MarketResult> => {
+      if (canRefresh) {
+        try {
+          return await marketApi.refreshSymbol(symbol, timeframe, true);
+        } catch {
+          // A forced read spends the shared rate limit; the cached read still
+          // renders the sheet when it is refused.
+        }
+      }
+      return marketApi.detail(symbol, timeframe, true);
+    };
+    load()
       .then((res) => {
         if (alive) setData(res);
       })
@@ -60,7 +76,7 @@ export function MarketDetail({
     return () => {
       alive = false;
     };
-  }, [symbol, timeframe, seq]);
+  }, [symbol, timeframe, seq, canRefresh]);
 
   const a = data?.ok ? data : null;
 
@@ -71,8 +87,9 @@ export function MarketDetail({
       size="lg"
       title={symbol}
       actions={
-        canWrite ? (
+        canRefresh || canRemove ? (
           <>
+          {canRefresh && (
           <button
             type="button"
             onClick={() => setSeq((n) => n + 1)}
@@ -83,6 +100,8 @@ export function MarketDetail({
           >
             <RefreshCw className={"h-4 w-4 " + (busy ? "animate-spin" : "")} />
           </button>
+          )}
+          {canRemove && (
           <button
             type="button"
             onClick={() => {
@@ -95,6 +114,7 @@ export function MarketDetail({
           >
             <Trash2 className="h-4 w-4" />
           </button>
+          )}
           </>
         ) : null
       }

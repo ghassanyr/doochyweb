@@ -1,11 +1,17 @@
 // Pure formatting and filtering helpers for the market snapshots panel. Kept
 // out of the .tsx so they can be unit tested (the test tsconfig has no JSX).
 
+import {
+  detectedTimeZone,
+  formatLocalTime,
+  localDayKey,
+  timeZoneLabel,
+  type TimeOptions,
+} from "../time";
 import type { CaptureChange, MarketSnapshot } from "./types";
 
-// The cron writes UTC. Everything the trader reads is UTC+3 (fixed offset, no
-// DST) to match the legacy capture summaries.
-export const UTC3_MS = 3 * 3_600_000;
+// The cron writes UTC. Everything the trader reads is rendered in their own
+// zone through the shared local-time helpers, so DST is handled by the platform.
 
 export const SESSION_LABEL: Record<string, string> = {
   tokyo: "Tokyo",
@@ -19,30 +25,23 @@ export const SESSION_LABEL: Record<string, string> = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
+function yearOf(key: string): number {
+  return Number(key.slice(0, 4));
 }
 
-function shift3(iso: string): Date | null {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return null;
-  return new Date(t + UTC3_MS);
-}
-
-/** "20:04 UTC+3", or "26 Oct 20:04 UTC+3" when it is not today in UTC+3. */
-export function fmtUtc3(iso: string, now = Date.now()): string {
-  const d = shift3(iso);
-  if (!d) return iso || "-";
-  const today = new Date(now + UTC3_MS);
-  const hh = pad(d.getUTCHours());
-  const mm = pad(d.getUTCMinutes());
-  const sameDay =
-    d.getUTCFullYear() === today.getUTCFullYear() &&
-    d.getUTCMonth() === today.getUTCMonth() &&
-    d.getUTCDate() === today.getUTCDate();
-  if (sameDay) return `${hh}:${mm} UTC+3`;
-  const year = d.getUTCFullYear() === today.getUTCFullYear() ? "" : ` ${d.getUTCFullYear()}`;
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}${year} ${hh}:${mm} UTC+3`;
+/** "20:04 GMT+3", or "26 Oct 20:04 GMT+3" when it is not today locally. */
+export function fmtCaptureTime(iso: string, now = Date.now(), opts: TimeOptions = {}): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return iso || "-";
+  const local = { ...opts, timeZone: opts.timeZone ?? detectedTimeZone() };
+  const hhmm = formatLocalTime(date, local);
+  const label = timeZoneLabel({ ...local, at: date });
+  const key = localDayKey(date, local);
+  const todayKey = localDayKey(new Date(now), local);
+  if (key === todayKey) return `${hhmm} ${label}`;
+  const [y, m, d] = key.split("-").map(Number);
+  const year = y === yearOf(todayKey) ? "" : ` ${y}`;
+  return `${d} ${MONTHS[m - 1]}${year} ${hhmm} ${label}`;
 }
 
 /** "just now", "12m ago", "3h ago", "2d ago". */
@@ -56,18 +55,16 @@ export function relativeTime(iso: string, now = Date.now()): string {
   return `${Math.round(s / 86_400)}d ago`;
 }
 
-/** YYYY-MM-DD of the capture in UTC+3, used for day dividers. */
-export function dayKey(iso: string): string {
-  const d = shift3(iso);
-  if (!d) return "";
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+/** YYYY-MM-DD of the capture in the visitor's zone, used for day dividers. */
+export function dayKey(iso: string, opts: TimeOptions = {}): string {
+  return localDayKey(iso, opts);
 }
 
 /** "Today", "Yesterday", or "26 Oct 2026" for a dayKey. */
-export function dayLabel(key: string, now = Date.now()): string {
+export function dayLabel(key: string, now = Date.now(), opts: TimeOptions = {}): string {
   if (!key) return "";
-  const todayKey = dayKey(new Date(now).toISOString());
-  const yesterdayKey = dayKey(new Date(now - 86_400_000).toISOString());
+  const todayKey = localDayKey(new Date(now), opts);
+  const yesterdayKey = localDayKey(new Date(now - 86_400_000), opts);
   if (key === todayKey) return "Today";
   if (key === yesterdayKey) return "Yesterday";
   const [y, m, d] = key.split("-").map(Number);

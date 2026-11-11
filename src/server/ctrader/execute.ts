@@ -624,13 +624,18 @@ export async function previewOrder(userId: string, ctid: number, isLive: boolean
     const price = Number(p.price);
     if (!Number.isFinite(price) || price <= 0) return { ok: false, error: `a ${orderType} order needs a level price` };
     entryRef = round(price, spec.digits || 0);
-  } else {
-    // Market: anchor risk/reward to the cached live quote when one exists.
+  } else if (sl != null || tp != null) {
+    // Market: anchor risk/reward to the live quote. If the symbol has no open
+    // position it was never subscribed, so ask for a spot stream and wait for
+    // the first tick instead of silently leaving risk/reward empty.
     // A BUY enters at the ask, a SELL at the bid (same sides the positions
     // table uses for close marks).
     const sockets = userSockets(userId);
-    const q = sockets.getQuote(env, symbolId);
-    if (q) entryRef = side === "BUY" ? (q.ask || q.bid) : (q.bid || q.ask);
+    const q = await sockets.waitForQuote(env, ctid, symbolId, 1200);
+    if (q) {
+      const px = side === "BUY" ? (q.ask || q.bid) : (q.bid || q.ask);
+      if (px > 0) entryRef = px;
+    }
   }
 
   const se = sideError(side, entryRef, sl, tp);

@@ -14,7 +14,7 @@ console.log = (...args: unknown[]) => process.stderr.write(args.map(String).join
 import { connectDb } from "../db";
 import { H4_MS, searchAnalogues, type SearchResult } from "./analogues";
 import { loadHistory, readHistory } from "./history";
-import { loadCatalog, resolveMeta } from "./routes";
+import { loadCatalog, resolveMeta } from "./catalog";
 
 function arg(name: string): string | undefined {
   return process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");

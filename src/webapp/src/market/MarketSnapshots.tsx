@@ -9,7 +9,7 @@ import {
   changedSymbolCount,
   dayKey,
   dayLabel,
-  fmtUtc3,
+  fmtCaptureTime,
   groupChanges,
   matchesCapture,
   relativeTime,
@@ -195,7 +195,7 @@ function SnapshotRow({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        aria-label={`${fmtUtc3(cap.timestamp_utc)} ${sessionLabel} snapshot`}
+        aria-label={`${fmtCaptureTime(cap.timestamp_utc)} ${sessionLabel} snapshot`}
         className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left transition hover:bg-surface-hover/60"
       >
         <span
@@ -204,7 +204,7 @@ function SnapshotRow({
             (cap.needles_fired.length ? "bg-accent" : "bg-fg-faint/60")
           }
         />
-        <span className="shrink-0 text-[12.5px] font-semibold tabular-nums text-fg">{fmtUtc3(cap.timestamp_utc)}</span>
+        <span className="shrink-0 text-[12.5px] font-semibold tabular-nums text-fg">{fmtCaptureTime(cap.timestamp_utc)}</span>
         <span className="hidden shrink-0 text-[10.5px] text-fg-faint md:inline">{relativeTime(cap.timestamp_utc)}</span>
         {unseen && <Badge tone="accent">new</Badge>}
         <Badge tone="accent">{sessionLabel}</Badge>
@@ -321,7 +321,7 @@ function SnapshotRow({
 
           {cap.next_check_utc && (
             <div className="text-[11px] text-fg-faint">
-              Next check: <span className="tabular-nums text-fg-muted">{fmtUtc3(cap.next_check_utc)}</span>
+              Next check: <span className="tabular-nums text-fg-muted">{fmtCaptureTime(cap.next_check_utc)}</span>
             </div>
           )}
         </div>
@@ -494,7 +494,7 @@ export function MarketSnapshots({ onOpenSymbol }: { onOpenSymbol?: (symbol: stri
         )}
         <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-faint">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-          live · times UTC+3
+          live · local time
         </span>
       </div>
 
