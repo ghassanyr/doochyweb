@@ -12,9 +12,11 @@ import { FadeRise } from "./components/motion";
 export default function TradingConnect({
   onConnected,
   onSkip,
+  oauthAvailable = false,
 }: {
   onConnected: (creds: ConnectInput) => Promise<void>;
   onSkip: () => void;
+  oauthAvailable?: boolean;
 }) {
   const [showForm, setShowForm] = useState(false);
 
@@ -22,6 +24,7 @@ export default function TradingConnect({
     return (
       <ConnectPanel
         variant="inline"
+        oauthAvailable={oauthAvailable}
         onConnected={onConnected}
         onCancel={() => setShowForm(false)}
       />

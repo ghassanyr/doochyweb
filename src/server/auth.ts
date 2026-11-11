@@ -43,6 +43,29 @@ export function signToken(userId: string): string {
   return jwt.sign({ userId }, jwtSecret(), { expiresIn: JWT_TTL });
 }
 
+// Short-lived state carried through the cTrader OAuth browser round-trip. The
+// signature is what proves which DoochyWeb user started the flow: the callback
+// is a top-level navigation and cannot send the normal Authorization header.
+const OAUTH_STATE_PURPOSE = "ctrader-oauth";
+const OAUTH_STATE_TTL = "10m";
+
+export function signOAuthState(userId: string): string {
+  return jwt.sign({ userId, purpose: OAUTH_STATE_PURPOSE }, jwtSecret(), { expiresIn: OAUTH_STATE_TTL });
+}
+
+/** Returns the user id for a valid, unexpired OAuth state, else null. */
+export function verifyOAuthState(state: string): string | null {
+  try {
+    const payload: any = jwt.verify(state, jwtSecret());
+    if (!payload || payload.purpose !== OAUTH_STATE_PURPOSE || typeof payload.userId !== "string") {
+      return null;
+    }
+    return payload.userId;
+  } catch {
+    return null;
+  }
+}
+
 export function authRequired(req: AuthedRequest, res: Response, next: NextFunction): void {
   const token = readToken(req, res);
   if (!token) return;

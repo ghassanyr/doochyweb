@@ -3,6 +3,7 @@ export function initialView(
   hostname: string
 ): "trading" | "analysis" | "signals" | "breakouts" | "learn" {
   const params = new URLSearchParams(search);
+  if (params.get("view") === "trading") return "trading";
   if (params.get("view") === "learn") return "learn";
   if (params.get("view") === "signals") return "signals";
 

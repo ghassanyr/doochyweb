@@ -305,17 +305,23 @@ export const api = {
       role: UserRole;
       hasCredentials: boolean;
       clientIdMasked: string | null;
+      ctraderOAuth: boolean;
       accounts: AccountView[];
     }>("/api/me", { token }),
 
   connect: (creds: ConnectInput, token?: string) =>
     request<{ accounts: AccountView[] }>("/api/connect", { method: "POST", body: creds, token }),
 
+  ctraderOAuthStart: () =>
+    request<{ url: string }>("/api/ctrader/oauth/start", { method: "POST" }),
+
   accounts: () => request<{ accounts: AccountView[] }>("/api/accounts"),
 
   positions: (ctid: number) => request<{ positions: PositionRow[] }>(`/api/accounts/${ctid}/positions`),
 
   orders: (ctid: number) => request<{ orders: OrderRow[] }>(`/api/accounts/${ctid}/orders`),
+
+  accountSymbols: (ctid: number) => request<{ symbols: string[] }>(`/api/accounts/${ctid}/symbols`),
 
   setPrefs: (ctid: number, prefs: { nickname?: string; color?: string | null }, token?: string) =>
     request<{ ok: boolean }>(`/api/accounts/${ctid}/prefs`, {

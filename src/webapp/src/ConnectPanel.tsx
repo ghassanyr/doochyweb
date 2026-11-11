@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Plug, Eye, EyeOff } from "lucide-react";
-import { ApiError, ConnectInput } from "./api";
+import { ApiError, api, ConnectInput } from "./api";
 import { Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
 
@@ -18,6 +18,7 @@ export default function ConnectPanel({
   onCancel,
   storedClientId,
   variant = "fullscreen",
+  oauthAvailable = false,
 }: {
   onConnected: (creds: ConnectInput) => Promise<void>;
   onCancel?: () => void;
@@ -26,6 +27,8 @@ export default function ConnectPanel({
   storedClientId?: string | null;
   /** "inline" sits inside the Trading tab; "fullscreen" is the Settings takeover. */
   variant?: "fullscreen" | "inline";
+  /** Show the one-click cTrader consent flow instead of the credential form. */
+  oauthAvailable?: boolean;
 }) {
   const hasStored = Boolean(storedClientId);
   const [clientId, setClientId] = useState("");
@@ -36,9 +39,25 @@ export default function ConnectPanel({
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAppFields, setShowAppFields] = useState(false);
+  const [showManual, setShowManual] = useState(!oauthAvailable);
+
+  // Availability arrives with /api/me, which may settle after this panel mounts.
+  useEffect(() => {
+    setShowManual(!oauthAvailable);
+  }, [oauthAvailable]);
 
   const appReady = hasStored || (clientId && clientSecret);
   const ready = appReady && accessToken && refreshToken;
+
+  async function startOAuth() {
+    setError(null);
+    try {
+      const { url } = await api.ctraderOAuthStart();
+      window.location.assign(url);
+    } catch (err: any) {
+      setError(err instanceof ApiError ? err.message : "Could not start cTrader sign-in");
+    }
+  }
 
   async function doConnect() {
     setError(null);
@@ -81,14 +100,61 @@ export default function ConnectPanel({
             <Plug className="h-5 w-5" />
           </div>
           <h1 className="mt-4 text-2xl font-semibold tracking-tight">
-            {hasStored ? "Refresh cTrader tokens" : "Connect cTrader"}
+            {showManual ? (hasStored ? "Refresh cTrader tokens" : "Connect cTrader") : hasStored ? "Reconnect cTrader" : "Connect cTrader"}
           </h1>
           <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-fg-faint">
-            {hasStored && !showAppFields ? TOKEN_HELPER_TEXT : HELPER_TEXT}
+            {showManual
+              ? hasStored && !showAppFields
+                ? TOKEN_HELPER_TEXT
+                : HELPER_TEXT
+              : "Sign in at cTrader and approve access. You'll come straight back here; no keys to copy or paste."}
           </p>
 
           <div className="mt-5 space-y-4">
-            {hasStored && (
+            {!showManual && (
+              <>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
+                  className="w-full"
+                  icon={<Plug className="h-4 w-4" />}
+                  onClickAsync={startOAuth}
+                >
+                  Continue with cTrader
+                </Button>
+                {error && <Flash tone="danger">{error}</Flash>}
+                <div className="text-center">
+                  <button
+                    type="button"
+                    className="text-xs text-fg-faint underline-offset-2 transition hover:text-fg hover:underline"
+                    onClick={() => {
+                      setShowManual(true);
+                      setError(null);
+                    }}
+                  >
+                    Use my own cTrader OpenAPI app
+                  </button>
+                </div>
+              </>
+            )}
+
+            {showManual && oauthAvailable && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  className="text-xs text-fg-faint underline-offset-2 transition hover:text-fg hover:underline"
+                  onClick={() => {
+                    setShowManual(false);
+                    setError(null);
+                  }}
+                >
+                  Use cTrader sign-in instead
+                </button>
+              </div>
+            )}
+
+            {showManual && hasStored && (
               <div className="rounded-lg border border-hairline bg-soft px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -113,6 +179,8 @@ export default function ConnectPanel({
               </div>
             )}
 
+            {showManual && (
+              <>
             {(!hasStored || showAppFields) && (
               <>
             <div>
@@ -191,6 +259,8 @@ export default function ConnectPanel({
                 </Button>
               )}
             </div>
+              </>
+            )}
           </div>
         </Card>
       </FadeRise>

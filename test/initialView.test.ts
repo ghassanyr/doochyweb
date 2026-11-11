@@ -14,6 +14,11 @@ describe("initialView", () => {
     assert.equal(initialView("?view=signals&signal=abc", "doochy.net"), "signals");
   });
 
+  test("returns to Trading after the cTrader OAuth callback", () => {
+    assert.equal(initialView("?view=trading&ctrader=connected", "doochy.net"), "trading");
+    assert.equal(initialView("?view=trading&ctrader_error=access_denied", "doochy.net"), "trading");
+  });
+
   test("opens Learn from the learn host and its subdomains", () => {
     assert.equal(initialView("", "learn.doochy.net"), "learn");
     assert.equal(initialView("", "learn.example.com"), "learn");

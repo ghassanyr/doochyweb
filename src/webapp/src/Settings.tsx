@@ -28,6 +28,7 @@ export default function SettingsPage({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showConnect, setShowConnect] = useState(false);
   const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
+  const [oauthAvailable, setOauthAvailable] = useState(false);
 
   useEffect(() => {
     setPrefs(prefsFrom(accounts));
@@ -40,7 +41,9 @@ export default function SettingsPage({
     api
       .me()
       .then((r) => {
-        if (alive) setClientIdMasked(r.clientIdMasked ?? null);
+        if (!alive) return;
+        setClientIdMasked(r.clientIdMasked ?? null);
+        setOauthAvailable(Boolean(r.ctraderOAuth));
       })
       .catch(() => {});
     return () => {
@@ -81,6 +84,7 @@ export default function SettingsPage({
     return (
       <ConnectPanel
         storedClientId={clientIdMasked}
+        oauthAvailable={oauthAvailable}
         onConnected={async (creds) => {
           await onConnected(creds);
           const { accounts: fresh } = await api.accounts();

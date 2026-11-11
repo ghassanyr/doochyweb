@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LogIn } from "lucide-react";
 import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
@@ -14,7 +14,7 @@ import SettingsPage from "./Settings";
 import TradingConnect from "./TradingConnect";
 import { useAccounts } from "./useAccounts";
 import { AnimatedModal } from "./components/Modal";
-import { Button, Card, Skeleton } from "./components/ui";
+import { Button, Card, Flash, Skeleton } from "./components/ui";
 
 // The Analysis, Breakouts and Learn pages are public: market quotes, the shared
 // watchlist, the breakout feed and the anonymous drill carry no account data.
@@ -34,10 +34,37 @@ export default function App() {
   // has nothing to show on Trading yet.
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  // Result of the cTrader consent round-trip: the server redirects back to
+  // /?view=trading&ctrader=connected (or ctrader_error=...).
+  const [oauthNotice, setOauthNotice] = useState<{ tone: "success" | "danger"; message: string } | null>(
+    () => {
+      if (typeof window === "undefined") return null;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("ctrader") === "connected") {
+        return { tone: "success", message: "cTrader connected." };
+      }
+      const error = params.get("ctrader_error");
+      if (error) {
+        return { tone: "danger", message: `cTrader sign-in failed: ${error.replaceAll("_", " ")}.` };
+      }
+      return null;
+    }
+  );
   const signedIn = !!token;
   const { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect } =
     useAccounts(signedIn);
   const isAdmin = me?.role === "admin";
+
+  // Keep the notice on screen but drop the one-shot params so a reload does not
+  // replay it.
+  useEffect(() => {
+    if (!oauthNotice) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("ctrader") && !url.searchParams.has("ctrader_error")) return;
+    url.searchParams.delete("ctrader");
+    url.searchParams.delete("ctrader_error");
+    window.history.replaceState(null, "", url);
+  }, [oauthNotice]);
 
   // Validate a stored token once on load; drop it if it expired.
   if (booting && token) {
@@ -170,18 +197,28 @@ export default function App() {
               </div>
             </Card>
           </div>
-        ) : hasCredentials === null ? (
-          <div className="mx-auto w-full max-w-sm space-y-3 py-8">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ) : !hasCredentials ? (
-          <TradingConnect
-            onConnected={handleConnected}
-            onSkip={() => handleViewChange("analysis")}
-          />
         ) : (
-          <Dashboard accounts={accounts} />
+          <>
+            {oauthNotice && (
+              <div className="mx-auto w-full max-w-lg pb-3">
+                <Flash tone={oauthNotice.tone}>{oauthNotice.message}</Flash>
+              </div>
+            )}
+            {hasCredentials === null ? (
+              <div className="mx-auto w-full max-w-sm space-y-3 py-8">
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : !hasCredentials ? (
+              <TradingConnect
+                oauthAvailable={me?.ctraderOAuth ?? false}
+                onConnected={handleConnected}
+                onSkip={() => handleViewChange("analysis")}
+              />
+            ) : (
+              <Dashboard accounts={accounts} />
+            )}
+          </>
         )}
       </AppShell>
 

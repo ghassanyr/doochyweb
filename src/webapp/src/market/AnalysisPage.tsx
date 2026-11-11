@@ -340,13 +340,12 @@ export default function AnalysisPage({
             })}
           </div>
 
-          {canManageWatchlist ? (
-            <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
-          ) : (
+           {canManageWatchlist ? (
+             <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
+           ) : (
             <p className="flex-1 self-center px-1 text-sm text-fg-faint">
-              The watchlist is curated by an admin.
             </p>
-          )}
+         )}
         </Card>
 
         <StatusLine

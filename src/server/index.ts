@@ -7,7 +7,8 @@ import { connectDb, loadCredentials, saveCredentials, User } from "./db";
 import { signToken, authRequired, AuthedRequest, hashPassword, verifyPassword, findUserByUsername } from "./auth";
 import { userSockets } from "./ctrader/connection";
 import { discoverAccounts } from "./ctrader/auth";
-import { reconcileAccount, listAccounts } from "./ctrader/reads";
+import { ctraderOAuthAvailable, ctraderOAuthCallback, ctraderOAuthRouter } from "./ctrader/oauth";
+import { reconcileAccount, listAccounts, listTradableNames } from "./ctrader/reads";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
 import { signalsRouter } from "./signals/routes";
@@ -82,6 +83,7 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
       // Enough for Settings to say which OpenAPI app is connected without ever
       // sending the secret, or even the whole client id, to the browser.
       clientIdMasked: creds ? maskClientId(creds.clientId) : null,
+      ctraderOAuth: ctraderOAuthAvailable(),
       accounts,
     });
   } catch (err: any) {
@@ -205,6 +207,26 @@ app.get("/api/accounts/:ctid/positions", authRequired, async (req: AuthedRequest
     }
     const result = await reconcileAccount(req.userId!, ctid, account.isLive);
     res.json({ positions: result.positions });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message ?? "failed" });
+  }
+});
+
+app.get("/api/accounts/:ctid/symbols", authRequired, async (req: AuthedRequest, res: Response) => {
+  try {
+    const ctid = Number(req.params.ctid);
+    if (!Number.isFinite(ctid) || ctid <= 0) {
+      res.status(400).json({ error: "invalid account id" });
+      return;
+    }
+    const creds = await loadCredentials(req.userId!);
+    const account = creds?.accounts.find((a) => a.ctid === ctid);
+    if (!account) {
+      res.status(404).json({ error: "account not found" });
+      return;
+    }
+    const symbols = await listTradableNames(req.userId!, account.isLive ? "live" : "demo", ctid);
+    res.json({ symbols: [...symbols].sort((a, b) => a.localeCompare(b)) });
   } catch (err: any) {
     res.status(502).json({ error: err.message ?? "failed" });
   }
@@ -402,6 +424,14 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 app.use("/api/market", marketRouter);
 app.use("/api/signals", signalsRouter);
 app.use("/api/trainer", createTrainerRouter());
+app.use("/api/ctrader/oauth", ctraderOAuthRouter);
+
+// Production redirect URI is https://doochy.net/callback (single-segment URLs
+// are what cTrader's portal accepts for real domains). Handled outside /api so
+// the registered URL can stay short.
+app.get("/callback", (req: Request, res: Response) => {
+  void ctraderOAuthCallback(req, res);
+});
 
 // -----------------------------------------------------------------------
 // Static serving for the React SPA (production build)

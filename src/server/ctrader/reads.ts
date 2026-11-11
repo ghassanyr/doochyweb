@@ -127,7 +127,11 @@ export async function quoteUsdFactor(userId: string, ctid: number, isLive: boole
   else if (meta.nameToId.get(`${quote}USD`) != null) convName = `${quote}USD`;
   if (!convName) return null;
   const sockets = userSockets(userId);
-  return quoteToUsdFactor(sockets.getQuote(env, meta.nameToId.get(convName)!), convName);
+  // Subscribe/wait for the conversion pair too: without it a JPY- or
+  // CHF-quoted symbol would show its risk as if it were USD.
+  const convId = meta.nameToId.get(convName)!;
+  const convQuote = await sockets.waitForQuote(env, ctid, convId, 750);
+  return quoteToUsdFactor(convQuote, convName);
 }
 
 // The broker symbol whose spot gives a non-USD quote currency's USD value as a
