@@ -20,7 +20,7 @@ module.exports = {
         // Solid, blue-tinted borders (gauge's --border-soft / --border).
         hairline: {
           DEFAULT: "rgb(var(--surface-active) / <alpha-value>)",
-          strong: "rgb(35 48 68 / <alpha-value>)",
+          strong: "rgb(var(--line-strong) / <alpha-value>)",
         },
         fg: {
           DEFAULT: "rgb(var(--text) / 0.92)",

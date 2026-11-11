@@ -13,6 +13,7 @@ import { FadeRise, Stagger, StaggerItem } from "../components/motion";
 import { RouteLink } from "../components/RouteLink";
 import { Badge, Button, Card, Skeleton, buttonClass } from "../components/ui";
 import type { ViewKey } from "../routing";
+import { useSiteConfig, FALLBACK_BRANDING } from "../siteConfig";
 import {
   SIGNAL_DIRECTION,
   computeRR,
@@ -64,6 +65,7 @@ export default function HomePage({
   onNavigate: (view: ViewKey) => void;
 }) {
   const [latest, setLatest] = useState<LatestSignal>({ status: "loading" });
+  const { branding } = useSiteConfig();
 
   useEffect(() => {
     let alive = true;
@@ -95,8 +97,7 @@ export default function HomePage({
               <span className="block">Practice the pattern.</span>
             </h1>
             <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-fg-muted">
-              Doochy brings multi timeframe analysis, curated trade ideas, automated breakout
-              research, and a pattern trainer into one focused workspace.
+              {branding.description || FALLBACK_BRANDING.description}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-2">
               <RouteLink

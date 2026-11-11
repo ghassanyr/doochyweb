@@ -4,6 +4,7 @@ import { LogIn, LogOut, RefreshCw, Settings } from "lucide-react";
 import { RouteLink } from "./components/RouteLink";
 import { Button } from "./components/ui";
 import { pathForView, type ViewKey } from "./routing";
+import { useSiteConfig } from "./siteConfig";
 
 // Top-level shell: brand, primary navigation, and the account-level actions
 // (settings / sign out). The Analysis, Breakouts, Learn and Trading views render
@@ -51,6 +52,9 @@ export function AppShell({
   children: ReactNode;
 }) {
   const nav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
+  const { branding } = useSiteConfig();
+  const logoUrl = branding.logoUrl || "/doochy-mark-80.png";
+  const defaultLogo = !branding.logoUrl;
   return (
     <div className="min-h-screen bg-transparent text-fg">
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-xl">
@@ -59,12 +63,16 @@ export function AppShell({
             view="home"
             onNavigate={onViewChange}
             className="flex shrink-0 items-center gap-2.5"
-            aria-label="Doochy home"
-            title="Doochy home"
+            aria-label={`${branding.name} home`}
+            title={`${branding.name} home`}
           >
             <img
-              src="/doochy-mark-80.png"
-              srcSet="/doochy-mark-40.png 1x, /doochy-mark-80.png 2x, /doochy-mark-120.png 3x, /doochy-mark-160.png 4x"
+              src={logoUrl}
+              srcSet={
+                defaultLogo
+                  ? "/doochy-mark-40.png 1x, /doochy-mark-80.png 2x, /doochy-mark-120.png 3x, /doochy-mark-160.png 4x"
+                  : undefined
+              }
               alt=""
               width={40}
               height={40}
@@ -72,10 +80,10 @@ export function AppShell({
               aria-hidden="true"
             />
             <div className="leading-tight">
-              <div className="text-[17px] font-bold tracking-tight text-fg">Doochy</div>
-              <div className="hidden text-[11px] text-fg-muted sm:block">
-                Market analysis &amp; trading
-              </div>
+              <div className="text-[17px] font-bold tracking-tight text-fg">{branding.name}</div>
+              {branding.tagline && (
+                <div className="hidden text-[11px] text-fg-muted sm:block">{branding.tagline}</div>
+              )}
             </div>
           </RouteLink>
 
@@ -84,7 +92,8 @@ export function AppShell({
             aria-label="Primary"
           >
             {nav.map((n) => {
-              const active = view === n.key;
+              const active =
+                view === n.key || (n.key === "admin" && view === "admin-settings");
               return (
                 <a
                   key={n.key}
@@ -159,6 +168,12 @@ export function AppShell({
       </header>
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
+
+      {branding.footerText && (
+        <footer className="mx-auto max-w-page px-4 pb-6 pt-2 text-center text-[11px] leading-relaxed text-fg-faint sm:px-6">
+          {branding.footerText}
+        </footer>
+      )}
     </div>
   );
 }

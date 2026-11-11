@@ -338,11 +338,70 @@ export interface AdminUser {
   createdAt: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Site presentation, see src/server/settings
+// ---------------------------------------------------------------------------
+
+export type ThemeMode = "dark" | "light";
+
+export interface BrandingSettings {
+  name: string;
+  tagline: string;
+  description: string;
+  logoUrl: string;
+  supportEmail: string;
+  websiteUrl: string;
+  footerText: string;
+}
+
+export interface ThemeSettings {
+  mode: ThemeMode;
+  accent: string;
+  accentHover: string;
+  accentDeep: string;
+  accentFg: string;
+  canvas: string;
+  canvasSoft: string;
+  surface: string;
+  surfaceHover: string;
+  surfaceActive: string;
+  borderStrong: string;
+  text: string;
+  success: string;
+  danger: string;
+  strongSell: string;
+  strongBuy: string;
+  ratingNeutral: string;
+}
+
+export interface SiteConfig {
+  branding: BrandingSettings;
+  theme: ThemeSettings;
+  version: string | null;
+}
+
+export interface SiteSettings extends SiteConfig {
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export const configApi = {
+  get: () => request<SiteConfig>("/api/config"),
+};
+
 export const adminApi = {
   users: () => request<{ users: AdminUser[] }>("/api/admin/users"),
 
   deleteUser: (id: string) =>
     request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  settings: () => request<{ settings: SiteSettings }>("/api/admin/settings"),
+
+  saveSettings: (patch: { branding?: Partial<BrandingSettings>; theme?: Partial<ThemeSettings> }) =>
+    request<{ settings: SiteSettings }>("/api/admin/settings", {
+      method: "PUT",
+      body: patch,
+    }),
 };
 
 export const api = {

@@ -1,24 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
-import { GripVertical, Trash2, X } from "lucide-react";
+import { GripVertical, Palette, Trash2, X } from "lucide-react";
 
 import { adminApi, marketApi, type AdminUser } from "../api";
 import { ConfirmModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
-import { Badge, Card, Flash, Skeleton } from "../components/ui";
+import { RouteLink } from "../components/RouteLink";
+import { Badge, Card, Flash, Skeleton, buttonClass } from "../components/ui";
 import { applyOrder } from "../market/order";
 import { SortableGrid } from "../market/SortableGrid";
 import { SymbolSearch } from "../market/SymbolSearch";
 import type { CatalogEntry } from "../market/types";
+import type { ViewKey } from "../routing";
 import { formatLocalDateTime } from "../time";
 
 interface WatchItem {
   symbol: string;
 }
 
-// Admin-only curation of the shared watchlist and the account directory. The
-// watchlist endpoints power the Analysis page, but they require the admin role
-// server-side; this page is the only place that exposes them now.
-export default function AdminPage({ currentUsername }: { currentUsername?: string }) {
+// Admin-only curation of the shared watchlist, the account directory and the
+// site presentation. The watchlist endpoints power the Analysis page, but they
+// require the admin role server-side; this page is the only place that exposes
+// them now.
+export default function AdminPage({
+  currentUsername,
+  onNavigate,
+}: {
+  currentUsername?: string;
+  onNavigate: (view: ViewKey) => void;
+}) {
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [items, setItems] = useState<WatchItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,6 +147,23 @@ export default function AdminPage({ currentUsername }: { currentUsername?: strin
   return (
     <FadeRise>
       <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-fg">Admin</h1>
+            <p className="text-sm text-fg-muted">
+              Manage the shared watchlist, accounts and the site's branding.
+            </p>
+          </div>
+          <RouteLink
+            view="admin-settings"
+            onNavigate={onNavigate}
+            className={buttonClass("secondary")}
+          >
+            <Palette className="h-4 w-4" />
+            Site settings
+          </RouteLink>
+        </div>
+
         <Card className="space-y-3 p-4">
           <div>
             <h2 className="text-base font-bold tracking-tight text-fg">Watchlist</h2>

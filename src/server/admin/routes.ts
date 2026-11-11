@@ -7,6 +7,8 @@
 import { Router } from "express";
 
 import { adminRequired, type AuthedRequest } from "../auth";
+import { getSiteSettings, saveSiteSettings } from "../settings/store";
+import { SettingsValidationError } from "../settings/validate";
 import { deleteUser, listUsers } from "./users";
 
 export const adminRouter = Router();
@@ -37,5 +39,33 @@ adminRouter.delete("/users/:id", adminRequired, async (req: AuthedRequest, res) 
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "failed to delete user" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Site settings: branding and theme for every visitor.
+// ---------------------------------------------------------------------------
+
+adminRouter.get("/settings", adminRequired, async (_req, res) => {
+  try {
+    res.json({ settings: await getSiteSettings() });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to load site settings" });
+  }
+});
+
+adminRouter.put("/settings", adminRequired, async (req: AuthedRequest, res) => {
+  try {
+    const settings = await saveSiteSettings(
+      { branding: req.body?.branding, theme: req.body?.theme },
+      req.username ?? req.userId ?? "admin"
+    );
+    res.json({ settings });
+  } catch (err: any) {
+    if (err instanceof SettingsValidationError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err?.message ?? "failed to save site settings" });
   }
 });

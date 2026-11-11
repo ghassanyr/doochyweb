@@ -5,6 +5,7 @@ import AnalysisPage from "./market/AnalysisPage";
 import SignalsPage from "./signals/SignalsPage";
 import BreakoutsPage from "./market/BreakoutsPage";
 import AdminPage from "./admin/AdminPage";
+import AdminSettingsPage from "./admin/AdminSettingsPage";
 import LearnPage from "./learn/LearnPage";
 import HomePage from "./home/HomePage";
 import { isViewKey, pathForView, resolveRoute, type ViewKey } from "./routing";
@@ -124,7 +125,7 @@ export default function App() {
   }
 
   function handleViewChange(next: ViewKey) {
-    if (next === "admin" && !isAdmin) return;
+    if ((next === "admin" || next === "admin-settings") && !isAdmin) return;
     // Settings is a takeover, not a nav tab: always open it through the helper
     // so the back target is recorded.
     if (next === "settings") {
@@ -217,7 +218,13 @@ export default function App() {
           />
         ) : view === "admin" ? (
           isAdmin ? (
-            <AdminPage currentUsername={me?.username} />
+            <AdminPage currentUsername={me?.username} onNavigate={handleViewChange} />
+          ) : (
+            <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
+          )
+        ) : view === "admin-settings" ? (
+          isAdmin ? (
+            <AdminSettingsPage onNavigate={handleViewChange} />
           ) : (
             <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
           )

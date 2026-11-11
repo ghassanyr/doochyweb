@@ -10,6 +10,7 @@ import ConnectPanel from "./ConnectPanel";
 import { fmtMoney } from "./Dashboard";
 import { ACCOUNT_COLORS, Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
+import { useSiteConfig } from "./siteConfig";
 import TelegramNotifications from "./telegram/TelegramNotifications";
 
 type AccountPrefs = { nickname: string; color: string | null };
@@ -39,6 +40,9 @@ export default function SettingsPage({
   const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
   const [oauthAvailable, setOauthAvailable] = useState(false);
   const [reconnectErr, setReconnectErr] = useState<string | null>(null);
+  const { branding } = useSiteConfig();
+  const logoUrl = branding.logoUrl || "/doochy-mark-64.png";
+  const defaultLogo = !branding.logoUrl;
 
   useEffect(() => {
     setPrefs(prefsFrom(accounts));
@@ -136,15 +140,19 @@ export default function SettingsPage({
           />
           <div className="flex items-center gap-2">
             <img
-              src="/doochy-mark-64.png"
-              srcSet="/doochy-mark-32.png 1x, /doochy-mark-64.png 2x, /doochy-mark-96.png 3x"
+              src={logoUrl}
+              srcSet={
+                defaultLogo
+                  ? "/doochy-mark-32.png 1x, /doochy-mark-64.png 2x, /doochy-mark-96.png 3x"
+                  : undefined
+              }
               alt=""
               width={24}
               height={24}
               className="h-6 w-6 shrink-0"
               aria-hidden="true"
             />
-            <div className="text-[15px] font-semibold tracking-tight text-fg">Doochy</div>
+            <div className="text-[15px] font-semibold tracking-tight text-fg">{branding.name}</div>
             <span className="mt-0.5 rounded bg-surface px-1 py-px text-[11px] font-medium text-fg-faint">settings</span>
           </div>
         </div>
@@ -154,7 +162,7 @@ export default function SettingsPage({
         <FadeRise>
           <div className="space-y-1">
             <h1 className="text-lg font-semibold tracking-tight text-fg">Settings</h1>
-            <p className="text-sm text-fg-muted">Manage how accounts appear and how Doochy connects.</p>
+            <p className="text-sm text-fg-muted">Manage how accounts appear and how {branding.name} connects.</p>
           </div>
         </FadeRise>
 

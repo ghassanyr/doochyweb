@@ -19,6 +19,8 @@
 
   /* Blue-tinted borders, not white alpha. Gauge draws solid hairlines. */
   --line: 148 174 214;
+  /* Strong control borders. Hardcoded in Tailwind before theming existed. */
+  --line-strong: 35 48 68;
   --text: 231 237 245;
 
   /* Accent - teal */
@@ -46,7 +48,7 @@ html, body, #root {
 body {
   /* Gauge's signature: two soft radial glows over the flat canvas. */
   background:
-    radial-gradient(1200px 600px at 15% -10%, rgba(20, 184, 166, 0.08), transparent 60%),
+    radial-gradient(1200px 600px at 15% -10%, rgb(var(--accent) / 0.08), transparent 60%),
     radial-gradient(900px 500px at 100% 0%, rgba(59, 130, 246, 0.06), transparent 55%),
     rgb(var(--canvas));
   background-attachment: fixed;
