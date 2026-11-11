@@ -109,11 +109,11 @@ export default function HomePage({
               </RouteLink>
               {signedIn ? (
                 <RouteLink
-                  view="trading"
+                  view="signals"
                   onNavigate={onNavigate}
                   className={buttonClass("secondary", "lg")}
                 >
-                  Open Trading
+                  Open Signals
                 </RouteLink>
               ) : (
                 <Button variant="secondary" size="lg" onClick={onRegister}>
@@ -122,8 +122,8 @@ export default function HomePage({
               )}
             </div>
             <p className="mt-3 text-[11.5px] text-fg-faint">
-              Analysis, Signals, Breakouts and Learn are public. Trading requires a cTrader
-              connection.
+              Analysis, Signals, Breakouts and Learn are public. Trading unlocks once you connect
+              cTrader.
             </p>
           </div>
 
