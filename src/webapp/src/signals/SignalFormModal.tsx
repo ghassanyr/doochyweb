@@ -77,6 +77,8 @@ export function SignalFormModal({
     if (!Number.isFinite(targetNum) || targetNum <= 0) return "Target must be a positive number.";
     if (!Number.isFinite(stopNum) || stopNum <= 0) return "Stop must be a positive number.";
     if (targetNum === stopNum) return "Target and stop must be different.";
+    if (direction === "buy" && !(targetNum > stopNum)) return "For a buy, target must be above stop.";
+    if (direction === "sell" && !(targetNum < stopNum)) return "For a sell, target must be below stop.";
     if (entryNum !== null) {
       if (!Number.isFinite(entryNum) || entryNum <= 0) return "Entry must be a positive number.";
       if (direction === "buy" && !(stopNum < entryNum && entryNum < targetNum)) {
@@ -204,7 +206,7 @@ export function SignalFormModal({
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-fg-muted">Timeframe (optional)</span>
             <select className={inputCls} value={timeframe} onChange={(e) => setTimeframe(e.target.value)}>
-              <option value="">—</option>
+              <option value="">-</option>
               {timeframes.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}

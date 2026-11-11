@@ -1,4 +1,4 @@
-# Doochy Learn — Concept Anchor
+# Doochy Learn - Concept Anchor
 
 **Status:** stable idea. If a later decision contradicts this document, resolve it here first
 so we do not drift.
@@ -59,7 +59,7 @@ gives a natural "no-trade" class.
 - An **algorithm detects candidate instances** from history.
 - A **human curates** the candidates through a **CLI + CSV** workflow: confirm/reject the
   tag, pick the cut bar, set key levels, rate ambiguity.
-- The **human never decides the outcome** — the market already did, and it is computed
+- The **human never decides the outcome** - the market already did, and it is computed
   mechanically. This preserves honest base rates.
 - **Negative controls** (random walk / shuffled returns) and flips/jitter augmentation are
   **deferred** to a later phase.

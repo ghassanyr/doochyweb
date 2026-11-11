@@ -8,6 +8,8 @@ import {
   isExpired,
   validateSignalInput,
 } from "../src/server/signals/validate";
+import { resolveOutcome } from "../src/server/signals/outcome";
+import type { Candle } from "../src/server/market/types";
 import {
   formatLocalDate,
   formatLocalDateTime,
@@ -156,6 +158,86 @@ describe("signal validation", () => {
     assert.equal(canRestore("invalidated"), true);
     assert.equal(canRestore("expired"), false);
   });
+
+  test("direction fixes target/stop ordering even without an entry", () => {
+    const buyOk = validateSignalInput({ symbol: "XAUUSD", direction: "buy", target: 2450, stop: 2380 });
+    assert.equal(buyOk.ok, true);
+    const buyBad = validateSignalInput({ symbol: "XAUUSD", direction: "buy", target: 2380, stop: 2450 });
+    assert.equal(buyBad.ok, false);
+
+    const sellOk = validateSignalInput({ symbol: "XAUUSD", direction: "sell", target: 2350, stop: 2450 });
+    assert.equal(sellOk.ok, true);
+    const sellBad = validateSignalInput({ symbol: "XAUUSD", direction: "sell", target: 2450, stop: 2350 });
+    assert.equal(sellBad.ok, false);
+  });
+});
+
+function bar(time: number, high: number, low: number): Candle {
+  const mid = (high + low) / 2;
+  return { time, open: mid, high, low, close: mid, volume: 0 };
+}
+
+describe("automatic outcome resolution", () => {
+  test("a buy resolves at target when the high reaches it", () => {
+    const outcome = resolveOutcome(
+      { direction: "buy", target: 2450, stop: 2380 },
+      [bar(1_000, 2_460, 2_390)],
+      0
+    );
+    assert.deepEqual(outcome, { status: "target_hit", at: 1_000 });
+  });
+
+  test("a buy resolves at stop when the low reaches it", () => {
+    const outcome = resolveOutcome(
+      { direction: "buy", target: 2450, stop: 2380 },
+      [bar(1_000, 2_400, 2_370)],
+      0
+    );
+    assert.deepEqual(outcome, { status: "stopped_out", at: 1_000 });
+  });
+
+  test("a sell mirrors the buy rules", () => {
+    const target = resolveOutcome(
+      { direction: "sell", target: 2350, stop: 2450 },
+      [bar(1_000, 2_440, 2_340)],
+      0
+    );
+    assert.deepEqual(target, { status: "target_hit", at: 1_000 });
+
+    const stop = resolveOutcome(
+      { direction: "sell", target: 2350, stop: 2450 },
+      [bar(1_000, 2_460, 2_400)],
+      0
+    );
+    assert.deepEqual(stop, { status: "stopped_out", at: 1_000 });
+  });
+
+  test("bars from before the signal was published are ignored", () => {
+    const outcome = resolveOutcome(
+      { direction: "buy", target: 2450, stop: 2380 },
+      [bar(1_000, 2_460, 2_370)],
+      2_000
+    );
+    assert.equal(outcome, null);
+  });
+
+  test("when one bar spans both levels the stop wins", () => {
+    const outcome = resolveOutcome(
+      { direction: "buy", target: 2450, stop: 2380 },
+      [bar(1_000, 2_460, 2_370)],
+      0
+    );
+    assert.deepEqual(outcome, { status: "stopped_out", at: 1_000 });
+  });
+
+  test("the chronologically first touch decides the outcome", () => {
+    const outcome = resolveOutcome(
+      { direction: "buy", target: 2450, stop: 2380 },
+      [bar(1_000, 2_460, 2_390), bar(2_000, 2_400, 2_370)],
+      0
+    );
+    assert.deepEqual(outcome, { status: "target_hit", at: 1_000 });
+  });
 });
 
 describe("local time formatting", () => {
@@ -203,7 +285,7 @@ describe("local time formatting", () => {
   });
 
   test("invalid input degrades to a dash", () => {
-    assert.equal(formatLocalDateTime("not a date", { timeZone: "UTC" }), "—");
+    assert.equal(formatLocalDateTime("not a date", { timeZone: "UTC" }), "-");
   });
 });
 

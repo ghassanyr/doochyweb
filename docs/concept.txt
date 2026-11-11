@@ -1,4 +1,4 @@
-Good concept — but the charts and asset coverage are the easy 20%. The hard 80% is deciding what “correct” means, keeping users from memorizing famous charts, and not accidentally training gamblers. Here’s how I’d think about it.
+Good concept - but the charts and asset coverage are the easy 20%. The hard 80% is deciding what “correct” means, keeping users from memorizing famous charts, and not accidentally training gamblers. Here’s how I’d think about it.
 1. The core loop
 At bar T, show a context window (say 60–120 candles), state the pattern, hide the future, then ask one of:
 - Direction: up / down / no-trade
@@ -44,7 +44,7 @@ Users will recognize famous charts, reverse-image-search them, or just remember 
 - Hide symbol, date, and absolute price; normalize the y-axis to % or index 100.
 - Render as interactive vector charts, not images.
 - Randomize cut point within the pattern’s development (early, mid, breakout, retest).
-- Vertical flip charts occasionally (swap up/down and flip labels) — doubles the dataset and defeats memorization.
+- Vertical flip charts occasionally (swap up/down and flip labels) - doubles the dataset and defeats memorization.
 - Include placebo charts built from random walks or shuffled returns. Measure users’ false-positive rate. This is a killer pedagogical feature and a real differentiator.
 - Never send future bars to the client before the answer. Serve context, validate server-side, then fetch the reveal. Otherwise anyone can inspect the network tab.
 - Exclude or transform iconic events; add slight noise/jitter and alternative themes.
@@ -53,14 +53,14 @@ On scoring: one correct guess proves nothing. Use:
 - Item-response theory or Elo per pattern tag, so difficulty is estimated from the crowd, not hand-waved.
 - Confidence intervals; don’t show a “92% accuracy” badge after 12 questions.
 - Leaderboards ranked by skill, not raw accuracy, with a minimum sample size.
-- Discard items everyone gets right or everyone gets wrong — they have no discriminative power.
+- Discard items everyone gets right or everyone gets wrong - they have no discriminative power.
 This is also the ethical core: markets are noisy, and a trainer that implies “pattern = certainty” is harmful. The app should repeatedly say “this setup historically resolves up 54% of the time, which may not be an edge after costs.”
 5. UX and modes
 Core screens:
-1. Chart stage — clean candles, optional volume, drawing tools, zoom/pan restricted to the past.
-2. Answer panel — big up/down/pass buttons, confidence slider, optional probability input.
-3. Reveal — animated future bars, auto-drawn pattern boundaries, invalidation level, MFE/MAE, base-rate stats, and a short “why.”
-4. Review — your answer vs. crowd distribution, and the same pattern tag in a new instance later.
+1. Chart stage - clean candles, optional volume, drawing tools, zoom/pan restricted to the past.
+2. Answer panel - big up/down/pass buttons, confidence slider, optional probability input.
+3. Reveal - animated future bars, auto-drawn pattern boundaries, invalidation level, MFE/MAE, base-rate stats, and a short “why.”
+4. Review - your answer vs. crowd distribution, and the same pattern tag in a new instance later.
 Modes worth having:
 - Daily drill: 10 mixed questions, 5 minutes, spaced repetition.
 - Targeted drill: one pattern family or timeframe.
@@ -79,7 +79,7 @@ The retention engine is a skill profile, not XP alone:
 - “Your edge vs. baseline” with confidence intervals.
 - Leakage report: tags where you’re below 50% or overconfident.
 - Spaced repetition scheduled by concept/tag, never by exact chart, to avoid memorization.
-- Crowd comparison after each answer (“62% got this right”) — engaging and feeds item difficulty.
+- Crowd comparison after each answer (“62% got this right”) - engaging and feeds item difficulty.
 Avoid loss-framed streaks, loot-box mechanics, and “you’re on fire” language that encourages risk-taking. Trading apps have a real duty of care here.
 7. Content pipeline
 You cannot hand-label thousands of charts. The realistic pipeline:
@@ -104,7 +104,7 @@ Don’t render charts server-side with Puppeteer unless you need shareable image
 Start with 3–5 symbols and 2 timeframes. Depth beats breadth for the first year.
 10. Business model, legal, ethics
 - Freemium: free daily drill + limited pattern library; paid analytics, full library, live challenges, exam mode.
-- B2B: white-label for prop firms and trading academies — often better economics than consumers.
+- B2B: white-label for prop firms and trading academies - often better economics than consumers.
 - Affiliate/broker links: tempting, but conflicts with “education, not signals.” Proceed carefully.
 - Legal: “educational purposes only,” hypothetical-performance disclaimers, no real-money trading, age gate, GDPR/CCPA, app-store review for trading/gambling content. Real-money prizes or leaderboard payouts invite gambling regulation.
 - Ethics: session limits, reality checks, no dark patterns. This audience is already prone to over-trading.
@@ -130,4 +130,4 @@ Then add forex/metals, identification and validity questions, live weekly challe
 4. Live data in v1, or historical only? I’d defer live.
 5. Business: consumer subscription, B2B white-label, or free/community?
 6. Team/budget: solo build or funded? Data licensing alone can dictate the roadmap.
-My strongest opinion: the differentiator isn’t “more patterns.” It’s calibration training, negative controls, and transparent base rates — treating patterns as probabilistic edges rather than magic answers.
+My strongest opinion: the differentiator isn’t “more patterns.” It’s calibration training, negative controls, and transparent base rates - treating patterns as probabilistic edges rather than magic answers.

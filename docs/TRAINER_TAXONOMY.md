@@ -1,4 +1,4 @@
-# Doochy Learn — Pattern Taxonomy
+# Doochy Learn - Pattern Taxonomy
 
 **Status:** revised 2026-11-10 for detector accuracy; seven-tag pilot contract. This
 document is the contract for the trainer detectors in `src/server/trainer/detectors.ts` and

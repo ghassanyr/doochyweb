@@ -11,6 +11,7 @@ import { reconcileAccount, listAccounts } from "./ctrader/reads";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
 import { signalsRouter } from "./signals/routes";
+import { startSignalResolver } from "./signals/resolver";
 import { promoteConfiguredAdmins } from "./admin/roles";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
@@ -436,6 +437,7 @@ async function main() {
   });
   startBreakoutScheduler();
   startScraperScheduler();
+  startSignalResolver();
 }
 
 main().catch((err) => {

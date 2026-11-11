@@ -403,11 +403,11 @@ function StatsStrip({ stats }: { stats: SignalStats }) {
         <span className="ml-auto text-[11px] text-fg-muted">
           Win rate{" "}
           <span className="font-semibold text-fg">
-            {stats.winRate == null ? "—" : `${Math.round(stats.winRate * 100)}%`}
+            {stats.winRate == null ? "-" : `${Math.round(stats.winRate * 100)}%`}
           </span>{" "}
           · Avg{" "}
           <span className="font-semibold text-fg">
-            {stats.avgR == null ? "—" : `${stats.avgR.toFixed(2)}R`}
+            {stats.avgR == null ? "-" : `${stats.avgR.toFixed(2)}R`}
           </span>
         </span>
       )}

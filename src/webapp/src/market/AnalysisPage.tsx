@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, AlertTriangle, RefreshCw, Settings2 } from "lucide-react";
 
 import { marketApi } from "../api";
 import { FadeRise } from "../components/motion";
 import { Card } from "../components/ui";
+import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
 import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
@@ -11,7 +12,7 @@ import { SortableGrid } from "./SortableGrid";
 import { applyOrder } from "./order";
 import { SymbolSearch } from "./SymbolSearch";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes";
-import type { CatalogEntry, MarketResult, MarketSettings } from "./types";
+import type { CatalogEntry, MarketResult, MarketSettings, SymbolType } from "./types";
 
 export default function AnalysisPage({
   canRefresh,
@@ -36,6 +37,7 @@ export default function AnalysisPage({
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(new Set());
   const [order, setOrder] = useState<string[]>([]);
+  const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
 
   const [detail, setDetail] = useState<{ symbol: string; timeframe: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -44,6 +46,39 @@ export default function AnalysisPage({
   const settings = config?.settings;
   const strongRatio = settings?.strongRatio ?? 0.25;
   const refreshSeconds = settings?.refreshSeconds ?? 60;
+
+  // Failed analyses may omit the type (an unresolvable symbol never reaches the
+  // resolver), so fall back to the catalog the config request already sent.
+  const catalogTypes = useMemo(() => {
+    const map = new Map<string, SymbolType>();
+    for (const entry of config?.catalog ?? []) map.set(entry.symbol, entry.type);
+    return map;
+  }, [config?.catalog]);
+
+  const assetCounts = useMemo(() => {
+    const counts: Record<AssetFilter, number> = {
+      all: results.length,
+      crypto: 0,
+      forex: 0,
+      metals: 0,
+      indices: 0,
+    };
+    for (const r of results) {
+      const bucket = assetClass(r.type ?? catalogTypes.get(r.symbol));
+      if (bucket) counts[bucket] += 1;
+    }
+    return counts;
+  }, [results, catalogTypes]);
+
+  // Filtering is purely visual: the full result set keeps polling and feeding
+  // the MTF confluence strip, so switching filters is instant.
+  const visibleResults = useMemo(
+    () =>
+      assetFilter === "all"
+        ? results
+        : results.filter((r) => assetClass(r.type ?? catalogTypes.get(r.symbol)) === assetFilter),
+    [results, assetFilter, catalogTypes]
+  );
 
   // Guards against a slow response from an earlier request overwriting a newer
   // one (switching timeframe mid-flight is common).
@@ -242,7 +277,7 @@ export default function AnalysisPage({
     [timeframe, canRefresh, applyConfluence]
   );
 
-  const okCount = results.filter((r) => r.ok).length;
+  const okCount = visibleResults.filter((r) => r.ok).length;
   // Cards whose read fell back to a cached set because cTrader is throttling.
   const throttled = results.filter((r) => r.ok && (r.warnings?.length ?? 0) > 0).length;
 
@@ -269,6 +304,42 @@ export default function AnalysisPage({
             ))}
           </div>
 
+          <div
+            role="group"
+            aria-label="Filter by asset class"
+            className="flex flex-wrap items-center gap-1 border-t border-hairline pt-2.5"
+          >
+            <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
+              Asset class
+            </span>
+            {ASSET_FILTERS.map((f) => {
+              const active = f.id === assetFilter;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setAssetFilter(f.id)}
+                  className={
+                    "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                    (active
+                      ? "border border-accent/20 bg-accent-soft text-accent"
+                      : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
+                  }
+                >
+                  {f.label}
+                  <span
+                    className={
+                      "tabular-nums text-[10px] " + (active ? "opacity-70" : "text-fg-faint")
+                    }
+                  >
+                    {assetCounts[f.id]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {canManageWatchlist ? (
             <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
           ) : (
@@ -281,7 +352,7 @@ export default function AnalysisPage({
         <StatusLine
           loading={loading}
           okCount={okCount}
-          total={results.length}
+          total={visibleResults.length}
           secondsLeft={secondsLeft}
           onOpenSettings={() => setShowSettings(true)}
           onRefresh={() => void load()}
@@ -322,11 +393,24 @@ export default function AnalysisPage({
             <div className="text-sm text-fg-muted">Your watchlist is empty.</div>
             <div className="mt-1 text-xs text-fg-faint">Add a market above to start analysing.</div>
           </Card>
+        ) : visibleResults.length === 0 ? (
+          <Card className="p-8 text-center">
+            <div className="text-sm text-fg-muted">No markets match this filter.</div>
+            <button
+              type="button"
+              onClick={() => setAssetFilter("all")}
+              className="mt-2 text-xs font-medium text-accent hover:underline"
+            >
+              Show all markets
+            </button>
+          </Card>
         ) : (
           <SortableGrid
-            items={applyOrder(results, order)}
+            items={applyOrder(visibleResults, order)}
             onReorder={persistOrder}
-            canReorder={canManageWatchlist}
+            // A filtered grid is only part of the watchlist, so a drag would
+            // have no well-defined place for the hidden cards. Reorder on All.
+            canReorder={canManageWatchlist && assetFilter === "all"}
             className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]"
             renderItem={(r) =>
               r.ok ? (

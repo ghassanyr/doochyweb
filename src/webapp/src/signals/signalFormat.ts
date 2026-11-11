@@ -22,7 +22,7 @@ export const SIGNAL_DIRECTION: Record<SignalDirection, { label: string; tone: "s
 
 /** Price decimals scale with magnitude, matching the Analysis cards. */
 export function fmtPrice(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "-";
   const abs = Math.abs(v);
   const d = abs >= 1000 ? 2 : abs >= 10 ? 3 : abs >= 1 ? 4 : 6;
   return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -41,11 +41,11 @@ export function computeRR(
 }
 
 export function fmtRR(rr: number | null | undefined): string {
-  return rr == null || !Number.isFinite(rr) ? "—" : `${rr.toFixed(2)}R`;
+  return rr == null || !Number.isFinite(rr) ? "-" : `${rr.toFixed(2)}R`;
 }
 
 export function fmtPct(v: number | null | undefined): string {
-  return v == null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+  return v == null || !Number.isFinite(v) ? "-" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
 /** Distance from the current price to target/stop, in percent of price. */
@@ -128,5 +128,5 @@ export function signalShareText(signal: Signal): string {
 
 /** Human label for a timeframe id ("4h" → "4h"); unknown ids fall back to raw. */
 export function timeframeLabel(id: string | null | undefined): string {
-  return id ? id : "—";
+  return id ? id : "-";
 }

@@ -14,7 +14,7 @@ import { useDrill } from "./useDrill";
 
 function pctBucket(bucket: AccuracyBucket): string {
   const percent = accuracyPercent(bucket);
-  if (percent === null) return "—";
+  if (percent === null) return "-";
   return `${Math.round(percent)}%`;
 }
 
@@ -217,7 +217,7 @@ export default function LearnPage() {
             </p>
             <p>
               Take is correct when your call matches the realized outcome. Pass is
-              correct when it does not. A scratch — neither barrier hit first —
+              correct when it does not. A scratch, where neither barrier hit first,
               counts as a miss.
             </p>
             <p>

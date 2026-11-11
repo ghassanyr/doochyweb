@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import { ApiError, marketApi } from "../api";
 import { AnimatedModal } from "../components/Modal";
 import { BREAKOUT_STYLE, breakPct, breakoutDirection, fmtPct, fmtPrice } from "./breakoutFormat";
-import { SESSION_LABEL, fmtUtc3, relativeTime } from "./captures";
+import { SESSION_LABEL, fmtCaptureTime, relativeTime } from "./captures";
 import type { Breakout, NarrationBrief, NarrationNote } from "./types";
 
-const fmtShare = (r: number | null): string => (r == null ? "—" : `${(r * 100).toFixed(0)}%`);
-const fmtAtr = (x: number | null): string => (x == null ? "—" : `${Math.abs(x).toFixed(2)} ATR`);
+const fmtShare = (r: number | null): string => (r == null ? "-" : `${(r * 100).toFixed(0)}%`);
+const fmtAtr = (x: number | null): string => (x == null ? "-" : `${Math.abs(x).toFixed(2)} ATR`);
 
 function noteUrl(eventKey: string): string {
   const url = new URL(window.location.href);
@@ -120,7 +120,7 @@ export function BreakoutNoteModal({
   const style = breakout ? BREAKOUT_STYLE[breakout.type] : null;
   const symbol = breakout?.symbol ?? note?.symbol ?? "Breakout";
   const subtitle = breakout
-    ? `${style?.label ?? ""} break · ${SESSION_LABEL[breakout.session] ?? breakout.session} · ${fmtUtc3(breakout.timestamp_utc)}`
+    ? `${style?.label ?? ""} break · ${SESSION_LABEL[breakout.session] ?? breakout.session} · ${fmtCaptureTime(breakout.timestamp_utc)}`
     : "Research note";
 
   return (
@@ -168,7 +168,7 @@ export function BreakoutNoteModal({
           <div>
             <div className="text-[10px] uppercase tracking-wide text-fg-faint">Distance</div>
             <div className="mt-0.5 text-sm font-semibold tabular-nums text-fg">
-              {breakout.break_atr_mult == null ? "—" : `${Math.abs(breakout.break_atr_mult).toFixed(2)} ATR`}
+              {breakout.break_atr_mult == null ? "-" : `${Math.abs(breakout.break_atr_mult).toFixed(2)} ATR`}
             </div>
           </div>
           <div>
@@ -196,7 +196,7 @@ export function BreakoutNoteModal({
           {note.brief && <NarrationStats brief={note.brief} />}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3 text-[10.5px] text-fg-faint">
             <span>
-              {note.symbol ?? "—"} · generated {relativeTime(note.created_at)} · {note.model.split("/").pop()}
+              {note.symbol ?? "-"} · generated {relativeTime(note.created_at)} · {note.model.split("/").pop()}
             </span>
             {onOpenChart && (
               <button

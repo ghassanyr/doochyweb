@@ -128,7 +128,7 @@ function formatPrice(value: number): string {
 }
 
 function formatCell(value: unknown): string {
-  return value == null || value === "" ? "—" : `${value}`;
+  return value == null || value === "" ? "-" : `${value}`;
 }
 
 function priceRange(
@@ -434,14 +434,14 @@ function renderCard(
     `<header class="card-head">` +
     `<div class="badges">` +
     `<span class="badge tag">${escapeHtml(row.tag)}</span>` +
-    `<span class="badge dir">${escapeHtml(row.direction ?? "—")}</span>` +
+    `<span class="badge dir">${escapeHtml(row.direction ?? "-")}</span>` +
     `</div>` +
     `<span class="badge status status-${escapeHtml(row.status)}">` +
     `${escapeHtml(row.status)}</span></header>` +
     `<h2>${escapeHtml(row.id)}</h2>` +
     `<dl class="meta">${meta}</dl>` +
     `<div class="chart-wrap">${body}</div>` +
-    `<pre class="notes">${escapeHtml(row.notes || "—")}</pre>` +
+    `<pre class="notes">${escapeHtml(row.notes || "-")}</pre>` +
     `</article>`
   );
 }

@@ -21,7 +21,7 @@ import { noSourceError } from "../src/server/market/providers/index";
 import * as breaker from "../src/server/market/providers/breaker";
 import type { Candle, Timeframe } from "../src/server/market/types";
 import { applyOrder, moveTo, dropIndex } from "../src/webapp/src/market/order";
-import { changedSymbolCount, dayKey, dayLabel, fmtUtc3, groupChanges, matchesCapture, relativeTime } from "../src/webapp/src/market/captures";
+import { changedSymbolCount, dayKey, dayLabel, fmtCaptureTime, groupChanges, matchesCapture, relativeTime } from "../src/webapp/src/market/captures";
 import { computeConfluence } from "../src/webapp/src/market/confluence";
 import { timeframes as uiTimeframes } from "../src/webapp/src/market/timeframes";
 import type { Rating as UiRating, TimeframeRating as UiTimeframeRating } from "../src/webapp/src/market/types";
@@ -866,18 +866,30 @@ describe("market snapshot UI helpers", () => {
     };
   }
 
-  test("converts UTC to a fixed UTC+3 clock", () => {
+  test("renders capture times in the chosen zone", () => {
     const now = Date.parse("2026-10-26T18:00:00Z");
-    assert.equal(fmtUtc3("2026-10-26T17:04:00Z", now), "20:04 UTC+3");
-    assert.equal(fmtUtc3("2026-10-23T17:04:00Z", now), "23 Oct 20:04 UTC+3");
+    assert.equal(
+      fmtCaptureTime("2026-10-26T17:04:00Z", now, { timeZone: "Europe/Moscow" }),
+      "20:04 GMT+3"
+    );
+    assert.equal(
+      fmtCaptureTime("2026-10-23T17:04:00Z", now, { timeZone: "Europe/Moscow" }),
+      "23 Oct 20:04 GMT+3"
+    );
+    // Berlin is on standard time after the 25 Oct switch, so it shows GMT+1.
+    assert.equal(
+      fmtCaptureTime("2026-10-26T17:04:00Z", now, { timeZone: "Europe/Berlin" }),
+      "18:04 GMT+1"
+    );
   });
 
-  test("day keys and labels roll over in UTC+3", () => {
-    assert.equal(dayKey("2026-10-26T22:30:00Z"), "2026-10-27");
+  test("day keys and labels roll over in the chosen zone", () => {
+    assert.equal(dayKey("2026-10-26T22:30:00Z", { timeZone: "Europe/Moscow" }), "2026-10-27");
+    assert.equal(dayKey("2026-10-26T22:30:00Z", { timeZone: "UTC" }), "2026-10-26");
     const now = Date.parse("2026-10-26T12:00:00Z");
-    assert.equal(dayLabel("2026-10-26", now), "Today");
-    assert.equal(dayLabel("2026-10-25", now), "Yesterday");
-    assert.equal(dayLabel("2026-10-23", now), "23 Oct 2026");
+    assert.equal(dayLabel("2026-10-26", now, { timeZone: "UTC" }), "Today");
+    assert.equal(dayLabel("2026-10-25", now, { timeZone: "UTC" }), "Yesterday");
+    assert.equal(dayLabel("2026-10-23", now, { timeZone: "UTC" }), "23 Oct 2026");
   });
 
   test("relative time is compact", () => {

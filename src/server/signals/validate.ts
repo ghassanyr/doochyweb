@@ -50,6 +50,14 @@ export function validateSignalInput(
 
   const entry = asNumber(body.entry);
   if (entry !== null && entry <= 0) return { ok: false, error: "entry must be a positive number" };
+  // Direction fixes which side is the target even when no entry is given. This
+  // keeps automatic target/stop resolution unambiguous.
+  if (direction === "buy" && !(target > stop)) {
+    return { ok: false, error: "for a buy, target must be above stop" };
+  }
+  if (direction === "sell" && !(target < stop)) {
+    return { ok: false, error: "for a sell, target must be below stop" };
+  }
   if (entry !== null) {
     if (direction === "buy" && !(stop < entry && entry < target)) {
       return { ok: false, error: "for a buy, stop must be below entry and entry below target" };

@@ -1,8 +1,8 @@
-// Local-time formatting for the Signals tab.
+// Local-time formatting for every panel that shows market timestamps.
 //
-// The server stores UTC. Signals are the first surface that renders times in the
-// visitor's own zone rather than the fixed UTC+3 used by the older Breakouts and
-// Snapshot panels (those migrate in v2).
+// The server stores UTC. The UI renders times in the visitor's own zone, so a
+// trader in any region reads the clock they actually use. Signals, Breakouts and
+// the Snapshot panel all go through these helpers.
 //
 // Detection is one `Intl` call, cached for the page lifetime. Formatting always
 // goes through `Intl` with an explicit zone, so DST is handled by the platform.
@@ -45,7 +45,7 @@ function toDate(value: string | number | Date): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-interface TimeOptions {
+export interface TimeOptions {
   timeZone?: string;
   locale?: string;
 }
@@ -60,7 +60,7 @@ function parts(date: Date, opts: Required<Pick<TimeOptions, "timeZone">> & Intl.
 /** "14:32" in the chosen zone. */
 export function formatLocalTime(iso: string | number | Date, opts: TimeOptions = {}): string {
   const date = toDate(iso);
-  if (!date) return "—";
+  if (!date) return "-";
   const p = parts(date, {
     timeZone: opts.timeZone ?? detectedTimeZone(),
     hour: "2-digit",
@@ -73,7 +73,7 @@ export function formatLocalTime(iso: string | number | Date, opts: TimeOptions =
 /** "11 Nov 2026" in the chosen zone. */
 export function formatLocalDate(iso: string | number | Date, opts: TimeOptions = {}): string {
   const date = toDate(iso);
-  if (!date) return "—";
+  if (!date) return "-";
   const p = parts(date, {
     timeZone: opts.timeZone ?? detectedTimeZone(),
     day: "2-digit",
@@ -86,7 +86,7 @@ export function formatLocalDate(iso: string | number | Date, opts: TimeOptions =
 /** "11 Nov 2026, 14:32" in the chosen zone. */
 export function formatLocalDateTime(iso: string | number | Date, opts: TimeOptions = {}): string {
   const date = toDate(iso);
-  if (!date) return "—";
+  if (!date) return "-";
   const p = parts(date, {
     timeZone: opts.timeZone ?? detectedTimeZone(),
     day: "2-digit",
@@ -113,7 +113,7 @@ export function timeZoneLabel(opts: TimeOptions & { at?: string | number | Date 
 /** "11 Nov 2026, 14:32 GMT+2". */
 export function formatLocalTimestamp(iso: string | number | Date, opts: TimeOptions = {}): string {
   const date = toDate(iso);
-  if (!date) return "—";
+  if (!date) return "-";
   return `${formatLocalDateTime(date, opts)} ${timeZoneLabel({ ...opts, at: date })}`;
 }
 
@@ -136,7 +136,7 @@ export function localDayLabel(
   { now = new Date(), ...opts }: TimeOptions & { now?: Date } = {}
 ): string {
   const key = localDayKey(iso, opts);
-  if (!key) return "—";
+  if (!key) return "-";
   if (key === localDayKey(now, opts)) return "Today";
   if (key === localDayKey(new Date(now.getTime() - 86_400_000), opts)) return "Yesterday";
   return formatLocalDate(iso, opts);
