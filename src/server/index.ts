@@ -16,6 +16,8 @@ import { startSignalResolver } from "./signals/resolver";
 import { promoteConfiguredAdmins } from "./admin/roles";
 import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
+import { getSiteSettings } from "./settings/store";
+import { maintenanceGate, marketGate, moduleGate } from "./settings/access";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
 import { createTrainerRouter } from "./trainer/routes";
@@ -28,6 +30,11 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Trading data is unavailable during maintenance. Auth, /api/me, /api/config,
+// /api/admin and the OAuth callback stay reachable so an admin can sign in and
+// turn maintenance off again.
+app.use(["/api/accounts", "/api/connect", "/api/credentials"], maintenanceGate);
 
 app.post("/api/auth/register", async (req: Request, res: Response) => {
   try {
@@ -97,10 +104,17 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
       return;
     }
     const creds = await loadCredentials(req.userId!);
+    // /api/me stays reachable during maintenance so an allowed admin can be
+    // recognised, but live balances must not leak around the /api/accounts
+    // gate. Ordinary users get an empty list until maintenance ends.
+    const settings = await getSiteSettings();
+    const blocked =
+      settings.maintenance.enabled &&
+      !(settings.maintenance.allowAdmins && user.role === "admin");
     // listAccounts enriches each account with live balance + broker name (both
     // need a per-account broker round-trip), so /api/me returns the same shape
     // as /api/accounts rather than the raw stored rows.
-    const accounts = creds ? await listAccounts(req.userId!) : [];
+    const accounts = creds && !blocked ? await listAccounts(req.userId!) : [];
     res.json({
       username: user.username,
       role: (user.role as string | undefined) ?? "user",
@@ -446,9 +460,9 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 // public market quotes, so the Analysis page is usable without an account.
 // Everything under /api/accounts and /api/credentials stays behind auth.
 // -----------------------------------------------------------------------
-app.use("/api/market", marketRouter);
-app.use("/api/signals", signalsRouter);
-app.use("/api/trainer", createTrainerRouter());
+app.use("/api/market", maintenanceGate, marketGate, marketRouter);
+app.use("/api/signals", maintenanceGate, moduleGate("signals"), signalsRouter);
+app.use("/api/trainer", maintenanceGate, moduleGate("learn"), createTrainerRouter());
 app.use("/api/telegram", telegramRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/config", siteConfigRouter);

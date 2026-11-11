@@ -374,9 +374,52 @@ export interface ThemeSettings {
   ratingNeutral: string;
 }
 
+export type ModuleKey = "analysis" | "signals" | "breakouts" | "learn" | "trading";
+
+export type ModuleAccess = "public" | "signed-in";
+
+export interface ModuleSettings {
+  key: ModuleKey;
+  label: string;
+  hidden: boolean;
+  access: ModuleAccess;
+}
+
+export type LandingKey = "home" | "analysis" | "signals";
+
+export interface NavigationSettings {
+  modules: ModuleSettings[];
+  landing: {
+    signedIn: LandingKey;
+    signedOut: LandingKey;
+  };
+}
+
+export interface MaintenanceSettings {
+  enabled: boolean;
+  message: string;
+  allowAdmins: boolean;
+}
+
+export type AnnouncementTone = "info" | "success" | "warning" | "danger";
+
+export interface AnnouncementSettings {
+  enabled: boolean;
+  text: string;
+  tone: AnnouncementTone;
+  linkLabel: string;
+  linkUrl: string;
+  dismissible: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+}
+
 export interface SiteConfig {
   branding: BrandingSettings;
   theme: ThemeSettings;
+  navigation: NavigationSettings;
+  maintenance: MaintenanceSettings;
+  announcement: AnnouncementSettings;
   version: string | null;
 }
 
@@ -397,7 +440,13 @@ export const adminApi = {
 
   settings: () => request<{ settings: SiteSettings }>("/api/admin/settings"),
 
-  saveSettings: (patch: { branding?: Partial<BrandingSettings>; theme?: Partial<ThemeSettings> }) =>
+  saveSettings: (patch: {
+    branding?: Partial<BrandingSettings>;
+    theme?: Partial<ThemeSettings>;
+    navigation?: Partial<NavigationSettings>;
+    maintenance?: Partial<MaintenanceSettings>;
+    announcement?: Partial<AnnouncementSettings>;
+  }) =>
     request<{ settings: SiteSettings }>("/api/admin/settings", {
       method: "PUT",
       body: patch,

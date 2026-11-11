@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { LogIn, Settings } from "lucide-react";
-import { api, getToken, setToken, type ConnectInput } from "./api";
+import { LogIn } from "lucide-react";
+import { api, getToken, setToken, type ConnectInput, type ModuleKey } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import SignalsPage from "./signals/SignalsPage";
 import BreakoutsPage from "./market/BreakoutsPage";
@@ -12,11 +12,21 @@ import { isViewKey, pathForView, resolveRoute, type ViewKey } from "./routing";
 import AppShell from "./AppShell";
 import Dashboard from "./Dashboard";
 import Login from "./Login";
+import MaintenanceScreen from "./MaintenanceScreen";
 import SettingsPage from "./Settings";
 import TradingConnect from "./TradingConnect";
 import { useAccounts } from "./useAccounts";
 import { AnimatedModal } from "./components/Modal";
 import { Button, Card, Flash, Skeleton } from "./components/ui";
+import { FALLBACK_MAINTENANCE, FALLBACK_NAVIGATION, useSiteConfig } from "./siteConfig";
+
+const MODULE_VIEWS: readonly ModuleKey[] = [
+  "analysis",
+  "signals",
+  "breakouts",
+  "learn",
+  "trading",
+];
 
 // The Analysis, Breakouts and Learn pages are public: market quotes, the shared
 // watchlist, the breakout feed and the anonymous drill carry no account data.
@@ -55,12 +65,35 @@ export default function App() {
   const { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect } =
     useAccounts(signedIn);
   const isAdmin = me?.role === "admin";
+  const { config } = useSiteConfig();
+  const navigation = config?.navigation ?? FALLBACK_NAVIGATION;
+  const maintenance = config?.maintenance ?? FALLBACK_MAINTENANCE;
+  // The configured landing page applies once, to the root URL, after the
+  // session and public config are both known. Home stays reachable from the
+  // header afterwards.
+  const [landingApplied, setLandingApplied] = useState(false);
 
   // Canonicalize legacy query links once on load.
   useEffect(() => {
     const route = resolveRoute(window.location);
     if (route.redirectTo) window.history.replaceState(null, "", route.redirectTo);
   }, []);
+
+  useEffect(() => {
+    if (landingApplied || booting || !config) return;
+    setLandingApplied(true);
+    if (config.maintenance.enabled) return;
+    if (window.location.pathname !== "/") return;
+    const target = signedIn
+      ? config.navigation.landing.signedIn
+      : config.navigation.landing.signedOut;
+    if (target === "home") return;
+    setView(target);
+    const url = new URL(window.location.href);
+    url.pathname = pathForView(target);
+    url.search = "";
+    window.history.replaceState(null, "", url);
+  }, [landingApplied, booting, config, signedIn]);
 
   // Browser back/forward switches the view without a full page load.
   useEffect(() => {
@@ -184,6 +217,49 @@ export default function App() {
     handleViewChange("analysis");
   }
 
+  const viewModule = (MODULE_VIEWS as readonly string[]).includes(view)
+    ? (view as ModuleKey)
+    : null;
+  const viewAccess = viewModule
+    ? navigation.modules.find((module) => module.key === viewModule)?.access ??
+      (viewModule === "trading" ? "signed-in" : "public")
+    : "public";
+  const moduleLocked = !!viewModule && viewAccess === "signed-in" && !signedIn;
+  const lockedLabel = viewModule
+    ? navigation.modules.find((module) => module.key === viewModule)?.label ?? "this page"
+    : "";
+
+  const loginModal = (
+    <AnimatedModal
+      open={showLogin && !signedIn}
+      onClose={() => setShowLogin(false)}
+      title={authMode === "login" ? "Sign in" : "Create account"}
+      subtitle={
+        authMode === "login"
+          ? "Sign in to manage your cTrader accounts"
+          : "Create an account to get started"
+      }
+    >
+      <Login mode={authMode} onModeChange={setAuthMode} onAuthed={handleAuthed} />
+    </AnimatedModal>
+  );
+
+  // Maintenance covers the whole site for ordinary visitors. Auth, /api/me and
+  // the public config stay reachable so an allowed admin can sign in and turn it
+  // off from the admin panel.
+  if (maintenance.enabled && !(maintenance.allowAdmins && isAdmin)) {
+    return (
+      <>
+        <MaintenanceScreen
+          message={maintenance.message || FALLBACK_MAINTENANCE.message}
+          canSignIn={maintenance.allowAdmins}
+          onSignIn={openLogin}
+        />
+        {loginModal}
+      </>
+    );
+  }
+
   // Settings manages cTrader credentials, so it is a takeover for signed-in
   // users only and sits outside the shell.
   if (view === "settings" && signedIn) {
@@ -215,6 +291,12 @@ export default function App() {
             onRegister={() => openAuth("register")}
             onNavigate={handleViewChange}
           />
+        ) : moduleLocked ? (
+          <SignInPrompt
+            title={`Sign in to view ${lockedLabel}`}
+            body={`${lockedLabel} is available to signed-in members. Sign in to continue, or keep using the public pages.`}
+            onSignIn={openLogin}
+          />
         ) : view === "admin" ? (
           isAdmin ? (
             <AdminPage currentUsername={me?.username} onNavigate={handleViewChange} />
@@ -236,55 +318,11 @@ export default function App() {
         ) : view === "learn" ? (
           <LearnPage />
         ) : view === "settings" ? (
-          <div className="mx-auto w-full max-w-lg">
-            <Card className="p-8 text-center shadow-overlay">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
-                <Settings className="h-5 w-5" />
-              </div>
-              <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">
-                Sign in to manage settings
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-                Settings holds your cTrader connection, account preferences and notification
-                options. Sign in to continue.
-              </p>
-              <div className="mt-5 flex justify-center">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  icon={<LogIn className="h-4 w-4" />}
-                  onClick={openLogin}
-                >
-                  Sign in
-                </Button>
-              </div>
-            </Card>
-          </div>
-        ) : !signedIn ? (
-          <div className="mx-auto w-full max-w-lg">
-            <Card className="p-8 text-center shadow-overlay">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
-                <LogIn className="h-5 w-5" />
-              </div>
-              <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">
-                Sign in to view trading
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-                The Trading tab shows your cTrader balances, positions and orders. Sign in to view
-                them, or keep using the public market pages.
-              </p>
-              <div className="mt-5 flex justify-center">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  icon={<LogIn className="h-4 w-4" />}
-                  onClick={openLogin}
-                >
-                  Sign in
-                </Button>
-              </div>
-            </Card>
-          </div>
+          <SignInPrompt
+            title="Sign in to manage settings"
+            body="Settings holds your cTrader connection, account preferences and notification options. Sign in to continue."
+            onSignIn={openLogin}
+          />
         ) : (
           <>
             {oauthNotice && (
@@ -310,19 +348,40 @@ export default function App() {
         )}
       </AppShell>
 
-      <AnimatedModal
-        open={showLogin && !signedIn}
-        onClose={() => setShowLogin(false)}
-        title={authMode === "login" ? "Sign in" : "Create account"}
-        subtitle={
-          authMode === "login"
-            ? "Sign in to manage your cTrader accounts"
-            : "Create an account to get started"
-        }
-      >
-        <Login mode={authMode} onModeChange={setAuthMode} onAuthed={handleAuthed} />
-      </AnimatedModal>
+      {loginModal}
     </>
+  );
+}
+
+function SignInPrompt({
+  title,
+  body,
+  onSignIn,
+}: {
+  title: string;
+  body: string;
+  onSignIn: () => void;
+}) {
+  return (
+    <div className="mx-auto w-full max-w-lg">
+      <Card className="p-8 text-center shadow-overlay">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
+          <LogIn className="h-5 w-5" />
+        </div>
+        <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">{title}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-fg-muted">{body}</p>
+        <div className="mt-5 flex justify-center">
+          <Button
+            variant="primary"
+            size="lg"
+            icon={<LogIn className="h-4 w-4" />}
+            onClick={onSignIn}
+          >
+            Sign in
+          </Button>
+        </div>
+      </Card>
+    </div>
   );
 }
 

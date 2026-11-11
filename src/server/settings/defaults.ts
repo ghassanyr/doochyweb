@@ -1,8 +1,17 @@
-// Default site presentation. The theme mirrors the tokens in
+// Default site presentation and access rules. The theme mirrors the tokens in
 // src/webapp/src/index.css so a fresh deployment looks exactly like today's
 // build, and every value can be overridden from the admin panel.
 
-import type { BrandingSettings, SiteSettings, ThemeSettings } from "./types";
+import type {
+  AnnouncementSettings,
+  BrandingSettings,
+  MaintenanceSettings,
+  ModuleKey,
+  ModuleSettings,
+  NavigationSettings,
+  SiteSettings,
+  ThemeSettings,
+} from "./types";
 
 export const DEFAULT_BRANDING: BrandingSettings = {
   name: "Doochy",
@@ -35,11 +44,57 @@ export const DEFAULT_THEME: ThemeSettings = {
   ratingNeutral: "#94a3b8",
 };
 
+/** Every module key, in the order the shell has always shown them. */
+export const MODULE_KEYS: readonly ModuleKey[] = [
+  "analysis",
+  "signals",
+  "breakouts",
+  "learn",
+  "trading",
+];
+
+/** Default tabs in the order the shell has always shown them. */
+export const DEFAULT_MODULES: ModuleSettings[] = [
+  { key: "analysis", label: "Analysis", hidden: false, access: "public" },
+  { key: "signals", label: "Signals", hidden: false, access: "public" },
+  { key: "breakouts", label: "Breakouts", hidden: false, access: "public" },
+  { key: "learn", label: "Learn", hidden: false, access: "public" },
+  { key: "trading", label: "Trading", hidden: false, access: "signed-in" },
+];
+
+export const DEFAULT_NAVIGATION: NavigationSettings = {
+  modules: DEFAULT_MODULES.map((module) => ({ ...module })),
+  landing: { signedIn: "home", signedOut: "home" },
+};
+
+export const DEFAULT_MAINTENANCE: MaintenanceSettings = {
+  enabled: false,
+  message: "We're making some improvements. Please check back soon.",
+  allowAdmins: true,
+};
+
+export const DEFAULT_ANNOUNCEMENT: AnnouncementSettings = {
+  enabled: false,
+  text: "",
+  tone: "info",
+  linkLabel: "",
+  linkUrl: "",
+  dismissible: true,
+  startsAt: null,
+  endsAt: null,
+};
+
 /** The complete settings shape when no document exists yet. */
 export function defaultSiteSettings(): SiteSettings {
   return {
     branding: { ...DEFAULT_BRANDING },
     theme: { ...DEFAULT_THEME },
+    navigation: {
+      modules: DEFAULT_MODULES.map((module) => ({ ...module })),
+      landing: { ...DEFAULT_NAVIGATION.landing },
+    },
+    maintenance: { ...DEFAULT_MAINTENANCE },
+    announcement: { ...DEFAULT_ANNOUNCEMENT },
     version: null,
     updatedAt: null,
     updatedBy: null,

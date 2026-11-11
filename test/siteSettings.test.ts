@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { DEFAULT_BRANDING, DEFAULT_THEME } from "../src/server/settings/defaults";
+import {
+  DEFAULT_ANNOUNCEMENT,
+  DEFAULT_BRANDING,
+  DEFAULT_MAINTENANCE,
+  DEFAULT_NAVIGATION,
+  DEFAULT_THEME,
+} from "../src/server/settings/defaults";
 import { mergeSiteSettings, publicSiteConfig } from "../src/server/settings/store";
 import {
   SettingsValidationError,
+  normalizeAnnouncement,
   normalizeBranding,
+  normalizeMaintenance,
+  normalizeNavigation,
   normalizeTheme,
 } from "../src/server/settings/validate";
 
@@ -17,6 +26,9 @@ describe("site settings defaults", () => {
     const settings = mergeSiteSettings(null);
     assert.deepEqual(settings.branding, DEFAULT_BRANDING);
     assert.deepEqual(settings.theme, DEFAULT_THEME);
+    assert.deepEqual(settings.navigation, DEFAULT_NAVIGATION);
+    assert.deepEqual(settings.maintenance, DEFAULT_MAINTENANCE);
+    assert.deepEqual(settings.announcement, DEFAULT_ANNOUNCEMENT);
     assert.equal(settings.version, null);
     assert.equal(settings.updatedAt, null);
     assert.equal(settings.updatedBy, null);
@@ -45,7 +57,14 @@ describe("site settings defaults", () => {
       updatedBy: "alice",
     });
     const config = publicSiteConfig(settings);
-    assert.deepEqual(Object.keys(config).sort(), ["branding", "theme", "version"]);
+    assert.deepEqual(Object.keys(config).sort(), [
+      "announcement",
+      "branding",
+      "maintenance",
+      "navigation",
+      "theme",
+      "version",
+    ]);
     assert.equal("updatedBy" in config, false);
   });
 });
@@ -143,5 +162,169 @@ describe("normalizeTheme", () => {
 
   test("an empty patch returns the base theme", () => {
     assert.deepEqual(normalizeTheme(undefined, DEFAULT_THEME), DEFAULT_THEME);
+  });
+});
+
+describe("normalizeNavigation", () => {
+  test("keeps the submitted order and applies labels", () => {
+    const navigation = normalizeNavigation(
+      {
+        modules: [
+          { key: "signals", label: "Ideas", hidden: false, access: "public" },
+          { key: "analysis", label: "Market", hidden: true, access: "signed-in" },
+        ],
+      },
+      DEFAULT_NAVIGATION
+    );
+
+    assert.equal(navigation.modules[0].key, "signals");
+    assert.equal(navigation.modules[0].label, "Ideas");
+    assert.equal(navigation.modules[1].hidden, true);
+    assert.equal(navigation.modules[1].access, "signed-in");
+    // Omitted modules are appended from the defaults so no tab vanishes.
+    assert.deepEqual(
+      navigation.modules.slice(2).map((module) => module.key),
+      ["breakouts", "learn", "trading"]
+    );
+  });
+
+  test("forces trading to signed-in", () => {
+    const navigation = normalizeNavigation(
+      { modules: [{ key: "trading", label: "Desk", hidden: false, access: "public" }] },
+      DEFAULT_NAVIGATION
+    );
+    assert.equal(navigation.modules.find((module) => module.key === "trading")?.access, "signed-in");
+  });
+
+  test("accepts landing pages", () => {
+    const navigation = normalizeNavigation(
+      { landing: { signedIn: "analysis", signedOut: "signals" } },
+      DEFAULT_NAVIGATION
+    );
+    assert.deepEqual(navigation.landing, { signedIn: "analysis", signedOut: "signals" });
+  });
+
+  test("rejects an unknown module", () => {
+    assert.throws(
+      () => normalizeNavigation({ modules: [{ key: "news" }] }, DEFAULT_NAVIGATION),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects duplicate modules", () => {
+    assert.throws(
+      () =>
+        normalizeNavigation(
+          { modules: [{ key: "signals" }, { key: "signals" }] },
+          DEFAULT_NAVIGATION
+        ),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects an empty label", () => {
+    assert.throws(
+      () =>
+        normalizeNavigation(
+          { modules: [{ key: "signals", label: "   " }] },
+          DEFAULT_NAVIGATION
+        ),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects an unknown landing page", () => {
+    assert.throws(
+      () => normalizeNavigation({ landing: { signedIn: "trading" } }, DEFAULT_NAVIGATION),
+      SettingsValidationError
+    );
+  });
+
+  test("an empty patch returns the base", () => {
+    assert.deepEqual(normalizeNavigation(undefined, DEFAULT_NAVIGATION), DEFAULT_NAVIGATION);
+  });
+});
+
+describe("normalizeMaintenance", () => {
+  test("merges booleans and trims the message", () => {
+    const maintenance = normalizeMaintenance(
+      { enabled: true, message: "  Back soon  " },
+      DEFAULT_MAINTENANCE
+    );
+    assert.equal(maintenance.enabled, true);
+    assert.equal(maintenance.message, "Back soon");
+    assert.equal(maintenance.allowAdmins, DEFAULT_MAINTENANCE.allowAdmins);
+  });
+
+  test("rejects a non-boolean", () => {
+    assert.throws(
+      () => normalizeMaintenance({ enabled: "yes" }, DEFAULT_MAINTENANCE),
+      SettingsValidationError
+    );
+  });
+});
+
+describe("normalizeAnnouncement", () => {
+  test("accepts a scheduled announcement", () => {
+    const announcement = normalizeAnnouncement(
+      {
+        enabled: true,
+        text: "  New signals  ",
+        tone: "success",
+        linkUrl: "/signals",
+        linkLabel: "Open",
+        startsAt: "2026-01-01T10:00:00.000Z",
+        endsAt: "2026-01-02T10:00:00.000Z",
+      },
+      DEFAULT_ANNOUNCEMENT
+    );
+
+    assert.equal(announcement.text, "New signals");
+    assert.equal(announcement.tone, "success");
+    assert.equal(announcement.linkUrl, "/signals");
+    assert.equal(announcement.startsAt, "2026-01-01T10:00:00.000Z");
+  });
+
+  test("requires text when enabled", () => {
+    assert.throws(
+      () => normalizeAnnouncement({ enabled: true, text: "   " }, DEFAULT_ANNOUNCEMENT),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects an unknown tone", () => {
+    assert.throws(
+      () => normalizeAnnouncement({ tone: "purple" }, DEFAULT_ANNOUNCEMENT),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects a javascript link", () => {
+    assert.throws(
+      () => normalizeAnnouncement({ linkUrl: "javascript:alert(1)" }, DEFAULT_ANNOUNCEMENT),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects an end before the start", () => {
+    assert.throws(
+      () =>
+        normalizeAnnouncement(
+          {
+            startsAt: "2026-01-02T00:00:00.000Z",
+            endsAt: "2026-01-01T00:00:00.000Z",
+          },
+          DEFAULT_ANNOUNCEMENT
+        ),
+      SettingsValidationError
+    );
+  });
+
+  test("clears a date with null", () => {
+    const announcement = normalizeAnnouncement(
+      { startsAt: null, endsAt: null },
+      { ...DEFAULT_ANNOUNCEMENT, startsAt: "2026-01-01T00:00:00.000Z" }
+    );
+    assert.equal(announcement.startsAt, null);
   });
 });

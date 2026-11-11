@@ -1,10 +1,11 @@
 import { type ReactNode } from "react";
 import { LogIn, LogOut, Moon, Settings, Sun } from "lucide-react";
 
+import { AnnouncementBanner } from "./AnnouncementBanner";
 import { RouteLink } from "./components/RouteLink";
 import { Button } from "./components/ui";
 import { pathForView, type ViewKey } from "./routing";
-import { useSiteConfig } from "./siteConfig";
+import { FALLBACK_ANNOUNCEMENT, FALLBACK_MODULES, useSiteConfig } from "./siteConfig";
 
 // Top-level shell: brand, primary navigation, and the account-level actions
 // (settings / sign out). The Analysis, Breakouts, Learn and Trading views render
@@ -14,14 +15,9 @@ import { useSiteConfig } from "./siteConfig";
 // top-level views could share it. Styling follows the standalone Gauge project:
 // sticky translucent topbar, a segmented control for the primary nav, and the
 // 1600px page measure.
-
-const NAV: { key: ViewKey; label: string }[] = [
-  { key: "analysis", label: "Analysis" },
-  { key: "signals", label: "Signals" },
-  { key: "breakouts", label: "Breakouts" },
-  { key: "learn", label: "Learn" },
-  { key: "trading", label: "Trading" },
-];
+//
+// Tab order, labels and visibility come from site settings; the Admin tab is
+// appended for admins and is not configurable.
 
 const ADMIN_NAV: { key: ViewKey; label: string } = { key: "admin", label: "Admin" };
 
@@ -47,8 +43,15 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
-  const nav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
-  const { branding, mode, toggleMode } = useSiteConfig();
+  const { config, branding, mode, toggleMode } = useSiteConfig();
+  const modules = (config?.navigation.modules ?? FALLBACK_MODULES).filter(
+    (module) => !module.hidden
+  );
+  const nav: { key: ViewKey; label: string }[] = modules.map((module) => ({
+    key: module.key,
+    label: module.label,
+  }));
+  const items = isAdmin ? [...nav, ADMIN_NAV] : nav;
   const logoUrl = branding.logoUrl || "/doochy-mark-80.png";
   const defaultLogo = !branding.logoUrl;
   const nextMode = mode === "dark" ? "light" : "dark";
@@ -88,7 +91,7 @@ export function AppShell({
             className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-soft p-[3px]"
             aria-label="Primary"
           >
-            {nav.map((n) => {
+            {items.map((n) => {
               const active =
                 view === n.key || (n.key === "admin" && view === "admin-settings");
               return (
@@ -159,6 +162,8 @@ export function AppShell({
           </div>
         </div>
       </header>
+
+      <AnnouncementBanner announcement={config?.announcement ?? FALLBACK_ANNOUNCEMENT} />
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
 

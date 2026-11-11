@@ -5,7 +5,20 @@
 // Anything that reaches the database has been trimmed, length-checked and, for
 // colours and URLs, format-checked.
 
-import type { BrandingSettings, ThemeMode, ThemeSettings } from "./types";
+import { DEFAULT_MODULES, MODULE_KEYS } from "./defaults";
+import type {
+  AnnouncementSettings,
+  AnnouncementTone,
+  BrandingSettings,
+  LandingKey,
+  MaintenanceSettings,
+  ModuleAccess,
+  ModuleKey,
+  ModuleSettings,
+  NavigationSettings,
+  ThemeMode,
+  ThemeSettings,
+} from "./types";
 
 export class SettingsValidationError extends Error {
   constructor(message: string) {
@@ -144,4 +157,189 @@ export function normalizeTheme(patch: unknown, base: ThemeSettings): ThemeSettin
   }
 
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// Navigation, maintenance and announcement
+// ---------------------------------------------------------------------------
+
+const LANDING_KEYS: readonly LandingKey[] = ["home", "analysis", "signals"];
+const ANNOUNCEMENT_TONES: readonly AnnouncementTone[] = ["info", "success", "warning", "danger"];
+
+function readBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: boolean
+): boolean {
+  if (!(key in source) || source[key] === undefined) return fallback;
+  if (typeof source[key] !== "boolean") {
+    throw new SettingsValidationError(`${key} must be true or false`);
+  }
+  return source[key] as boolean;
+}
+
+function readLanding(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: LandingKey
+): LandingKey {
+  if (!(key in source) || source[key] === undefined) return fallback;
+  const raw = source[key];
+  if (typeof raw === "string" && (LANDING_KEYS as readonly string[]).includes(raw)) {
+    return raw as LandingKey;
+  }
+  throw new SettingsValidationError("landing page must be home, analysis or signals");
+}
+
+function readTone(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: AnnouncementTone
+): AnnouncementTone {
+  if (!(key in source) || source[key] === undefined) return fallback;
+  const raw = source[key];
+  if (typeof raw === "string" && (ANNOUNCEMENT_TONES as readonly string[]).includes(raw)) {
+    return raw as AnnouncementTone;
+  }
+  throw new SettingsValidationError("tone must be info, success, warning or danger");
+}
+
+/** Null clears the bound; a date string is normalised to ISO. */
+function readDate(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: string | null
+): string | null {
+  if (!(key in source) || source[key] === undefined) return fallback;
+  const raw = source[key];
+  if (raw === null || raw === "") return null;
+  const date = raw instanceof Date ? raw : typeof raw === "string" ? new Date(raw) : null;
+  if (!date || !Number.isFinite(date.getTime())) {
+    throw new SettingsValidationError(`${key} must be a valid date or null`);
+  }
+  return date.toISOString();
+}
+
+function defaultModule(key: ModuleKey): ModuleSettings {
+  return DEFAULT_MODULES.find((module) => module.key === key) ?? DEFAULT_MODULES[0];
+}
+
+/**
+ * Normalise the ordered module list. The client always sends the full list;
+ * any module it omits is appended in the default order so a partial patch can
+ * never make a tab disappear from the shell entirely.
+ */
+export function normalizeModules(patch: unknown, base: ModuleSettings[]): ModuleSettings[] {
+  if (patch === undefined) return base.map((module) => ({ ...module }));
+  if (!Array.isArray(patch)) {
+    throw new SettingsValidationError("modules must be an array");
+  }
+
+  const seen = new Set<ModuleKey>();
+  const next: ModuleSettings[] = [];
+
+  for (const entry of patch) {
+    const source = plainObject(entry);
+    const key = source.key;
+    if (typeof key !== "string" || !(MODULE_KEYS as readonly string[]).includes(key)) {
+      throw new SettingsValidationError("modules must use a known module key");
+    }
+    const moduleKey = key as ModuleKey;
+    if (seen.has(moduleKey)) {
+      throw new SettingsValidationError(`duplicate module: ${moduleKey}`);
+    }
+    seen.add(moduleKey);
+
+    const current = base.find((module) => module.key === moduleKey) ?? defaultModule(moduleKey);
+    const label = readString(source, "label", current.label, 32);
+    if (!label) throw new SettingsValidationError("module labels cannot be empty");
+
+    let access: ModuleAccess = current.access;
+    if (source.access !== undefined) {
+      if (source.access !== "public" && source.access !== "signed-in") {
+        throw new SettingsValidationError("module access must be public or signed-in");
+      }
+      access = source.access;
+    }
+    // Trading always needs a session; the trading API is auth-only.
+    if (moduleKey === "trading") access = "signed-in";
+
+    next.push({
+      key: moduleKey,
+      label,
+      hidden: readBoolean(source, "hidden", current.hidden),
+      access,
+    });
+  }
+
+  for (const fallback of DEFAULT_MODULES) {
+    if (seen.has(fallback.key)) continue;
+    const current = base.find((module) => module.key === fallback.key) ?? fallback;
+    next.push({ ...current, access: fallback.key === "trading" ? "signed-in" : current.access });
+  }
+
+  return next;
+}
+
+export function normalizeNavigation(
+  patch: unknown,
+  base: NavigationSettings
+): NavigationSettings {
+  const source = plainObject(patch);
+  const landingSource = plainObject(source.landing);
+
+  return {
+    modules: normalizeModules(source.modules, base.modules),
+    landing: {
+      signedIn: readLanding(landingSource, "signedIn", base.landing.signedIn),
+      signedOut: readLanding(landingSource, "signedOut", base.landing.signedOut),
+    },
+  };
+}
+
+export function normalizeMaintenance(
+  patch: unknown,
+  base: MaintenanceSettings
+): MaintenanceSettings {
+  const source = plainObject(patch);
+  return {
+    enabled: readBoolean(source, "enabled", base.enabled),
+    message: readString(source, "message", base.message, 500),
+    allowAdmins: readBoolean(source, "allowAdmins", base.allowAdmins),
+  };
+}
+
+export function normalizeAnnouncement(
+  patch: unknown,
+  base: AnnouncementSettings
+): AnnouncementSettings {
+  const source = plainObject(patch);
+
+  const text = readString(source, "text", base.text, 300);
+  const enabled = readBoolean(source, "enabled", base.enabled);
+  if (enabled && !text) {
+    throw new SettingsValidationError("announcement text is required when enabled");
+  }
+
+  const linkUrl = readString(source, "linkUrl", base.linkUrl, 500);
+  if (linkUrl && !linkUrl.startsWith("/") && !HTTP_URL.test(linkUrl)) {
+    throw new SettingsValidationError("linkUrl must start with / or be an http(s) URL");
+  }
+
+  const startsAt = readDate(source, "startsAt", base.startsAt);
+  const endsAt = readDate(source, "endsAt", base.endsAt);
+  if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    throw new SettingsValidationError("endsAt must be after startsAt");
+  }
+
+  return {
+    enabled,
+    text,
+    tone: readTone(source, "tone", base.tone),
+    linkLabel: readString(source, "linkLabel", base.linkLabel, 40),
+    linkUrl,
+    dismissible: readBoolean(source, "dismissible", base.dismissible),
+    startsAt,
+    endsAt,
+  };
 }

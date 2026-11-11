@@ -43,6 +43,25 @@ export function signToken(userId: string): string {
   return jwt.sign({ userId }, jwtSecret(), { expiresIn: JWT_TTL });
 }
 
+/** User id from a valid bearer token, or null. Never writes a response. */
+export function tokenUserId(req: Request): string | null {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith("Bearer ")) return null;
+  try {
+    const payload: any = jwt.verify(header.slice(7), jwtSecret());
+    return payload && typeof payload.userId === "string" ? payload.userId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Read the role from the database; used by the maintenance gate. */
+export async function isAdminUser(userId: string | null): Promise<boolean> {
+  if (!userId) return false;
+  const user = await User.findById(userId).lean().exec();
+  return ((user?.role as UserRole | undefined) ?? "user") === "admin";
+}
+
 // Short-lived state carried through the cTrader OAuth browser round-trip. The
 // signature is what proves which Doochy user started the flow: the callback
 // is a top-level navigation and cannot send the normal Authorization header.

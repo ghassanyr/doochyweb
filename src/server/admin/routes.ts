@@ -57,7 +57,13 @@ adminRouter.get("/settings", adminRequired, async (_req, res) => {
 adminRouter.put("/settings", adminRequired, async (req: AuthedRequest, res) => {
   try {
     const settings = await saveSiteSettings(
-      { branding: req.body?.branding, theme: req.body?.theme },
+      {
+        branding: req.body?.branding,
+        theme: req.body?.theme,
+        navigation: req.body?.navigation,
+        maintenance: req.body?.maintenance,
+        announcement: req.body?.announcement,
+      },
       req.username ?? req.userId ?? "admin"
     );
     res.json({ settings });

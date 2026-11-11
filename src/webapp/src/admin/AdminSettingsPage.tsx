@@ -1,9 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, Palette, RotateCcw, Save, Type, Upload } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  Megaphone,
+  Navigation,
+  Palette,
+  RotateCcw,
+  Save,
+  Type,
+  Upload,
+  Wrench,
+} from "lucide-react";
 
 import {
   adminApi,
+  type AnnouncementSettings,
+  type AnnouncementTone,
   type BrandingSettings,
+  type LandingKey,
+  type MaintenanceSettings,
+  type ModuleAccess,
+  type ModuleSettings,
+  type NavigationSettings,
   type SiteSettings,
   type ThemeSettings,
 } from "../api";
@@ -60,6 +80,24 @@ const COLOR_GROUPS: { title: string; fields: { key: ColorKey; label: string }[] 
 const compactInput =
   "rounded-md border border-hairline-strong bg-canvas px-2 py-1 text-[11px] text-fg " +
   "focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40";
+
+const ACCESS_OPTIONS: { value: ModuleAccess; label: string }[] = [
+  { value: "public", label: "Public" },
+  { value: "signed-in", label: "Signed-in only" },
+];
+
+const LANDING_OPTIONS: { value: LandingKey; label: string }[] = [
+  { value: "home", label: "Home" },
+  { value: "analysis", label: "Analysis" },
+  { value: "signals", label: "Signals" },
+];
+
+const TONE_OPTIONS: { value: AnnouncementTone; label: string }[] = [
+  { value: "info", label: "Info" },
+  { value: "success", label: "Success" },
+  { value: "warning", label: "Warning" },
+  { value: "danger", label: "Danger" },
+];
 
 function TextField({
   label,
@@ -134,6 +172,89 @@ function ColorField({
   );
 }
 
+function Toggle({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={`flex items-center gap-2 text-xs font-medium ${
+        disabled ? "text-fg-faint" : "text-fg-muted"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 accent-accent"
+      />
+      {label}
+    </label>
+  );
+}
+
+function SelectField<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  hint,
+  disabled = false,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: { value: T; label: string }[];
+  hint?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs font-medium text-fg-muted">{label}</span>
+      <select
+        className={inputCls}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as T)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {hint && <span className="block text-[11px] text-fg-faint">{hint}</span>}
+    </label>
+  );
+}
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+/** ISO timestamp -> the local value a datetime-local input expects. */
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "";
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+/** datetime-local value -> ISO, or null when the field is empty. */
+function localInputToIso(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 export default function AdminSettingsPage({
   onNavigate,
 }: {
@@ -143,6 +264,9 @@ export default function AdminSettingsPage({
   const [loaded, setLoaded] = useState<SiteSettings | null>(null);
   const [branding, setBranding] = useState<BrandingSettings | null>(null);
   const [theme, setTheme] = useState<ThemeSettings | null>(null);
+  const [navigation, setNavigation] = useState<NavigationSettings | null>(null);
+  const [maintenance, setMaintenance] = useState<MaintenanceSettings | null>(null);
+  const [announcement, setAnnouncement] = useState<AnnouncementSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -161,6 +285,9 @@ export default function AdminSettingsPage({
         setLoaded(settings);
         setBranding(settings.branding);
         setTheme(settings.theme);
+        setNavigation(settings.navigation);
+        setMaintenance(settings.maintenance);
+        setAnnouncement(settings.announcement);
       })
       .catch((err) => {
         if (alive) setError(err instanceof Error ? err.message : "Failed to load site settings");
@@ -192,31 +319,48 @@ export default function AdminSettingsPage({
   }, [theme]);
 
   const dirty = useMemo(() => {
-    if (!loaded || !branding || !theme) return false;
+    if (!loaded || !branding || !theme || !navigation || !maintenance || !announcement) {
+      return false;
+    }
     return (
       JSON.stringify(branding) !== JSON.stringify(loaded.branding) ||
-      JSON.stringify(theme) !== JSON.stringify(loaded.theme)
+      JSON.stringify(theme) !== JSON.stringify(loaded.theme) ||
+      JSON.stringify(navigation) !== JSON.stringify(loaded.navigation) ||
+      JSON.stringify(maintenance) !== JSON.stringify(loaded.maintenance) ||
+      JSON.stringify(announcement) !== JSON.stringify(loaded.announcement)
     );
-  }, [loaded, branding, theme]);
+  }, [loaded, branding, theme, navigation, maintenance, announcement]);
 
   function reset() {
     if (!loaded) return;
     setBranding(loaded.branding);
     setTheme(loaded.theme);
+    setNavigation(loaded.navigation);
+    setMaintenance(loaded.maintenance);
+    setAnnouncement(loaded.announcement);
     applyTheme(loaded.theme);
     setSaved(false);
     setError(null);
   }
 
   async function save() {
-    if (!branding || !theme) return;
+    if (!branding || !theme || !navigation || !maintenance || !announcement) return;
     setError(null);
     setSaved(false);
     try {
-      const { settings } = await adminApi.saveSettings({ branding, theme });
+      const { settings } = await adminApi.saveSettings({
+        branding,
+        theme,
+        navigation,
+        maintenance,
+        announcement,
+      });
       setLoaded(settings);
       setBranding(settings.branding);
       setTheme(settings.theme);
+      setNavigation(settings.navigation);
+      setMaintenance(settings.maintenance);
+      setAnnouncement(settings.announcement);
       // Push the saved values into the provider so the header, title and
       // palette update without a reload.
       setConfig(settings);
@@ -258,7 +402,7 @@ export default function AdminSettingsPage({
     );
   }
 
-  if (!branding || !theme) {
+  if (!branding || !theme || !navigation || !maintenance || !announcement) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-3">
         <Flash tone="danger">{error ?? "Site settings are unavailable."}</Flash>
@@ -271,6 +415,29 @@ export default function AdminSettingsPage({
 
   const logoPreview = branding.logoUrl || "/doochy-mark-80.png";
   const logoIsUpload = branding.logoUrl.startsWith("data:");
+
+  function updateModule(index: number, patch: Partial<ModuleSettings>) {
+    setNavigation((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        modules: current.modules.map((module, i) =>
+          i === index ? { ...module, ...patch } : module
+        ),
+      };
+    });
+  }
+
+  function moveModule(index: number, delta: number) {
+    setNavigation((current) => {
+      if (!current) return current;
+      const target = index + delta;
+      if (target < 0 || target >= current.modules.length) return current;
+      const modules = [...current.modules];
+      [modules[index], modules[target]] = [modules[target], modules[index]];
+      return { ...current, modules };
+    });
+  }
 
   return (
     <FadeRise>
@@ -288,8 +455,8 @@ export default function AdminSettingsPage({
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-fg">Site settings</h1>
               <p className="text-sm text-fg-muted">
-                Branding and theme for every visitor. Theme colours preview live; everything
-                publishes on save.
+                Branding, navigation and access for every visitor. Theme colours preview live;
+                everything publishes on save.
               </p>
             </div>
           </div>
@@ -318,7 +485,7 @@ export default function AdminSettingsPage({
         {error && <Flash tone="danger">{error}</Flash>}
         {saved && (
           <Flash tone="success">
-            Saved. Visitors see the new branding on their next load.
+            Saved. Visitors see the changes on their next load.
           </Flash>
         )}
         {invalidColors.length > 0 && (
@@ -500,6 +667,237 @@ export default function AdminSettingsPage({
               </div>
             </div>
           ))}
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Navigation className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Navigation</h2>
+              <p className="text-xs text-fg-muted">
+                Rename, reorder and hide tabs. Hidden tabs stay reachable by direct link.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {navigation.modules.map((module, index) => (
+              <div
+                key={module.key}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-hairline bg-soft px-2.5 py-2"
+              >
+                <span className="w-[74px] shrink-0 font-mono text-[10px] uppercase tracking-wide text-fg-faint">
+                  {module.key}
+                </span>
+                <input
+                  value={module.label}
+                  onChange={(event) => updateModule(index, { label: event.target.value })}
+                  maxLength={32}
+                  aria-label={`${module.key} tab label`}
+                  className={`${compactInput} min-w-[120px] flex-1`}
+                />
+                <select
+                  value={module.access}
+                  disabled={module.key === "trading"}
+                  onChange={(event) =>
+                    updateModule(index, { access: event.target.value as ModuleAccess })
+                  }
+                  aria-label={`${module.key} access`}
+                  className={`${compactInput} w-[128px]`}
+                >
+                  {ACCESS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <Toggle
+                  checked={!module.hidden}
+                  onChange={(visible) => updateModule(index, { hidden: !visible })}
+                  label="Show"
+                />
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === 0}
+                    onClick={() => moveModule(index, -1)}
+                    aria-label={`Move ${module.label} up`}
+                    title="Move up"
+                    icon={<ArrowUp className="h-3.5 w-3.5" />}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === navigation.modules.length - 1}
+                    onClick={() => moveModule(index, 1)}
+                    aria-label={`Move ${module.label} down`}
+                    title="Move down"
+                    icon={<ArrowDown className="h-3.5 w-3.5" />}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SelectField
+              label="Landing page — signed in"
+              value={navigation.landing.signedIn}
+              onChange={(signedIn) =>
+                setNavigation({
+                  ...navigation,
+                  landing: { ...navigation.landing, signedIn },
+                })
+              }
+              options={LANDING_OPTIONS}
+              hint="Applied when a signed-in visitor opens the site root."
+            />
+            <SelectField
+              label="Landing page — signed out"
+              value={navigation.landing.signedOut}
+              onChange={(signedOut) =>
+                setNavigation({
+                  ...navigation,
+                  landing: { ...navigation.landing, signedOut },
+                })
+              }
+              options={LANDING_OPTIONS}
+              hint="Home remains reachable from the header."
+            />
+          </div>
+          <p className="text-[11px] text-fg-faint">
+            Trading is always signed-in only because it shows broker accounts.
+          </p>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Maintenance</h2>
+              <p className="text-xs text-fg-muted">
+                Show a maintenance notice instead of the public site.
+              </p>
+            </div>
+          </div>
+
+          <Toggle
+            checked={maintenance.enabled}
+            onChange={(enabled) => setMaintenance({ ...maintenance, enabled })}
+            label="Enable maintenance mode"
+          />
+          <TextField
+            label="Message"
+            value={maintenance.message}
+            onChange={(message) => setMaintenance({ ...maintenance, message })}
+            placeholder="We're making some improvements. Please check back soon."
+            hint="Shown to visitors while maintenance is on."
+            textarea
+            maxLength={500}
+          />
+          <Toggle
+            checked={maintenance.allowAdmins}
+            onChange={(allowAdmins) => setMaintenance({ ...maintenance, allowAdmins })}
+            label="Allow signed-in admins to bypass maintenance"
+          />
+          {maintenance.enabled && !maintenance.allowAdmins && (
+            <Flash tone="danger">
+              With this off, nobody can sign in to turn maintenance back off. You would need to
+              edit the database directly.
+            </Flash>
+          )}
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Announcement</h2>
+              <p className="text-xs text-fg-muted">
+                A dismissible banner under the header, optionally scheduled.
+              </p>
+            </div>
+          </div>
+
+          <Toggle
+            checked={announcement.enabled}
+            onChange={(enabled) => setAnnouncement({ ...announcement, enabled })}
+            label="Show the announcement banner"
+          />
+          <TextField
+            label="Message"
+            value={announcement.text}
+            onChange={(text) => setAnnouncement({ ...announcement, text })}
+            placeholder="New signals are live this week."
+            textarea
+            maxLength={300}
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SelectField
+              label="Tone"
+              value={announcement.tone}
+              onChange={(tone) => setAnnouncement({ ...announcement, tone })}
+              options={TONE_OPTIONS}
+            />
+            <TextField
+              label="Link label"
+              value={announcement.linkLabel}
+              onChange={(linkLabel) => setAnnouncement({ ...announcement, linkLabel })}
+              placeholder="Learn more"
+              hint="Shown only when a link URL is set."
+              maxLength={40}
+            />
+          </div>
+
+          <TextField
+            label="Link URL"
+            value={announcement.linkUrl}
+            onChange={(linkUrl) => setAnnouncement({ ...announcement, linkUrl })}
+            placeholder="https://example.com or /signals"
+            hint="Leave empty for a text-only banner."
+            maxLength={500}
+          />
+
+          <Toggle
+            checked={announcement.dismissible}
+            onChange={(dismissible) => setAnnouncement({ ...announcement, dismissible })}
+            label="Visitors can dismiss it"
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-fg-muted">Starts at</span>
+              <input
+                type="datetime-local"
+                className={inputCls}
+                value={isoToLocalInput(announcement.startsAt)}
+                onChange={(event) =>
+                  setAnnouncement({
+                    ...announcement,
+                    startsAt: localInputToIso(event.target.value),
+                  })
+                }
+              />
+              <span className="block text-[11px] text-fg-faint">Empty means immediately.</span>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-fg-muted">Ends at</span>
+              <input
+                type="datetime-local"
+                className={inputCls}
+                value={isoToLocalInput(announcement.endsAt)}
+                onChange={(event) =>
+                  setAnnouncement({
+                    ...announcement,
+                    endsAt: localInputToIso(event.target.value),
+                  })
+                }
+              />
+              <span className="block text-[11px] text-fg-faint">Empty means no end date.</span>
+            </label>
+          </div>
         </Card>
 
         <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">

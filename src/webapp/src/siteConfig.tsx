@@ -23,7 +23,11 @@ import {
 
 import {
   configApi,
+  type AnnouncementSettings,
   type BrandingSettings,
+  type MaintenanceSettings,
+  type ModuleSettings,
+  type NavigationSettings,
   type SiteConfig,
   type ThemeMode,
   type ThemeSettings,
@@ -82,6 +86,37 @@ export const LIGHT_THEME: ThemeSettings = {
 };
 
 const MODE_KEY = "doochyweb_theme_mode";
+
+/** Compiled navigation used before /api/config resolves. */
+export const FALLBACK_MODULES: ModuleSettings[] = [
+  { key: "analysis", label: "Analysis", hidden: false, access: "public" },
+  { key: "signals", label: "Signals", hidden: false, access: "public" },
+  { key: "breakouts", label: "Breakouts", hidden: false, access: "public" },
+  { key: "learn", label: "Learn", hidden: false, access: "public" },
+  { key: "trading", label: "Trading", hidden: false, access: "signed-in" },
+];
+
+export const FALLBACK_NAVIGATION: NavigationSettings = {
+  modules: FALLBACK_MODULES,
+  landing: { signedIn: "home", signedOut: "home" },
+};
+
+export const FALLBACK_MAINTENANCE: MaintenanceSettings = {
+  enabled: false,
+  message: "We're making some improvements. Please check back soon.",
+  allowAdmins: true,
+};
+
+export const FALLBACK_ANNOUNCEMENT: AnnouncementSettings = {
+  enabled: false,
+  text: "",
+  tone: "info",
+  linkLabel: "",
+  linkUrl: "",
+  dismissible: true,
+  startsAt: null,
+  endsAt: null,
+};
 
 type ColorKey = Exclude<keyof ThemeSettings, "mode">;
 

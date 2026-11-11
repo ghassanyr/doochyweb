@@ -7,9 +7,33 @@
 
 import mongoose from "mongoose";
 
-import { DEFAULT_BRANDING, DEFAULT_THEME } from "./defaults";
-import type { SiteConfig, SiteSettings } from "./types";
-import { normalizeBranding, normalizeTheme } from "./validate";
+import {
+  DEFAULT_ANNOUNCEMENT,
+  DEFAULT_BRANDING,
+  DEFAULT_MAINTENANCE,
+  DEFAULT_MODULES,
+  DEFAULT_NAVIGATION,
+  DEFAULT_THEME,
+  MODULE_KEYS,
+} from "./defaults";
+import type {
+  AnnouncementSettings,
+  AnnouncementTone,
+  LandingKey,
+  MaintenanceSettings,
+  ModuleKey,
+  ModuleSettings,
+  NavigationSettings,
+  SiteConfig,
+  SiteSettings,
+} from "./types";
+import {
+  normalizeAnnouncement,
+  normalizeBranding,
+  normalizeMaintenance,
+  normalizeNavigation,
+  normalizeTheme,
+} from "./validate";
 
 const brandingSchema = new mongoose.Schema(
   {
@@ -47,11 +71,84 @@ const themeSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const moduleSchema = new mongoose.Schema(
+  {
+    key: { type: String, enum: MODULE_KEYS, required: true },
+    label: { type: String, required: true },
+    hidden: { type: Boolean, default: false },
+    access: { type: String, enum: ["public", "signed-in"], default: "public" },
+  },
+  { _id: false }
+);
+
+const landingSchema = new mongoose.Schema(
+  {
+    signedIn: {
+      type: String,
+      enum: ["home", "analysis", "signals"],
+      default: DEFAULT_NAVIGATION.landing.signedIn,
+    },
+    signedOut: {
+      type: String,
+      enum: ["home", "analysis", "signals"],
+      default: DEFAULT_NAVIGATION.landing.signedOut,
+    },
+  },
+  { _id: false }
+);
+
+const navigationSchema = new mongoose.Schema(
+  {
+    modules: {
+      type: [moduleSchema],
+      default: () => DEFAULT_MODULES.map((module) => ({ ...module })),
+    },
+    landing: { type: landingSchema, default: () => ({ ...DEFAULT_NAVIGATION.landing }) },
+  },
+  { _id: false }
+);
+
+const maintenanceSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: DEFAULT_MAINTENANCE.enabled },
+    message: { type: String, default: DEFAULT_MAINTENANCE.message },
+    allowAdmins: { type: Boolean, default: DEFAULT_MAINTENANCE.allowAdmins },
+  },
+  { _id: false }
+);
+
+const announcementSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: DEFAULT_ANNOUNCEMENT.enabled },
+    text: { type: String, default: DEFAULT_ANNOUNCEMENT.text },
+    tone: {
+      type: String,
+      enum: ["info", "success", "warning", "danger"],
+      default: DEFAULT_ANNOUNCEMENT.tone,
+    },
+    linkLabel: { type: String, default: DEFAULT_ANNOUNCEMENT.linkLabel },
+    linkUrl: { type: String, default: DEFAULT_ANNOUNCEMENT.linkUrl },
+    dismissible: { type: Boolean, default: DEFAULT_ANNOUNCEMENT.dismissible },
+    startsAt: { type: String, default: null },
+    endsAt: { type: String, default: null },
+  },
+  { _id: false }
+);
+
 const siteSettingsSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, default: "site" },
     branding: { type: brandingSchema, default: () => ({ ...DEFAULT_BRANDING }) },
     theme: { type: themeSchema, default: () => ({ ...DEFAULT_THEME }) },
+    navigation: {
+      type: navigationSchema,
+      default: () => ({
+        modules: DEFAULT_MODULES.map((module) => ({ ...module })),
+        landing: { ...DEFAULT_NAVIGATION.landing },
+      }),
+    },
+    maintenance: { type: maintenanceSchema, default: () => ({ ...DEFAULT_MAINTENANCE }) },
+    announcement: { type: announcementSchema, default: () => ({ ...DEFAULT_ANNOUNCEMENT }) },
     updatedBy: { type: String, default: null },
   },
   { timestamps: true }
@@ -65,21 +162,133 @@ function iso(value: unknown): string | null {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
+function isModuleKey(value: unknown): value is ModuleKey {
+  return typeof value === "string" && (MODULE_KEYS as readonly string[]).includes(value);
+}
+
+function isLanding(value: unknown): value is LandingKey {
+  return value === "home" || value === "analysis" || value === "signals";
+}
+
+function isTone(value: unknown): value is AnnouncementTone {
+  return value === "info" || value === "success" || value === "warning" || value === "danger";
+}
+
+/**
+ * Merge a stored module list over the defaults. Unknown or duplicate keys are
+ * dropped, missing modules are appended in the default order, and trading is
+ * always signed-in because its API is auth-only.
+ */
+export function mergeModules(
+  stored: unknown,
+  base: ModuleSettings[] = DEFAULT_MODULES
+): ModuleSettings[] {
+  const rows = Array.isArray(stored) ? stored : [];
+  const seen = new Set<ModuleKey>();
+  const modules: ModuleSettings[] = [];
+
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as Record<string, unknown>;
+    if (!isModuleKey(row.key) || seen.has(row.key)) continue;
+    const key = row.key;
+    seen.add(key);
+    const fallback = base.find((module) => module.key === key) ?? DEFAULT_MODULES.find((m) => m.key === key)!;
+    modules.push({
+      key,
+      label:
+        typeof row.label === "string" && row.label.trim() ? row.label.trim() : fallback.label,
+      hidden: row.hidden === true,
+      access: key === "trading" ? "signed-in" : row.access === "signed-in" ? "signed-in" : "public",
+    });
+  }
+
+  for (const fallback of DEFAULT_MODULES) {
+    if (seen.has(fallback.key)) continue;
+    const current = base.find((module) => module.key === fallback.key) ?? fallback;
+    modules.push({
+      ...current,
+      access: fallback.key === "trading" ? "signed-in" : current.access,
+    });
+  }
+
+  return modules;
+}
+
+export function mergeNavigation(stored: any): NavigationSettings {
+  const navigation = stored && typeof stored === "object" ? stored : {};
+  const landing = navigation.landing && typeof navigation.landing === "object" ? navigation.landing : {};
+  return {
+    modules: mergeModules(navigation.modules),
+    landing: {
+      signedIn: isLanding(landing.signedIn)
+        ? landing.signedIn
+        : DEFAULT_NAVIGATION.landing.signedIn,
+      signedOut: isLanding(landing.signedOut)
+        ? landing.signedOut
+        : DEFAULT_NAVIGATION.landing.signedOut,
+    },
+  };
+}
+
+export function mergeMaintenance(stored: any): MaintenanceSettings {
+  const maintenance = stored && typeof stored === "object" ? stored : {};
+  return {
+    enabled: maintenance.enabled === true,
+    message:
+      typeof maintenance.message === "string"
+        ? maintenance.message
+        : DEFAULT_MAINTENANCE.message,
+    allowAdmins: maintenance.allowAdmins !== false,
+  };
+}
+
+export function mergeAnnouncement(stored: any): AnnouncementSettings {
+  const announcement = stored && typeof stored === "object" ? stored : {};
+  return {
+    enabled: announcement.enabled === true,
+    text: typeof announcement.text === "string" ? announcement.text : DEFAULT_ANNOUNCEMENT.text,
+    tone: isTone(announcement.tone) ? announcement.tone : DEFAULT_ANNOUNCEMENT.tone,
+    linkLabel:
+      typeof announcement.linkLabel === "string"
+        ? announcement.linkLabel
+        : DEFAULT_ANNOUNCEMENT.linkLabel,
+    linkUrl:
+      typeof announcement.linkUrl === "string"
+        ? announcement.linkUrl
+        : DEFAULT_ANNOUNCEMENT.linkUrl,
+    dismissible: announcement.dismissible !== false,
+    startsAt: iso(announcement.startsAt),
+    endsAt: iso(announcement.endsAt),
+  };
+}
+
 /** Merge a stored document over the defaults. Exported for the test suite. */
 export function mergeSiteSettings(doc: any): SiteSettings {
   const updatedAt = iso(doc?.updatedAt);
   return {
     branding: { ...DEFAULT_BRANDING, ...(doc?.branding ?? {}) },
     theme: { ...DEFAULT_THEME, ...(doc?.theme ?? {}) },
+    navigation: mergeNavigation(doc?.navigation),
+    maintenance: mergeMaintenance(doc?.maintenance),
+    announcement: mergeAnnouncement(doc?.announcement),
     version: updatedAt,
     updatedAt,
     updatedBy: typeof doc?.updatedBy === "string" ? doc.updatedBy : null,
   };
 }
 
+// The config endpoint is hit on every page load. A short cache keeps the
+// public path off Mongo without delaying an admin save by more than a request.
+const CACHE_MS = 3_000;
+let cache: { at: number; settings: SiteSettings } | null = null;
+
 export async function getSiteSettings(): Promise<SiteSettings> {
+  if (cache && Date.now() - cache.at < CACHE_MS) return cache.settings;
   const doc = await SiteSettingsModel.findOne({ key: "site" }).lean().exec();
-  return mergeSiteSettings(doc);
+  const settings = mergeSiteSettings(doc);
+  cache = { at: Date.now(), settings };
+  return settings;
 }
 
 /**
@@ -87,22 +296,35 @@ export async function getSiteSettings(): Promise<SiteSettings> {
  * singleton. `updatedBy` is the admin username, kept for future audit tooling.
  */
 export async function saveSiteSettings(
-  patch: { branding?: unknown; theme?: unknown },
+  patch: {
+    branding?: unknown;
+    theme?: unknown;
+    navigation?: unknown;
+    maintenance?: unknown;
+    announcement?: unknown;
+  },
   updatedBy: string
 ): Promise<SiteSettings> {
+  // Read the latest document rather than a value cached before the previous save.
+  cache = null;
   const current = await getSiteSettings();
   const branding = normalizeBranding(patch.branding, current.branding);
   const theme = normalizeTheme(patch.theme, current.theme);
+  const navigation = normalizeNavigation(patch.navigation, current.navigation);
+  const maintenance = normalizeMaintenance(patch.maintenance, current.maintenance);
+  const announcement = normalizeAnnouncement(patch.announcement, current.announcement);
 
   const doc = await SiteSettingsModel.findOneAndUpdate(
     { key: "site" },
-    { $set: { branding, theme, updatedBy } },
+    { $set: { branding, theme, navigation, maintenance, announcement, updatedBy } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   )
     .lean()
     .exec();
 
-  return mergeSiteSettings(doc);
+  const settings = mergeSiteSettings(doc);
+  cache = { at: Date.now(), settings };
+  return settings;
 }
 
 /** The subset safe to expose without a session. */
@@ -110,6 +332,9 @@ export function publicSiteConfig(settings: SiteSettings): SiteConfig {
   return {
     branding: settings.branding,
     theme: settings.theme,
+    navigation: settings.navigation,
+    maintenance: settings.maintenance,
+    announcement: settings.announcement,
     version: settings.version,
   };
 }
