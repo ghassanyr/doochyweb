@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, ArrowLeft, KeyRound, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, KeyRound, Link2, RefreshCw, Save } from "lucide-react";
 import {
   api,
   ApiError,
@@ -20,11 +20,14 @@ function prefsFrom(accounts: AccountView[]): Record<number, AccountPrefs> {
 
 export default function SettingsPage({
   accounts,
+  hasCredentials,
   onConnected,
   onAccountsChanged,
   onClose,
 }: {
   accounts: AccountView[];
+  /** False for a fresh account that has never linked cTrader. */
+  hasCredentials: boolean;
   onConnected: (creds: ConnectInput) => Promise<void>;
   onAccountsChanged: (accounts: AccountView[]) => void;
   onClose: () => void;
@@ -257,7 +260,9 @@ export default function SettingsPage({
             <div className="space-y-1">
               <h2 className="text-sm font-semibold tracking-tight text-fg">cTrader access</h2>
               <p className="text-sm text-fg-muted">
-                Reconnect to refresh the cTrader session or change which accounts are available here.
+                {hasCredentials
+                  ? "Reconnect to refresh the cTrader session or change which accounts are available here."
+                  : "Connect your cTrader account to load balances, positions and orders here."}
                 {oauthAvailable ? " You'll approve access on cTrader and come straight back." : ""}
               </p>
             </div>
@@ -269,10 +274,16 @@ export default function SettingsPage({
             <div className="mt-3">
               <Button
                 variant="secondary"
-                icon={<RefreshCw className="h-4 w-4" />}
+                icon={
+                  hasCredentials ? (
+                    <RefreshCw className="h-4 w-4" />
+                  ) : (
+                    <Link2 className="h-4 w-4" />
+                  )
+                }
                 onClickAsync={reconnectCtrader}
               >
-                Reconnect cTrader
+                {hasCredentials ? "Reconnect cTrader" : "Connect cTrader"}
               </Button>
             </div>
           </Card>

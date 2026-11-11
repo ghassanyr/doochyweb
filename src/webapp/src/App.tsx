@@ -189,6 +189,7 @@ export default function App() {
     return (
       <SettingsPage
         accounts={accounts}
+        hasCredentials={hasCredentials === true}
         onAccountsChanged={setAccounts}
         onConnected={handleConnected}
         onClose={closeSettings}
@@ -216,7 +217,7 @@ export default function App() {
           />
         ) : view === "admin" ? (
           isAdmin ? (
-            <AdminPage />
+            <AdminPage currentUsername={me?.username} />
           ) : (
             <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
           )

@@ -330,6 +330,21 @@ export const telegramApi = {
   test: () => request<{ ok: boolean }>("/api/telegram/test", { method: "POST" }),
 };
 
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string | null;
+  role: UserRole;
+  createdAt: string | null;
+}
+
+export const adminApi = {
+  users: () => request<{ users: AdminUser[] }>("/api/admin/users"),
+
+  deleteUser: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
 export const api = {
   register: (username: string, email: string, password: string) =>
     request<{ token: string }>("/api/auth/register", {

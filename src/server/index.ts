@@ -14,6 +14,7 @@ import { marketRouter } from "./market/routes";
 import { signalsRouter } from "./signals/routes";
 import { startSignalResolver } from "./signals/resolver";
 import { promoteConfiguredAdmins } from "./admin/roles";
+import { adminRouter } from "./admin/routes";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
 import { createTrainerRouter } from "./trainer/routes";
@@ -446,6 +447,7 @@ app.use("/api/market", marketRouter);
 app.use("/api/signals", signalsRouter);
 app.use("/api/trainer", createTrainerRouter());
 app.use("/api/telegram", telegramRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/ctrader/oauth", ctraderOAuthRouter);
 
 // Production redirect URI is https://doochy.net/callback (single-segment URLs

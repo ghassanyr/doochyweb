@@ -1,27 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
-import { GripVertical, X } from "lucide-react";
+import { GripVertical, Trash2, X } from "lucide-react";
 
-import { marketApi } from "../api";
+import { adminApi, marketApi, type AdminUser } from "../api";
+import { ConfirmModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
-import { Card, Flash, Skeleton } from "../components/ui";
+import { Badge, Card, Flash, Skeleton } from "../components/ui";
 import { applyOrder } from "../market/order";
 import { SortableGrid } from "../market/SortableGrid";
 import { SymbolSearch } from "../market/SymbolSearch";
 import type { CatalogEntry } from "../market/types";
+import { formatLocalDateTime } from "../time";
 
 interface WatchItem {
   symbol: string;
 }
 
-// Admin-only curation of the shared watchlist. The same endpoints power the
-// Analysis page, but they require the admin role server-side; this page is the
-// only place that exposes them now.
-export default function AdminPage() {
+// Admin-only curation of the shared watchlist and the account directory. The
+// watchlist endpoints power the Analysis page, but they require the admin role
+// server-side; this page is the only place that exposes them now.
+export default function AdminPage({ currentUsername }: { currentUsername?: string }) {
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [items, setItems] = useState<WatchItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
 
   const loadWatchlist = useCallback(async () => {
     const watch = await marketApi.watchlist();
@@ -41,6 +48,23 @@ export default function AdminPage() {
         if (alive) setError(err instanceof Error ? err.message : "Failed to load the watchlist");
       } finally {
         if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await adminApi.users();
+        if (alive) setUsers(res.users);
+      } catch (err) {
+        if (alive) setUsersError(err instanceof Error ? err.message : "Failed to load users");
+      } finally {
+        if (alive) setUsersLoading(false);
       }
     })();
     return () => {
@@ -97,6 +121,19 @@ export default function AdminPage() {
     },
     [items]
   );
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setUsersError(null);
+    try {
+      await adminApi.deleteUser(deleteTarget.id);
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+    } catch (err) {
+      setUsersError(err instanceof Error ? err.message : "Failed to delete the user");
+      // Keep the modal open so the message stays next to the action.
+      throw err;
+    }
+  }
 
   return (
     <FadeRise>
@@ -155,6 +192,80 @@ export default function AdminPage() {
           Drag a market to change its card order on the Analysis page. Changes apply to every
           visitor.
         </p>
+
+        <Card className="space-y-3 p-4">
+          <div>
+            <h2 className="text-base font-bold tracking-tight text-fg">Users</h2>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              Every account on this deployment. Deleting a user also removes their cTrader
+              credentials and Telegram link.
+            </p>
+          </div>
+
+          {usersError && <Flash tone="danger">{usersError}</Flash>}
+
+          {usersLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : users.length === 0 ? (
+            <p className="py-4 text-center text-sm text-fg-muted">No users found.</p>
+          ) : (
+            <div className="divide-y divide-hairline">
+              {users.map((u) => {
+                const self = u.username === currentUsername;
+                return (
+                  <div key={u.id} className="flex items-center gap-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-fg">{u.username}</span>
+                        {self && <span className="text-[11px] text-fg-faint">(you)</span>}
+                        <Badge tone={u.role === "admin" ? "accent" : "muted"}>
+                          {u.role === "admin" ? "Admin" : "User"}
+                        </Badge>
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-fg-muted">
+                        {u.email ?? "no email"}
+                      </div>
+                    </div>
+                    <div className="hidden shrink-0 text-xs tabular-nums text-fg-faint sm:block">
+                      {u.createdAt ? formatLocalDateTime(u.createdAt) : "-"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(u)}
+                      disabled={self}
+                      aria-label={`Delete ${u.username}`}
+                      title={self ? "You cannot delete your own account" : `Delete ${u.username}`}
+                      className="rounded-md p-1.5 text-danger transition duration-150 hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <ConfirmModal
+          open={deleteTarget != null}
+          title={deleteTarget ? `Delete ${deleteTarget.username}?` : "Delete user"}
+          body={
+            deleteTarget && (
+              <span>
+                This removes the account, its cTrader credentials and its Telegram link. This
+                cannot be undone.
+              </span>
+            )
+          }
+          confirmLabel="Delete user"
+          danger
+          onConfirm={confirmDelete}
+          onClose={() => setDeleteTarget(null)}
+        />
       </div>
     </FadeRise>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   CandlestickSeries,
   ColorType,
@@ -88,6 +88,32 @@ export default function LearnChart({
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  // The pane labels for the barriers are drawn by lightweight-charts at the
+  // right edge, over the newest bars. Render them ourselves at the left instead
+  // and track the prices so they can be re-positioned after resize/data changes.
+  const upperLabelRef = useRef<HTMLDivElement>(null);
+  const lowerLabelRef = useRef<HTMLDivElement>(null);
+  const barrierPricesRef = useRef<{ upper: number; lower: number } | null>(null);
+
+  const positionBarrierLabels = useCallback(() => {
+    const candles = candleRef.current;
+    const prices = barrierPricesRef.current;
+    if (!candles || !prices) return;
+
+    const place = (el: HTMLDivElement | null, price: number) => {
+      if (!el) return;
+      const y = candles.priceToCoordinate(price);
+      if (y == null) {
+        el.style.opacity = "0";
+        return;
+      }
+      el.style.opacity = "1";
+      el.style.top = `${y}px`;
+    };
+
+    place(upperLabelRef.current, prices.upper);
+    place(lowerLabelRef.current, prices.lower);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -171,6 +197,8 @@ export default function LearnChart({
         Math.max(1, Math.floor(rect.width)),
         Math.max(1, Math.floor(rect.height))
       );
+      // Re-place the barrier labels once the price scale has the new height.
+      window.requestAnimationFrame(positionBarrierLabels);
     });
     observer.observe(container);
 
@@ -183,7 +211,7 @@ export default function LearnChart({
       markersRef.current = null;
       priceLinesRef.current = [];
     };
-  }, []);
+  }, [positionBarrierLabels]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -195,25 +223,29 @@ export default function LearnChart({
     for (const line of priceLinesRef.current) {
       candles.removePriceLine(line);
     }
+    const upper = chartValue(item.question.barrierPct.upperPct);
+    const lower = chartValue(item.question.barrierPct.lowerPct);
+    barrierPricesRef.current = { upper, lower };
     priceLinesRef.current = [
       candles.createPriceLine({
-        price: chartValue(item.question.barrierPct.upperPct),
+        price: upper,
         color: UPPER,
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: "Upper",
+        title: "",
       }),
       candles.createPriceLine({
-        price: chartValue(item.question.barrierPct.lowerPct),
+        price: lower,
         color: LOWER,
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: "Lower",
+        title: "",
       }),
     ];
-  }, [item]);
+    positionBarrierLabels();
+  }, [item, positionBarrierLabels]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -250,6 +282,8 @@ export default function LearnChart({
       volume.setData([...contextVolume, ...toVolume(revealBars)]);
       markers.setMarkers(marker);
       chart.timeScale().fitContent();
+      positionBarrierLabels();
+      window.requestAnimationFrame(positionBarrierLabels);
     };
 
     const reduce =
@@ -273,6 +307,8 @@ export default function LearnChart({
         ...toVolume(revealBars.slice(0, shown)),
       ]);
       chart.timeScale().fitContent();
+      positionBarrierLabels();
+      window.requestAnimationFrame(positionBarrierLabels);
       if (shown >= revealBars.length) {
         window.clearInterval(timer);
         markers.setMarkers(marker);
@@ -280,7 +316,7 @@ export default function LearnChart({
     }, 55);
 
     return () => window.clearInterval(timer);
-  }, [item, reveal]);
+  }, [item, reveal, positionBarrierLabels]);
 
   const outcomeLabel =
     reveal && reveal.itemId === item.itemId
@@ -293,10 +329,27 @@ export default function LearnChart({
 
   return (
     <div
-      ref={containerRef}
-      className="h-[340px] w-full sm:h-[400px]"
+      className="relative h-[340px] w-full sm:h-[400px]"
       role="img"
       aria-label={`Anonymized candlestick chart with upper and lower percent barriers, ${outcomeLabel}.`}
-    />
+    >
+      <div ref={containerRef} className="h-full w-full" />
+      <div className="pointer-events-none absolute inset-y-0 left-0">
+        <div
+          ref={upperLabelRef}
+          className="absolute left-1.5 -translate-y-1/2 rounded border bg-canvas/85 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-0"
+          style={{ color: UPPER, borderColor: "rgba(20, 184, 166, 0.45)" }}
+        >
+          Upper
+        </div>
+        <div
+          ref={lowerLabelRef}
+          className="absolute left-1.5 -translate-y-1/2 rounded border bg-canvas/85 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-0"
+          style={{ color: LOWER, borderColor: "rgba(245, 158, 11, 0.45)" }}
+        >
+          Lower
+        </div>
+      </div>
+    </div>
   );
 }
