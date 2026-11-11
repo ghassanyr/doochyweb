@@ -17,12 +17,15 @@ export default function ConnectPanel({
   onConnected,
   onCancel,
   storedClientId,
+  variant = "fullscreen",
 }: {
   onConnected: (creds: ConnectInput) => Promise<void>;
   onCancel?: () => void;
   /** Masked id of the already-saved app. When set, the client id and secret
    *  are optional: only new tokens are needed. */
   storedClientId?: string | null;
+  /** "inline" sits inside the Trading tab; "fullscreen" is the Settings takeover. */
+  variant?: "fullscreen" | "inline";
 }) {
   const hasStored = Boolean(storedClientId);
   const [clientId, setClientId] = useState("");
@@ -54,7 +57,13 @@ export default function ConnectPanel({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
+    <div
+      className={
+        variant === "fullscreen"
+          ? "flex min-h-screen items-center justify-center p-6"
+          : "flex justify-center py-6"
+      }
+    >
       <FadeRise className="w-full max-w-md">
         <Card className="p-8 shadow-overlay">
           {onCancel && (

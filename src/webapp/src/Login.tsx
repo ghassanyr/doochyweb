@@ -9,7 +9,7 @@ export default function Login({
   variant = "fullscreen",
   hint,
 }: {
-  onAuthed: (token: string) => void;
+  onAuthed: (token: string, mode: "login" | "register") => void;
   // "fullscreen" takes over the viewport (used when nothing is signed in and
   // no shell is rendered); "inline" sits inside the app shell, for the Trading
   // tab when the visitor has no account.
@@ -25,7 +25,7 @@ export default function Login({
     setError(null);
     try {
       const res = mode === "login" ? await api.login(username, password) : await api.register(username, password);
-      onAuthed(res.token);
+      onAuthed(res.token, mode);
     } catch (err: any) {
       setError(err instanceof ApiError ? err.message : "Request failed");
     }

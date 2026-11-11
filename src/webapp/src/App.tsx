@@ -7,10 +7,10 @@ import AdminPage from "./admin/AdminPage";
 import LearnPage from "./learn/LearnPage";
 import { initialView } from "./initialView";
 import AppShell, { type ViewKey } from "./AppShell";
-import ConnectPanel from "./ConnectPanel";
 import Dashboard from "./Dashboard";
 import Login from "./Login";
 import SettingsPage from "./Settings";
+import TradingConnect from "./TradingConnect";
 import { useAccounts } from "./useAccounts";
 import { Skeleton } from "./components/ui";
 
@@ -51,9 +51,13 @@ export default function App() {
     await refreshBalances();
   }
 
-  function handleAuthed(t: string) {
+  function handleAuthed(t: string, mode: "login" | "register") {
     setToken(t);
     setTokenState(t);
+    // Registration is finished at this point. New accounts have no cTrader
+    // credentials, so land on Analysis instead of the Trading tab's connect
+    // card; Trading keeps the connection action when they want it.
+    if (mode === "register") handleViewChange("analysis");
   }
 
   function handleViewChange(next: ViewKey) {
@@ -138,7 +142,10 @@ export default function App() {
           <Skeleton className="h-10 w-full" />
         </div>
       ) : !hasCredentials ? (
-        <ConnectPanel onConnected={handleConnected} />
+        <TradingConnect
+          onConnected={handleConnected}
+          onSkip={() => handleViewChange("analysis")}
+        />
       ) : (
         <Dashboard accounts={accounts} />
       )}
