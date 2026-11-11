@@ -89,11 +89,13 @@ export default function HomePage({
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
               Market workspace
             </div>
-            <h1 className="mt-4 max-w-2xl text-4xl font-bold tracking-tight text-fg sm:text-5xl">
-              Read the market. Track published setups. Practice the pattern.
+            <h1 className="mt-4 max-w-2xl text-4xl font-bold leading-[1.08] tracking-tight text-fg sm:text-5xl">
+              <span className="block">Read the market.</span>
+              <span className="block">Track published setups.</span>
+              <span className="block">Practice the pattern.</span>
             </h1>
             <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-fg-muted">
-              Doochy brings multi-timeframe analysis, curated trade ideas, automated breakout
+              Doochy brings multi timeframe analysis, curated trade ideas, automated breakout
               research, and a pattern trainer into one focused workspace.
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-2">

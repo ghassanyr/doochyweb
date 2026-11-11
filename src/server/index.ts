@@ -21,12 +21,19 @@ import { createTrainerRouter } from "./trainer/routes";
 const app = express();
 app.use(express.json({ limit: "100kb" }));
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 app.post("/api/auth/register", async (req: Request, res: Response) => {
   try {
-    const { username, password } = req.body ?? {};
+    const { username, email, password } = req.body ?? {};
     const clean = String(username ?? "").trim();
+    const cleanEmail = String(email ?? "").trim().toLowerCase();
     if (!/^[A-Za-z0-9_-]{3,32}$/.test(clean)) {
       res.status(400).json({ error: "username must be 3-32 characters (letters, digits, _, -)" });
+      return;
+    }
+    if (!EMAIL_RE.test(cleanEmail)) {
+      res.status(400).json({ error: "email must be a valid address" });
       return;
     }
     if (typeof password !== "string" || password.length < 8) {
@@ -38,7 +45,11 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       res.status(409).json({ error: "username taken" });
       return;
     }
-    const user = await User.create({ username: clean, passwordHash: await hashPassword(password) });
+    const user = await User.create({
+      username: clean,
+      email: cleanEmail,
+      passwordHash: await hashPassword(password),
+    });
     res.json({ token: signToken(String(user._id)) });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? "register failed" });

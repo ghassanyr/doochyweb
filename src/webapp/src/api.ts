@@ -293,8 +293,11 @@ export const signalsApi = {
 };
 
 export const api = {
-  register: (username: string, password: string) =>
-    request<{ token: string }>("/api/auth/register", { method: "POST", body: { username, password } }),
+  register: (username: string, email: string, password: string) =>
+    request<{ token: string }>("/api/auth/register", {
+      method: "POST",
+      body: { username, email, password },
+    }),
 
   login: (username: string, password: string) =>
     request<{ token: string }>("/api/auth/login", { method: "POST", body: { username, password } }),
