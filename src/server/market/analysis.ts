@@ -4,7 +4,7 @@
 // project; only types were added.
 
 import * as ti from "./indicators";
-import { detectEngulfing, isLastBarForming } from "./patterns";
+import { detectEngulfingMatch, isLastBarForming } from "./patterns";
 import { getTimeframe } from "./timeframes";
 import type { Analysis, Candle, IndicatorRow, Rating, Section, Signal, SymbolMeta } from "./types";
 
@@ -155,6 +155,11 @@ export function analyze(candles: Candle[], meta: Partial<SymbolMeta> = {}, timef
   const score = total ? (overall.buy - overall.sell) / total : 0;
 
   const lastCandle = candles[candles.length - 1];
+  const engulf = detectEngulfingMatch(
+    candles,
+    timeframe,
+    isLastBarForming(candles, getTimeframe(timeframe).ms)
+  );
 
   return {
     symbol: meta.symbol!,
@@ -175,7 +180,9 @@ export function analyze(candles: Candle[], meta: Partial<SymbolMeta> = {}, timef
     movingAverages: maSummary,
     sparkline: closes.slice(-120),
     series: candles.slice(-180).map((c) => ({ t: c.time, c: c.close })),
-    engulfing: detectEngulfing(candles, timeframe, isLastBarForming(candles, getTimeframe(timeframe).ms)),
+    engulfing: engulf?.kind ?? null,
+    /** Close time of the bar the engulfing pattern printed on, if any. */
+    engulfingBarClose: engulf?.closeTime ?? null,
     updatedAt: Date.now(),
   };
 }

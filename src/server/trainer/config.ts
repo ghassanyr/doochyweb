@@ -50,11 +50,9 @@ export const SWEEP_LEVEL_LOOKBACK = 20;
 /** Wick penetration beyond the swept range extreme, in ATR20 units. */
 export const SWEEP_PENETRATION_ATR = 0.1;
 
-/** Minimum current/prior body-size ratio for an engulfing match. */
-export const ENGULF_MIN_BODY_RATIO = 1.3;
-
-/** Close clearance beyond the prior wick, in ATR20 units. */
-export const ENGULF_WICK_EPS_ATR = 0.1;
+// The engulfing thresholds live with the shared rule so the live Analysis badge
+// and the trainer detectors cannot drift apart.
+export { ENGULF_MIN_BODY_RATIO, ENGULF_WICK_EPS_ATR } from "../market/engulf";
 
 /** Mechanical pattern tags, grouped in taxonomy order. */
 export const TAGS = [

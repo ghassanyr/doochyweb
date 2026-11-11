@@ -455,13 +455,23 @@ async function sweep4h(
   timeframe: string,
   bars: Parameters<typeof detectSweep>[0],
   settings: AnalysisSettings,
-  force: boolean
-): Promise<Sweep | null> {
+  force: boolean,
+  currentStale: boolean
+): Promise<{ kind: Sweep | null; stale: boolean }> {
   try {
-    const series = timeframe === "4h" ? bars : (await getCandles(meta, "4h", settings, { force })).bars;
-    return detectSweep(series, isLastBarForming(series, getTimeframe("4h").ms));
+    if (timeframe === "4h") {
+      return {
+        kind: detectSweep(bars, isLastBarForming(bars, getTimeframe("4h").ms)),
+        stale: currentStale,
+      };
+    }
+    const read = await getCandles(meta, "4h", settings, { force });
+    return {
+      kind: detectSweep(read.bars, isLastBarForming(read.bars, getTimeframe("4h").ms)),
+      stale: read.stale,
+    };
   } catch {
-    return null;
+    return { kind: null, stale: false };
   }
 }
 
@@ -478,7 +488,7 @@ async function analyzeSymbol(
     return { ok: false, symbol, error: unresolvableError(symbol, brokerError) };
   }
   try {
-    const { bars, provider, warnings, cached } = await getCandles(meta, timeframe, settings, { force });
+    const { bars, provider, warnings, cached, stale } = await getCandles(meta, timeframe, settings, { force });
     const result = analyze(bars, meta, timeframe);
     // cTrader bars stop at the last closed bar, so the newest close can be a
     // full timeframe old. Show the latest 1-minute close instead, which is at
@@ -493,14 +503,17 @@ async function analyzeSymbol(
         // A missing minute bar must not blank the card: the bar close is valid.
       }
     }
+    const sweep = await sweep4h(meta, timeframe, bars, settings, force, stale);
     return {
       ok: true,
       ...result,
       provider,
       cached,
+      stale,
       warnings,
       meta: { note: meta.note },
-      sweep4h: await sweep4h(meta, timeframe, bars, settings, force),
+      sweep4h: sweep.kind,
+      sweep4hStale: sweep.stale,
     };
   } catch (err) {
     return {

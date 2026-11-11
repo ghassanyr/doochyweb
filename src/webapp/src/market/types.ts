@@ -63,13 +63,19 @@ export interface MarketAnalysis {
   sparkline: number[];
   series: { t: number; c: number }[];
   engulfing: "bullish" | "bearish" | null;
+  /** Close time of the bar the engulfing pattern printed on, if any. */
+  engulfingBarClose: number | null;
   updatedAt: number;
   provider: string;
   cached: boolean;
+  /** True when the series is served from a cache that the source could not refresh. */
+  stale: boolean;
   warnings: ProviderWarning[];
   meta: { note?: string };
   timeframeRatings?: Record<string, TimeframeRating>;
   sweep4h: "high" | "low" | "both" | null;
+  /** True when the 4H series behind sweep4h is stale. */
+  sweep4hStale: boolean;
 }
 
 export interface MarketAnalysisError {

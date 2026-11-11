@@ -6,6 +6,7 @@ import { MtfConfluence, MtfConfluenceSkeleton } from "./MtfConfluence";
 import { RatingDial } from "./RatingDial";
 import { Sparkline } from "./Sparkline";
 import {
+  barAge,
   changeTone,
   fmtChangePct,
   fmtPrice,
@@ -48,7 +49,7 @@ function SourceBadge({ a }: { a: MarketAnalysis }) {
   );
 }
 
-function SweepBadge({ kind }: { kind: "high" | "low" | "both" }) {
+function SweepBadge({ kind, stale }: { kind: "high" | "low" | "both"; stale?: boolean }) {
   const color =
     kind === "high" ? RATINGS.sell.color : kind === "low" ? RATINGS.buy.color : RATINGS.neutral.color;
   const label = kind === "high" ? "4H high" : kind === "low" ? "4H low" : "4H both";
@@ -60,29 +61,46 @@ function SweepBadge({ kind }: { kind: "high" | "low" | "both" }) {
         : "4H candle swept both the prior highs and lows and closed back inside";
   return (
     <span
-      className="shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide"
+      className={
+        "shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide" +
+        (stale ? " opacity-50" : "")
+      }
       style={{ color, borderColor: color }}
-      title={title}
+      title={stale ? `${title} (bars are stale)` : title}
     >
       {label}
     </span>
   );
 }
 
-function EngulfBadge({ kind }: { kind: "bullish" | "bearish" }) {
+function EngulfBadge({
+  kind,
+  barClose,
+  stale,
+}: {
+  kind: "bullish" | "bearish";
+  barClose?: number | null;
+  stale?: boolean;
+}) {
   const bull = kind === "bullish";
   const color = bull ? RATINGS.buy.color : RATINGS.sell.color;
+  const age = barAge(barClose);
+  const title =
+    (bull ? "Bullish" : "Bearish") +
+    " engulfing on the last closed bar (body >= 1.3x prior, close clears the prior wick)" +
+    (barClose ? `, closed ${new Date(barClose).toLocaleString()}` : "") +
+    (stale ? " - bars are stale" : "");
   return (
     <span
-      className="shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide"
-      style={{ color, borderColor: color }}
-      title={
-        bull
-          ? "Bullish engulfing on the last closed bar"
-          : "Bearish engulfing on the last closed bar"
+      className={
+        "shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide" +
+        (stale ? " opacity-50" : "")
       }
+      style={{ color, borderColor: color }}
+      title={title}
     >
       {bull ? "Bull engulf" : "Bear engulf"}
+      {age ? ` · ${age}` : ""}
     </span>
   );
 }
@@ -209,9 +227,16 @@ function MarketCardInner({ analysis, strongRatio, refreshing, canRefresh, canRem
       <div className="pointer-events-none relative mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-hairline pt-2">
         <SourceBadge a={a} />
         <span className="ml-auto flex flex-wrap items-center justify-end gap-1">
-          {a.engulfing && <EngulfBadge kind={a.engulfing} />}
-          {a.sweep4h && <SweepBadge kind={a.sweep4h} />}
-          <span className="shrink-0 text-[10.5px] text-fg-faint">{timeAgo(a.updatedAt)}</span>
+          {a.engulfing && (
+            <EngulfBadge kind={a.engulfing} barClose={a.engulfingBarClose} stale={a.stale} />
+          )}
+          {a.sweep4h && <SweepBadge kind={a.sweep4h} stale={a.sweep4hStale} />}
+          <span
+            className="shrink-0 text-[10.5px] text-fg-faint"
+            title={`Analysis refreshed ${timeAgo(a.updatedAt)}`}
+          >
+            updated {timeAgo(a.updatedAt)}
+          </span>
         </span>
       </div>
     </Card>

@@ -4,11 +4,10 @@
 // null. Definitions live in docs/TRAINER_TAXONOMY.md. Detectors never read past
 // the supplied index, so the reveal window cannot influence validity.
 
-import { ATR_PERIOD, MIN_PCT, SWING_LOOKBACK } from "../market/breakoutEngine";
+import { MIN_PCT, SWING_LOOKBACK } from "../market/breakoutEngine";
+import { atrAt, engulfingAt } from "../market/engulf";
 import type { Candle } from "../market/types";
 import {
-  ENGULF_MIN_BODY_RATIO,
-  ENGULF_WICK_EPS_ATR,
   SWEEP_LEVEL_LOOKBACK,
   SWEEP_PENETRATION_ATR,
   TAG_FAMILY,
@@ -23,30 +22,14 @@ import type {
   TrainerTimeframe,
 } from "./types";
 
+// Re-exported because outcomes.ts and the detector tests use it from here.
+export { atrAt };
+
 /** A match before the scanner attaches the series identity and stable id. */
 export type DetectorMatch = Omit<Candidate, "id" | "symbol" | "timeframe">;
 
 /** S/R retests and first-break checks use this gap limit, per the taxonomy. */
 const RETEST_WINDOW = 60;
-
-/**
- * Simple mean true range over `period` bars ending at `i`, identical to
- * meanTrueRange in breakoutEngine.ts. Needs `period + 1` closed bars.
- */
-export function atrAt(
-  bars: readonly Candle[],
-  i: number,
-  period: number = ATR_PERIOD
-): number | null {
-  if (!Number.isInteger(i) || i < period || i >= bars.length || period <= 0) return null;
-  let sum = 0;
-  for (let j = i - period + 1; j <= i; j++) {
-    const b = bars[j];
-    const pc = bars[j - 1].close;
-    sum += Math.max(b.high - b.low, Math.abs(b.high - pc), Math.abs(b.low - pc));
-  }
-  return sum / period;
-}
 
 /** Break threshold at `i`: max(0.2% of close, ATR20), per the taxonomy. */
 export function thresholdAt(bars: readonly Candle[], i: number): number | null {
@@ -130,27 +113,8 @@ export function detectBullishEngulfing(
   i: number
 ): DetectorMatch | null {
   if (!validIndex(bars, i) || i < 1) return null;
-  const atr = atrAt(bars, i);
-  if (atr === null) return null;
-  const p = i - 1;
-  const prior = bars[p];
-  const current = bars[i];
-  const priorBody = prior.close - prior.open;
-  const currentBody = current.close - current.open;
-  if (priorBody === 0 || currentBody === 0) return null;
-
-  const bodyRatio = Math.abs(currentBody) / Math.abs(priorBody);
-  if (
-    priorBody < 0 &&
-    currentBody > 0 &&
-    current.open <= prior.close &&
-    current.close >= prior.open &&
-    bodyRatio >= ENGULF_MIN_BODY_RATIO &&
-    current.close >= prior.high - atr * ENGULF_WICK_EPS_ATR
-  ) {
-    return makeMatch("bullish_engulfing", "up", i, p, i, levels());
-  }
-  return null;
+  if (engulfingAt(bars, i) !== "bullish") return null;
+  return makeMatch("bullish_engulfing", "up", i, i - 1, i, levels());
 }
 
 export function detectBearishEngulfing(
@@ -158,27 +122,8 @@ export function detectBearishEngulfing(
   i: number
 ): DetectorMatch | null {
   if (!validIndex(bars, i) || i < 1) return null;
-  const atr = atrAt(bars, i);
-  if (atr === null) return null;
-  const p = i - 1;
-  const prior = bars[p];
-  const current = bars[i];
-  const priorBody = prior.close - prior.open;
-  const currentBody = current.close - current.open;
-  if (priorBody === 0 || currentBody === 0) return null;
-
-  const bodyRatio = Math.abs(currentBody) / Math.abs(priorBody);
-  if (
-    priorBody > 0 &&
-    currentBody < 0 &&
-    current.open >= prior.close &&
-    current.close <= prior.open &&
-    bodyRatio >= ENGULF_MIN_BODY_RATIO &&
-    current.close <= prior.low + atr * ENGULF_WICK_EPS_ATR
-  ) {
-    return makeMatch("bearish_engulfing", "down", i, p, i, levels());
-  }
-  return null;
+  if (engulfingAt(bars, i) !== "bearish") return null;
+  return makeMatch("bearish_engulfing", "down", i, i - 1, i, levels());
 }
 
 // ---------------------------------------------------------------- liquidity

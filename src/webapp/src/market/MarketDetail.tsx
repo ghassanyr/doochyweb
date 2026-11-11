@@ -236,6 +236,14 @@ export function MarketDetail({
                     {a.warnings.length} source(s) unavailable
                   </span>
                 )}
+                {a.stale && (
+                  <span
+                    className="text-amber-500"
+                    title="The source could not refresh, so these bars come from a cache."
+                  >
+                    bars are stale
+                  </span>
+                )}
               </div>
             </div>
           )

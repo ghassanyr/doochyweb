@@ -79,6 +79,19 @@ export function timeAgo(ts: number | null | undefined): string {
   return new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Age of a completed bar. Unlike timeAgo this never falls back to a clock
+ * time, so a badge always reads as "how long ago the pattern printed".
+ */
+export function barAge(ts: number | null | undefined): string {
+  if (!ts) return "";
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+
 // A few indicators are quoted in price units rather than an index value, so
 // they read better with adaptive precision than a flat two decimals.
 export const PRICE_STYLE_INDICATORS = ["ATR(14)", "Highs/Lows(14)", "Bull/Bear Power(13)"];

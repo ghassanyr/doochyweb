@@ -121,6 +121,27 @@ function seriesVersion(pid: ProviderId, bars: Candle[], at: number): string {
   return `${pid}:${bars.length}:${last?.time ?? 0}:${at}`;
 }
 
+/**
+ * Drop a trailing bar that was captured while it was still forming.
+ *
+ * Caches keep whatever the source returned at fetch time. If the last bar was
+ * open when `fetchedAt` was taken, its OHLC is a partial snapshot. Once the
+ * clock passes that bar's close time, the snapshot would otherwise look like a
+ * completed bar and could print a pattern that never existed. Keeping the
+ * previous closed bar is always safe; the next refresh restores the real one.
+ */
+export function trimFormingTail(
+  bars: Candle[],
+  tfMs: number,
+  fetchedAt: number,
+  now: number = Date.now()
+): Candle[] {
+  if (!bars.length) return bars;
+  const closeTime = bars[bars.length - 1].time + tfMs;
+  if (fetchedAt < closeTime && closeTime <= now) return bars.slice(0, -1);
+  return bars;
+}
+
 export async function getCandles(
   meta: SymbolMeta,
   timeframeId: string,
@@ -162,14 +183,23 @@ async function readThrough(
   // 1. Hot memory cache.
   const hot = cache.get(key);
   if (!force && hot && Date.now() - hot.at < tf.ttl * 1000) {
+    const bars = trimFormingTail(hot.series, tf.ms, hot.at);
+    const trimmed = bars.length !== hot.series.length;
+    if (trimmed) {
+      // The tail was a partial snapshot and its bar has since closed. Keep the
+      // previous closed bar, and fetch a complete copy behind the caller. Leave
+      // the cache untouched: if the refresh fails, the next read trims again and
+      // keeps reporting stale instead of silently presenting an old series as fresh.
+      void refreshInBackground(pid, meta, tf, key, ref);
+    }
     breaker.recordSuccess(pid);
     return {
       provider: pid,
-      bars: hot.series,
+      bars,
       warnings,
       cached: true,
-      stale: false,
-      version: seriesVersion(pid, hot.series, hot.at),
+      stale: trimmed,
+      version: seriesVersion(pid, bars, hot.at),
     };
   }
 
@@ -180,44 +210,59 @@ async function readThrough(
   if (!force) {
     const stored = await readPersist(ref, tf).catch(() => null);
     if (stored && stored.bars.length >= MIN_CANDLES) {
-      const fresh = stored.fetchedAt >= freshAfter;
-      cache.set(key, { at: stored.fetchedAt, series: stored.bars });
+      const bars = trimFormingTail(stored.bars, tf.ms, stored.fetchedAt);
+      const trimmed = bars.length !== stored.bars.length;
+      const fresh = stored.fetchedAt >= freshAfter && !trimmed;
+      cache.set(key, { at: stored.fetchedAt, series: bars });
       if (fresh) {
         breaker.recordSuccess(pid);
         return {
           provider: pid,
-          bars: stored.bars,
+          bars,
           warnings,
           cached: true,
           stale: false,
-          version: seriesVersion(pid, stored.bars, stored.fetchedAt),
+          version: seriesVersion(pid, bars, stored.fetchedAt),
         };
       }
       void refreshInBackground(pid, meta, tf, key, ref);
       return {
         provider: pid,
-        bars: stored.bars,
+        bars,
         warnings,
         cached: true,
         stale: true,
-        version: seriesVersion(pid, stored.bars, stored.fetchedAt),
+        version: seriesVersion(pid, bars, stored.fetchedAt),
       };
     }
   }
 
   // 3. Network. Nothing usable stored, so this one has to wait.
-  const candles = await fetchFromSource(pid, meta, tf, settings, warnings, ref);
-  if (!candles.length) return null;
+  const fetched = await fetchFromSource(pid, meta, tf, settings, warnings, ref);
+  if (!fetched.candles.length) return null;
+  // A failed fetch that fell back to memory must not be re-stamped as fresh:
+  // keep the original age, flag it stale, and leave Mongo untouched.
+  if (fetched.staleAt !== null) {
+    const bars = trimFormingTail(fetched.candles, tf.ms, fetched.staleAt);
+    return {
+      provider: pid,
+      bars,
+      warnings,
+      cached: true,
+      stale: true,
+      version: seriesVersion(pid, bars, fetched.staleAt),
+    };
+  }
   const at = Date.now();
-  cache.set(key, { at, series: candles });
-  void writePersist(ref, tf, candles).catch(() => {});
+  cache.set(key, { at, series: fetched.candles });
+  void writePersist(ref, tf, fetched.candles).catch(() => {});
   return {
     provider: pid,
-    bars: candles,
+    bars: fetched.candles,
     warnings,
     cached: false,
     stale: false,
-    version: seriesVersion(pid, candles, at),
+    version: seriesVersion(pid, fetched.candles, at),
   };
 }
 
@@ -230,6 +275,13 @@ export function cachedBars(meta: SymbolMeta, timeframeId: string): Candle[] | nu
   return null;
 }
 
+/** One network read. `staleAt` is set when the source failed and memory was used. */
+interface SourceFetch {
+  candles: Candle[];
+  /** Fetch time of the in-memory fallback, or null on a real source read. */
+  staleAt: number | null;
+}
+
 async function fetchFromSource(
   pid: ProviderId,
   meta: SymbolMeta,
@@ -237,7 +289,7 @@ async function fetchFromSource(
   settings: AnalysisSettings,
   warnings: ProviderWarning[],
   ref: SourceRef
-): Promise<Candle[]> {
+): Promise<SourceFetch> {
   const p = REGISTRY[pid];
   try {
     const release = await rateLimit.acquire(pid);
@@ -249,7 +301,7 @@ async function fetchFromSource(
         );
       }
       breaker.recordSuccess(pid);
-      return candles;
+      return { candles, staleAt: null };
     } finally {
       release();
     }
@@ -262,8 +314,8 @@ async function fetchFromSource(
     // A previous run may have left usable bars in memory even when the source
     // is refusing; stale data beats an empty card.
     const stale = cache.get(cacheKey(pid, meta, tf));
-    if (stale) return stale.series;
-    return [];
+    if (stale) return { candles: stale.series, staleAt: stale.at };
+    return { candles: [], staleAt: null };
   }
 }
 

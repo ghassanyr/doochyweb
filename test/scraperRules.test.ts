@@ -221,13 +221,15 @@ describe("freshness", () => {
 import { detectEngulfing as legacyEngulf, detectSweep as legacySweep, isLastBarForming } from "../src/server/market/patterns";
 describe("lastBarForming flag", () => {
   const b = (o: number, c: number): Candle => ({ time: 0, open: o, close: c, high: Math.max(o, c) + 1, low: Math.min(o, c) - 1, volume: 1 });
+  // The shared engulf rule needs ATR20, so give it a flat history first.
+  const history = Array.from({ length: 20 }, () => b(50, 50));
   test("closed series: the last bar is the bar under test", () => {
-    const closed = [b(50, 50), b(10, 8), b(7, 11)]; // bullish engulf on the last bar
+    const closed = [...history, b(10, 8), b(7, 11)]; // bullish engulf on the last bar
     assert.equal(legacyEngulf(closed, "4h", false), "bullish");
     assert.equal(legacyEngulf(closed, "4h", true), null, "old behaviour ignores the last bar");
   });
   test("forming-bar series keeps the old behaviour", () => {
-    const withForming = [b(50, 50), b(10, 8), b(7, 11), b(1, 1)];
+    const withForming = [...history, b(10, 8), b(7, 11), b(1, 1)];
     assert.equal(legacyEngulf(withForming, "4h", true), "bullish");
   });
   test("sweep: closed series reads the last bar", () => {

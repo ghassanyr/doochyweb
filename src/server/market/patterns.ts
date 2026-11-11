@@ -2,9 +2,10 @@
 // purpose: a pattern is a badge, not a vote, so it must not move the dial.
 
 import { getTimeframe } from "./timeframes";
+import { engulfingAt, type Engulfing } from "./engulf";
 import type { Candle } from "./types";
 
-export type Engulfing = "bullish" | "bearish";
+export type { Engulfing };
 
 /** A 4H candle that took a prior extreme and closed back through it. */
 export type Sweep = "high" | "low" | "both";
@@ -15,53 +16,54 @@ const SWEEP_LOOKBACK = 5;
 /** Patterns are noise below this. 1m, 3m and 5m are excluded. */
 const MIN_MS = 15 * 60 * 1000;
 
+/** A match plus the bar it printed on. */
+export interface EngulfingMatch {
+  kind: Engulfing;
+  /** Open time of the matched bar. */
+  time: number;
+  /** Close time of the matched bar (open time + timeframe). */
+  closeTime: number;
+}
+
 /**
- * Classic body engulfing on the last CLOSED bar.
+ * Engulfing on the last CLOSED bar, using the shared trainer definition in
+ * engulf.ts (body cover + close clears the prior wick + body ratio >= 1.3).
  *
- * The newest bar from both Binance and cTrader is still forming, so a pattern
- * printed on it can vanish before the bar closes. The check therefore compares
- * candles[length - 2] with candles[length - 3] and ignores the live bar.
+ * The newest bar from Binance is still forming, so a pattern printed on it can
+ * vanish before the bar closes. The check therefore compares
+ * candles[length - 2] with candles[length - 3] and ignores the live bar. A
+ * cTrader series contains no forming bar, so there the last element is the bar
+ * under test. `lastBarForming` selects between the two.
  *
- * Bullish: prior bar red, current bar green, and the current body covers the
- * prior body (open at or below the prior close, close at or above the prior
- * open). Bearish is the mirror. Wicks are ignored. A doji (open === close) has
- * no direction, so either bar being a doji is not a match.
+ * Returns the matched bar's close time as well, so the UI can show when the
+ * pattern actually printed instead of when the analysis was refreshed.
  */
-export function detectEngulfing(
+export function detectEngulfingMatch(
   candles: Candle[],
   timeframeId: string,
   lastBarForming: boolean = true
-): Engulfing | null {
-  if (getTimeframe(timeframeId).ms < MIN_MS) return null;
+): EngulfingMatch | null {
+  const tf = getTimeframe(timeframeId);
+  if (tf.ms < MIN_MS) return null;
   if (!Array.isArray(candles) || candles.length < 3) return null;
   // The bar under test is the last CLOSED one. When the last element is still forming
   // (Binance includes the live bar) that is length - 2; when it has closed (cTrader
   // series contain no forming bar) it is length - 1.
   const cur = lastBarForming ? candles.length - 2 : candles.length - 1;
   if (cur < 1) return null;
-  const prior = candles[cur - 1];
-  const current = candles[cur];
-  const priorBody = prior.close - prior.open;
-  const currentBody = current.close - current.open;
-  if (priorBody === 0 || currentBody === 0) return null;
+  const kind = engulfingAt(candles, cur);
+  if (!kind) return null;
+  const bar = candles[cur];
+  return { kind, time: bar.time, closeTime: bar.time + tf.ms };
+}
 
-  if (
-    priorBody < 0 &&
-    currentBody > 0 &&
-    current.open <= prior.close &&
-    current.close >= prior.open
-  ) {
-    return "bullish";
-  }
-  if (
-    priorBody > 0 &&
-    currentBody < 0 &&
-    current.open >= prior.close &&
-    current.close <= prior.open
-  ) {
-    return "bearish";
-  }
-  return null;
+/** Direction-only wrapper for callers that do not need the bar timestamp. */
+export function detectEngulfing(
+  candles: Candle[],
+  timeframeId: string,
+  lastBarForming: boolean = true
+): Engulfing | null {
+  return detectEngulfingMatch(candles, timeframeId, lastBarForming)?.kind ?? null;
 }
 
 /**

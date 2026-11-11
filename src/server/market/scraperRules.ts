@@ -10,6 +10,7 @@
 //  - "4H low" is rebuilt from bars: the last closed 4H bar's low is below the prior 5 lows.
 //    A sweep is that break closing back above the prior low; a true break closes at or below it.
 
+import { engulfingAt } from "./engulf";
 import type { Candle } from "./types";
 
 export type Signal = "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy";
@@ -80,17 +81,13 @@ export function isWeekendClosed(iso: string): boolean {
 
 // ---- bar-derived patterns (closed bars only; last element = bar under test) ----
 
-/** Body engulf on the last closed bar. Mirrors detectEngulfing() in patterns.ts. */
+/**
+ * Engulf on the last closed bar, using the shared trainer definition in
+ * engulf.ts. Mirrors detectEngulfing() in patterns.ts.
+ */
 export function engulfClosed(bars: Candle[]): Engulf {
   if (bars.length < 2) return null;
-  const prior = bars[bars.length - 2];
-  const cur = bars[bars.length - 1];
-  const pb = prior.close - prior.open;
-  const cb = cur.close - cur.open;
-  if (pb === 0 || cb === 0) return null;
-  if (pb < 0 && cb > 0 && cur.open <= prior.close && cur.close >= prior.open) return "bullish";
-  if (pb > 0 && cb < 0 && cur.open >= prior.close && cur.close <= prior.open) return "bearish";
-  return null;
+  return engulfingAt(bars, bars.length - 1);
 }
 
 /** 4H structure on the last closed bar against the prior REF_BARS closed bars. */

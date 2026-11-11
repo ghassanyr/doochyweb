@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { analyze, applyLatestPrice, RATINGS } from "../src/server/market/analysis";
-import { detectEngulfing, detectSweep } from "../src/server/market/patterns";
+import { detectEngulfing, detectEngulfingMatch, detectSweep } from "../src/server/market/patterns";
 import * as ti from "../src/server/market/indicators";
 import { buildCatalog, resolveAgainstBroker, toSymbolMeta, searchCatalog } from "../src/server/market/symbols";
 import { deriveCryptoPairs, cryptoCatalogEntries, type RawPair } from "../src/server/market/crypto";
@@ -17,7 +17,7 @@ import { maskClientId, resolveConnectInput } from "../src/server/credentials";
 import { normalizeCapture } from "../src/server/market/captures";
 import { aggregate } from "../src/server/market/providers/binance";
 import { getTimeframe, TIMEFRAMES } from "../src/server/market/timeframes";
-import { noSourceError } from "../src/server/market/providers/index";
+import { noSourceError, trimFormingTail } from "../src/server/market/providers/index";
 import * as breaker from "../src/server/market/providers/breaker";
 import type { Candle, Timeframe } from "../src/server/market/types";
 import { applyOrder, moveTo, dropIndex } from "../src/webapp/src/market/order";
@@ -116,6 +116,10 @@ describe("analysis", () => {
     assert.ok(result.summary.score >= -1 && result.summary.score <= 1);
     assert.equal(result.summary.buy + result.summary.sell + result.summary.neutral, 24);
     assert.ok(result.engulfing === null || result.engulfing === "bullish" || result.engulfing === "bearish");
+    assert.ok(
+      result.engulfingBarClose === null || Number.isFinite(result.engulfingBarClose),
+      "engulfingBarClose is a timestamp or null"
+    );
   });
 
   test("rejects too little data", () => {
@@ -156,22 +160,37 @@ describe("engulfing candle", () => {
     low: Math.min(open, close) - wick,
     volume: 1,
   });
+  // ATR20 needs 20 prior bars; the flat history keeps the wick tolerance small
+  // relative to the test bodies.
+  const history = (n = 20): Candle[] => Array.from({ length: n }, () => bar(50, 50));
   // Index -1 is the forming bar and must never decide the pattern.
   const series = (prior: Candle, closed: Candle, forming: Candle = bar(1, 1)): Candle[] => [
-    bar(50, 50),
+    ...history(),
     prior,
     closed,
     forming,
   ];
 
-  test("bullish: green body covers the prior red body", () => {
+  test("bullish: green body covers the prior red body and clears its high", () => {
     const candles = series(bar(10, 8), bar(7, 11));
     assert.equal(detectEngulfing(candles, "15m"), "bullish");
     assert.equal(detectEngulfing(candles, "1d"), "bullish");
   });
 
-  test("bearish: red body covers the prior green body", () => {
+  test("bearish: red body covers the prior green body and clears its low", () => {
     assert.equal(detectEngulfing(series(bar(8, 10), bar(11, 7)), "1h"), "bearish");
+  });
+
+  test("a body cover that does not clear the prior wick is rejected", () => {
+    // Prior body 10-8 (high 11). Current body 7.8-10.4 is exactly 1.3x, but it
+    // closes below the prior high by more than 0.1 ATR.
+    assert.equal(detectEngulfing(series(bar(10, 8), bar(7.8, 10.4)), "15m"), null);
+  });
+
+  test("a wick clearance without body expansion is rejected", () => {
+    // Prior body 12-8 (high 13). Current body 8-13 clears the high, but is only
+    // 1.25x the prior body.
+    assert.equal(detectEngulfing(series(bar(12, 8), bar(8, 13)), "15m"), null);
   });
 
   test("a longer wick is not enough when the body does not cover", () => {
@@ -198,8 +217,46 @@ describe("engulfing candle", () => {
     }
   });
 
-  test("equal body edges still count as a cover", () => {
-    assert.equal(detectEngulfing(series(bar(10, 8), bar(8, 10)), "30m"), "bullish");
+  test("not enough history for ATR20 is null", () => {
+    assert.equal(detectEngulfing([bar(10, 8), bar(7, 11)], "1h"), null);
+  });
+
+  test("a match reports the closed bar's close time", () => {
+    const candles = series(bar(10, 8), bar(7, 11));
+    const closed = candles[candles.length - 2];
+    const match = detectEngulfingMatch(candles, "4h");
+    assert.ok(match);
+    assert.equal(match.kind, "bullish");
+    assert.equal(match.time, closed.time);
+    assert.equal(match.closeTime, closed.time + getTimeframe("4h").ms);
+  });
+});
+
+describe("partial-bar cache hygiene", () => {
+  const H4 = 4 * 3_600_000;
+  const open = Date.UTC(2026, 10, 2, 8, 0);
+  const bar = (time: number): Candle => ({ time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 });
+  const bars = [bar(open - H4), bar(open)];
+
+  test("drops a tail captured while forming once its close has passed", () => {
+    assert.deepEqual(
+      trimFormingTail(bars, H4, open + 60_000, open + H4 + 60_000),
+      [bars[0]]
+    );
+  });
+
+  test("keeps a tail captured after it closed", () => {
+    assert.deepEqual(
+      trimFormingTail(bars, H4, open + H4 + 5_000, open + H4 + 60_000),
+      bars
+    );
+  });
+
+  test("keeps a tail that is still forming", () => {
+    assert.deepEqual(
+      trimFormingTail(bars, H4, open + 60_000, open + H4 - 60_000),
+      bars
+    );
   });
 });
 

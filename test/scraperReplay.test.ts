@@ -14,11 +14,18 @@ const neutral = () => "Neutral";
 
 /** 4H is bullish engulf at the last closed bar; 1H flips from flat to bullish engulf. */
 function flippingSymbol(B: number): ReplaySymbol {
+  // The shared engulf rule needs ATR20, so lead with a flat history.
+  const flat4h = Array.from({ length: 20 }, (_, i) =>
+    bar(B - 8 * H - (20 - i) * 4 * H, 10, 10)
+  );
+  const flat1h = Array.from({ length: 20 }, (_, i) =>
+    bar(B - 2 * H - (20 - i) * H, 10, 10)
+  );
   return {
     symbol: "EURUSD",
     meta: meta("EURUSD", "forex"),
-    bars4h: [bar(B - 8 * H, 10, 9), bar(B - 4 * H, 8.5, 10.5)],
-    bars1h: [bar(B - 2 * H, 10, 9), bar(B - 1 * H, 9, 8), bar(B, 7, 10)],
+    bars4h: [...flat4h, bar(B - 8 * H, 10, 9), bar(B - 4 * H, 8.5, 10.5)],
+    bars1h: [...flat1h, bar(B - 2 * H, 10, 9), bar(B - 1 * H, 9, 8), bar(B, 7, 10)],
   };
 }
 
