@@ -127,7 +127,9 @@ export default function LearnChart({
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "rgba(231, 237, 245, 0.60)",
         fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif',
-        fontSize: 11,
+        // The right-axis percentage ticks are the only labels on the chart, so
+        // keep them small enough not to compete with the candles.
+        fontSize: 9,
         attributionLogo: false,
       },
       grid: {
