@@ -6,8 +6,8 @@ import SignalsPage from "./signals/SignalsPage";
 import BreakoutsPage from "./market/BreakoutsPage";
 import AdminPage from "./admin/AdminPage";
 import LearnPage from "./learn/LearnPage";
-import { initialView } from "./initialView";
-import AppShell, { type ViewKey } from "./AppShell";
+import { pathForView, resolveRoute, type ViewKey } from "./routing";
+import AppShell from "./AppShell";
 import Dashboard from "./Dashboard";
 import Login from "./Login";
 import SettingsPage from "./Settings";
@@ -25,7 +25,7 @@ export default function App() {
   const [booting, setBooting] = useState<boolean>(() => !!getToken());
   const [view, setView] = useState<ViewKey>(() => {
     if (typeof window === "undefined") return "analysis";
-    return initialView(window.location.search, window.location.hostname);
+    return resolveRoute(window.location).view;
   });
   const [showSettings, setShowSettings] = useState(false);
   // Auth is a modal over the current view, not a tab. Clicking Sign in must not
@@ -35,7 +35,7 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   // Result of the cTrader consent round-trip: the server redirects back to
-  // /?view=trading&ctrader=connected (or ctrader_error=...).
+  // /trading?ctrader=connected (or ctrader_error=...).
   const [oauthNotice, setOauthNotice] = useState<{ tone: "success" | "danger"; message: string } | null>(
     () => {
       if (typeof window === "undefined") return null;
@@ -54,6 +54,23 @@ export default function App() {
   const { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect } =
     useAccounts(signedIn);
   const isAdmin = me?.role === "admin";
+
+  // Canonicalize legacy query links and the bare root once on load.
+  useEffect(() => {
+    const route = resolveRoute(window.location);
+    if (route.redirectTo) window.history.replaceState(null, "", route.redirectTo);
+  }, []);
+
+  // Browser back/forward switches the view without a full page load.
+  useEffect(() => {
+    function onPopState() {
+      const route = resolveRoute(window.location);
+      setView(route.view);
+      if (route.redirectTo) window.history.replaceState(null, "", route.redirectTo);
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // Keep the notice on screen but drop the one-shot params so a reload does not
   // replay it.
@@ -104,22 +121,20 @@ export default function App() {
 
   function handleViewChange(next: ViewKey) {
     if (next === "admin" && !isAdmin) return;
+    const sameView = view === next;
     setView(next);
+
     const url = new URL(window.location.href);
-    let changed = false;
-    if (next !== "breakouts" && url.searchParams.has("note")) {
-      url.searchParams.delete("note");
-      changed = true;
+    url.pathname = pathForView(next);
+    url.searchParams.delete("view");
+    if (next !== "breakouts") url.searchParams.delete("note");
+    if (next !== "signals") url.searchParams.delete("signal");
+
+    if (sameView) {
+      window.history.replaceState(null, "", url);
+    } else {
+      window.history.pushState(null, "", url);
     }
-    if (next !== "signals" && url.searchParams.has("signal")) {
-      url.searchParams.delete("signal");
-      changed = true;
-    }
-    if (next !== "learn" && url.searchParams.has("view")) {
-      url.searchParams.delete("view");
-      changed = true;
-    }
-    if (changed) window.history.replaceState(null, "", url);
   }
 
   function handleLogout() {

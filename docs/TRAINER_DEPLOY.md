@@ -12,9 +12,9 @@ human curation.
 browser -> nginx :443 -> 127.0.0.1:9111 (doochyweb) -> API + webapp/dist
 ```
 
-There is no second Node process, database or build. The SPA chooses the initial tab from the
-hostname (`learn.*`) or `?view=learn`; `doochy.net` keeps its existing Analysis default and
-shared `?note=` links still open Breakouts.
+There is no second Node process, database or build. The SPA uses canonical paths:
+`/analysis` is the default, `/learn` opens the trainer, and `/breakouts?note=<id>` keeps
+shared notes on Breakouts. Legacy `?view=` and bare `?note=` links redirect once.
 
 ## Verified state (2026-11-09)
 
@@ -109,9 +109,9 @@ Expected:
 - `/api/trainer/batch` returns `503 {"error":"no batch published"}` until `v1` is published.
   `v1` was published on 2026-11-10, so the current API returns `200` with `itemCount=50`.
 - After a published batch, both hosts return the same batch metadata.
-- Opening `https://learn.doochy.net/` selects the Learn tab without signing in.
-- Opening `https://doochy.net/?view=learn` also selects Learn.
-- Opening `https://doochy.net/?note=<id>` still opens Breakouts.
+- Opening `https://doochy.net/learn` selects the Learn tab without signing in.
+- Legacy `https://doochy.net/?view=learn` redirects to `/learn`.
+- Opening `https://doochy.net/breakouts?note=<id>` opens Breakouts; legacy bare `?note=` links redirect there.
 - Signing in and the Trading tab are unaffected.
 
 Do not use the production hosts for publish or answer/reveal tests until a pilot batch is

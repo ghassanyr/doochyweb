@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { LogIn, LogOut, RefreshCw, Settings } from "lucide-react";
 
 import { Button } from "./components/ui";
+import { pathForView, type ViewKey } from "./routing";
 
 // Top-level shell: brand, primary navigation, and the account-level actions
 // (settings / sign out). The Analysis, Breakouts, Learn and Trading views render
@@ -11,8 +12,6 @@ import { Button } from "./components/ui";
 // top-level views could share it. Styling follows the standalone Gauge project:
 // sticky translucent topbar, a segmented control for the primary nav, and the
 // 1600px page measure.
-
-export type ViewKey = "trading" | "analysis" | "signals" | "breakouts" | "learn" | "admin";
 
 const NAV: { key: ViewKey; label: string }[] = [
   { key: "analysis", label: "Analysis" },
@@ -80,10 +79,16 @@ export function AppShell({
             {nav.map((n) => {
               const active = view === n.key;
               return (
-                <button
+                <a
                   key={n.key}
-                  type="button"
-                  onClick={() => onViewChange(n.key)}
+                  href={pathForView(n.key)}
+                  onClick={(event) => {
+                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                      return;
+                    }
+                    event.preventDefault();
+                    onViewChange(n.key);
+                  }}
                   aria-current={active ? "page" : undefined}
                   className={
                     "rounded-md whitespace-nowrap px-3 py-1.5 text-[13px] transition duration-150 " +
@@ -93,7 +98,7 @@ export function AppShell({
                   }
                 >
                   {n.label}
-                </button>
+                </a>
               );
             })}
           </nav>

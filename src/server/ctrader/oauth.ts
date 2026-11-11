@@ -142,7 +142,7 @@ function stateCookieOptions(req: Request) {
 
 function redirectError(res: Response, code: string): void {
   const safe = (code || "oauth_failed").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
-  res.redirect(`/?view=trading&ctrader_error=${encodeURIComponent(safe)}`);
+  res.redirect(`/trading?ctrader_error=${encodeURIComponent(safe)}`);
 }
 
 /** Public callback: verify state, exchange the code, persist tokens + accounts. */
@@ -210,7 +210,7 @@ export async function ctraderOAuthCallback(req: Request, res: Response): Promise
     // The old sockets still hold the previous grant; force a fresh connection
     // on the next request.
     userSockets(userId).close();
-    res.redirect("/?view=trading&ctrader=connected");
+    res.redirect("/trading?ctrader=connected");
   } catch (err: any) {
     console.error(`[cTrader OAuth] callback failed for user ${userId}:`, err?.message ?? err);
     redirectError(res, "exchange_failed");

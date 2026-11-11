@@ -21,7 +21,7 @@ does not promise an edge.
 | Publish | `publish.ts` | Overlap/invalid/balance filters, base rates, snapshot + Mongo |
 | Public API | `payload.ts`, `attempts.ts`, `routes.ts` | Anonymized session, answer-gated reveal, in-memory attempts |
 | Web UI | `src/webapp/src/learn/` | Daily drill, chart, answer/reveal, browser-local scoring |
-| Host routing | `src/webapp/src/initialView.ts` | Learn on `learn.*` / `?view=learn`; notes stay on Breakouts |
+| Path routing | `src/webapp/src/routing.ts` | Canonical paths such as `/learn` and `/breakouts?note=`; legacy query links redirect |
 
 Data is written under the git-ignored `data/` directory:
 
@@ -188,7 +188,7 @@ approval. See [`TRAINER_DEPLOY.md`](./TRAINER_DEPLOY.md).
   Kept mix is 27 up / 23 down with no scratches: bullish engulfing 5, bearish engulfing 5,
   sweep up 7, sweep down 8, SR flip 9, BOS 8, CHoCH 8.
 - Verification: `/api/trainer/batch` returns `200` with `itemCount=50` on both hosts;
-  `learn.doochy.net/` and `doochy.net/?view=learn` return `200`. A local
+  `doochy.net/learn` returns `200`; the legacy `?view=learn` link redirects. A local
   session -> answer -> reveal pass returned an anonymized context and a reveal with tag,
   outcome and base rates.
 - No DNS, nginx, certificate or pm2 change was made. Any deploy/restart remains

@@ -120,7 +120,7 @@ export default function SignalsPage({
     return () => window.clearInterval(id);
   }, [load, mode]);
 
-  // Deep link: ?view=signals&signal=<id> opens the detail sheet.
+  // Deep link: /signals?signal=<id> opens the detail sheet.
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("signal");
     if (!id) return;
