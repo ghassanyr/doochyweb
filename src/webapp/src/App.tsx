@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogIn } from "lucide-react";
+import { LogIn, Settings } from "lucide-react";
 import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import SignalsPage from "./signals/SignalsPage";
@@ -7,7 +7,7 @@ import BreakoutsPage from "./market/BreakoutsPage";
 import AdminPage from "./admin/AdminPage";
 import LearnPage from "./learn/LearnPage";
 import HomePage from "./home/HomePage";
-import { pathForView, resolveRoute, type ViewKey } from "./routing";
+import { isViewKey, pathForView, resolveRoute, type ViewKey } from "./routing";
 import AppShell from "./AppShell";
 import Dashboard from "./Dashboard";
 import Login from "./Login";
@@ -28,7 +28,6 @@ export default function App() {
     if (typeof window === "undefined") return "analysis";
     return resolveRoute(window.location).view;
   });
-  const [showSettings, setShowSettings] = useState(false);
   // Auth is a modal over the current view, not a tab. Clicking Sign in must not
   // move the visitor to Trading (or anywhere else); after auth they stay where
   // they were, and registration lands on Analysis only because a fresh account
@@ -126,6 +125,12 @@ export default function App() {
 
   function handleViewChange(next: ViewKey) {
     if (next === "admin" && !isAdmin) return;
+    // Settings is a takeover, not a nav tab: always open it through the helper
+    // so the back target is recorded.
+    if (next === "settings") {
+      openSettings();
+      return;
+    }
     const sameView = view === next;
     setView(next);
 
@@ -142,26 +147,51 @@ export default function App() {
     }
   }
 
+  // Settings has a canonical URL so bot and support links can open it directly.
+  // Remember where it was opened from so the back arrow returns there; a
+  // direct link falls back to Home.
+  function openSettings() {
+    if (view === "settings") return;
+    const from = view;
+    setView("settings");
+    const url = new URL(window.location.href);
+    url.pathname = pathForView("settings");
+    url.search = "";
+    window.history.pushState({ settingsFrom: from }, "", url);
+  }
+
+  function closeSettings() {
+    void load();
+    const from = window.history.state?.settingsFrom;
+    if (typeof from === "string" && isViewKey(from) && from !== "settings") {
+      window.history.back();
+      return;
+    }
+    // Direct link with no in-app history: replace it so Back does not reopen
+    // Settings.
+    const url = new URL(window.location.href);
+    url.pathname = pathForView("home");
+    url.search = "";
+    setView("home");
+    window.history.replaceState(null, "", url);
+  }
+
   function handleLogout() {
     setToken(null);
     setTokenState(null);
-    setShowSettings(false);
     setShowLogin(false);
     handleViewChange("analysis");
   }
 
   // Settings manages cTrader credentials, so it is a takeover for signed-in
   // users only and sits outside the shell.
-  if (showSettings && signedIn) {
+  if (view === "settings" && signedIn) {
     return (
       <SettingsPage
         accounts={accounts}
         onAccountsChanged={setAccounts}
         onConnected={handleConnected}
-        onClose={() => {
-          setShowSettings(false);
-          void load();
-        }}
+        onClose={closeSettings}
       />
     );
   }
@@ -174,7 +204,7 @@ export default function App() {
         onRefresh={signedIn ? refreshBalances : undefined}
         signedIn={signedIn}
         isAdmin={isAdmin}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={openSettings}
         onSignIn={openLogin}
         onLogout={handleLogout}
       >
@@ -198,6 +228,31 @@ export default function App() {
           <BreakoutsPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
         ) : view === "learn" ? (
           <LearnPage />
+        ) : view === "settings" ? (
+          <div className="mx-auto w-full max-w-lg">
+            <Card className="p-8 text-center shadow-overlay">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                <Settings className="h-5 w-5" />
+              </div>
+              <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">
+                Sign in to manage settings
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+                Settings holds your cTrader connection, account preferences and notification
+                options. Sign in to continue.
+              </p>
+              <div className="mt-5 flex justify-center">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={<LogIn className="h-4 w-4" />}
+                  onClick={openLogin}
+                >
+                  Sign in
+                </Button>
+              </div>
+            </Card>
+          </div>
         ) : !signedIn ? (
           <div className="mx-auto w-full max-w-lg">
             <Card className="p-8 text-center shadow-overlay">

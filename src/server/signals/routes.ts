@@ -26,6 +26,7 @@ import {
 } from "./store";
 import { signalPrices } from "./prices";
 import { validateSignalInput } from "./validate";
+import { enqueueSignalPublished } from "../telegram/notify";
 
 export const signalsRouter = Router();
 
@@ -106,6 +107,16 @@ signalsRouter.post("/", adminRequired, async (req: AuthedRequest, res) => {
     }
     const force = req.body?.force === true;
     const signal = await createSignal(parsed.value, req.username, { force });
+
+    // Publish-only notifications. Queue before responding so a restart right
+    // after the publish cannot lose the alert; a notification failure must not
+    // fail the publish itself.
+    try {
+      await enqueueSignalPublished(signal);
+    } catch (err) {
+      console.error("[telegram] failed to enqueue publish notification:", err);
+    }
+
     res.status(201).json({ signal });
   } catch (err) {
     sendError(res, err);

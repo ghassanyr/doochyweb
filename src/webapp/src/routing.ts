@@ -2,7 +2,17 @@
 // path, while query strings still carry transient state such as a selected
 // breakout note or signal.
 
-export type ViewKey = "home" | "trading" | "analysis" | "signals" | "breakouts" | "learn" | "admin";
+// "settings" is a signed-in takeover rather than a nav tab, but it still owns a
+// canonical path so the bot and support messages can link straight to it.
+export type ViewKey =
+  | "home"
+  | "trading"
+  | "analysis"
+  | "signals"
+  | "breakouts"
+  | "learn"
+  | "admin"
+  | "settings";
 
 export const VIEW_KEYS: readonly ViewKey[] = [
   "home",
@@ -12,6 +22,7 @@ export const VIEW_KEYS: readonly ViewKey[] = [
   "breakouts",
   "learn",
   "admin",
+  "settings",
 ];
 
 const VIEW_SET = new Set<string>(VIEW_KEYS);

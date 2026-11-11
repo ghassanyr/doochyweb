@@ -17,6 +17,8 @@ import { promoteConfiguredAdmins } from "./admin/roles";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
 import { createTrainerRouter } from "./trainer/routes";
+import { telegramRouter } from "./telegram/routes";
+import { startTelegram, stopTelegram } from "./telegram/index";
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -443,6 +445,7 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 app.use("/api/market", marketRouter);
 app.use("/api/signals", signalsRouter);
 app.use("/api/trainer", createTrainerRouter());
+app.use("/api/telegram", telegramRouter);
 app.use("/api/ctrader/oauth", ctraderOAuthRouter);
 
 // Production redirect URI is https://doochy.net/callback (single-segment URLs
@@ -487,6 +490,17 @@ async function main() {
   startBreakoutScheduler();
   startScraperScheduler();
   startSignalResolver();
+
+  // Telegram is optional; a missing token or a bad one must never stop the
+  // web app. The feature logs its own startup failures.
+  void startTelegram();
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      stopTelegram();
+      process.exit(0);
+    });
+  }
 }
 
 main().catch((err) => {

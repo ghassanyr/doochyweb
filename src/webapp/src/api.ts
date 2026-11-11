@@ -292,6 +292,44 @@ export const signalsApi = {
     request<{ ok: boolean }>(`/api/signals/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
+// ---------------------------------------------------------------------------
+// Telegram notifications, see src/server/telegram
+// ---------------------------------------------------------------------------
+
+export interface TelegramStatus {
+  enabled: boolean;
+  botUsername: string;
+  linked: boolean;
+  username: string | null;
+  firstName: string | null;
+  notificationsEnabled: boolean;
+  linkedAt: string | null;
+  lastError: string | null;
+}
+
+export interface TelegramLinkResponse {
+  code: string;
+  expiresAt: string;
+  deepLink: string;
+  botUsername: string;
+}
+
+export const telegramApi = {
+  status: () => request<TelegramStatus>("/api/telegram/status"),
+
+  link: () => request<TelegramLinkResponse>("/api/telegram/link", { method: "POST" }),
+
+  unlink: () => request<{ ok: boolean }>("/api/telegram/unlink", { method: "POST" }),
+
+  setPrefs: (notificationsEnabled: boolean) =>
+    request<{ ok: boolean; notificationsEnabled: boolean }>("/api/telegram/prefs", {
+      method: "PATCH",
+      body: { notificationsEnabled },
+    }),
+
+  test: () => request<{ ok: boolean }>("/api/telegram/test", { method: "POST" }),
+};
+
 export const api = {
   register: (username: string, email: string, password: string) =>
     request<{ token: string }>("/api/auth/register", {

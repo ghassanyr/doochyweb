@@ -9,7 +9,7 @@ describe("path routing", () => {
   test("maps canonical paths to views", () => {
     assert.equal(pathForView("home"), "/");
     assert.equal(viewFromPath("/"), "home");
-    for (const view of ["analysis", "signals", "breakouts", "learn", "trading", "admin"] as const) {
+    for (const view of ["analysis", "signals", "breakouts", "learn", "trading", "admin", "settings"] as const) {
       assert.equal(pathForView(view), `/${view}`);
       assert.equal(viewFromPath(`/${view}`), view);
       assert.deepEqual(resolveRoute({ pathname: `/${view}`, search: "", hostname: D }), {
@@ -17,6 +17,21 @@ describe("path routing", () => {
         redirectTo: null,
       });
     }
+  });
+
+  test("settings is a routable signed-in takeover", () => {
+    assert.deepEqual(resolveRoute({ pathname: "/settings", search: "", hostname: D }), {
+      view: "settings",
+      redirectTo: null,
+    });
+    assert.deepEqual(resolveRoute({ pathname: "/settings/", search: "", hostname: D }), {
+      view: "settings",
+      redirectTo: "/settings",
+    });
+    assert.deepEqual(resolveRoute({ pathname: "/", search: "?view=settings", hostname: D }), {
+      view: "settings",
+      redirectTo: "/settings",
+    });
   });
 
   test("renders Home at the root", () => {
