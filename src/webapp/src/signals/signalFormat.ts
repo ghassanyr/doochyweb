@@ -20,6 +20,23 @@ export const SIGNAL_DIRECTION: Record<SignalDirection, { label: string; tone: "s
   sell: { label: "SELL", tone: "danger" },
 };
 
+export const EXPIRY_PRESETS = [
+  { id: "15m", label: "15m", ms: 15 * 60_000 },
+  { id: "30m", label: "30m", ms: 30 * 60_000 },
+  { id: "1h", label: "1h", ms: 60 * 60_000 },
+  { id: "4h", label: "4h", ms: 4 * 60 * 60_000 },
+  { id: "1d", label: "1d", ms: 24 * 60 * 60_000 },
+] as const;
+
+export type ExpiryPresetId = (typeof EXPIRY_PRESETS)[number]["id"];
+
+/** ISO expiry for a quick preset, measured from the moment it is published. */
+export function expiryIsoForPreset(id: ExpiryPresetId, now: Date = new Date()): string {
+  const preset = EXPIRY_PRESETS.find((p) => p.id === id);
+  if (!preset) throw new Error(`unknown expiry preset: ${id}`);
+  return new Date(now.getTime() + preset.ms).toISOString();
+}
+
 /** Price decimals scale with magnitude, matching the Analysis cards. */
 export function fmtPrice(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "-";

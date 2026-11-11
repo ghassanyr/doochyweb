@@ -22,6 +22,7 @@ import {
 import {
   computeRR as clientRR,
   distances,
+  expiryIsoForPreset,
   progressFor,
   relativeAgo,
   signalShareText,
@@ -344,5 +345,19 @@ describe("signal presentation", () => {
 
   test("client and server R:R agree", () => {
     assert.equal(clientRR(base.entry, base.target, base.stop), computeRR(base.entry, base.target, base.stop));
+  });
+
+  test("expiry presets count from publish time", () => {
+    const now = new Date("2026-11-11T12:00:00.000Z");
+    const cases = [
+      ["15m", "2026-11-11T12:15:00.000Z"],
+      ["30m", "2026-11-11T12:30:00.000Z"],
+      ["1h", "2026-11-11T13:00:00.000Z"],
+      ["4h", "2026-11-11T16:00:00.000Z"],
+      ["1d", "2026-11-12T12:00:00.000Z"],
+    ] as const;
+    for (const [preset, expected] of cases) {
+      assert.equal(expiryIsoForPreset(preset, now), expected);
+    }
   });
 });

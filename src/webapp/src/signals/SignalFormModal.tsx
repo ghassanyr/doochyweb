@@ -4,9 +4,12 @@ import { ApiError, signalsApi } from "../api";
 import { AnimatedModal } from "../components/Modal";
 import { Button, inputCls } from "../components/ui";
 import type { CatalogEntry } from "../market/types";
-import { toLocalInputValue } from "../time";
-import { computeRR, fmtRR } from "./signalFormat";
+import { formatLocalDateTime } from "../time";
+import { EXPIRY_PRESETS, computeRR, expiryIsoForPreset, fmtRR } from "./signalFormat";
+import type { ExpiryPresetId } from "./signalFormat";
 import type { Signal, SignalDirection } from "./types";
+
+type ExpiryChoice = ExpiryPresetId | "none" | "keep";
 
 export function SignalFormModal({
   open,
@@ -32,7 +35,7 @@ export function SignalFormModal({
   const [stop, setStop] = useState("");
   const [timeframe, setTimeframe] = useState("");
   const [note, setNote] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
+  const [expiryChoice, setExpiryChoice] = useState<ExpiryChoice>("none");
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [symbolOpen, setSymbolOpen] = useState(false);
@@ -48,7 +51,7 @@ export function SignalFormModal({
     setStop(signal ? String(signal.stop) : "");
     setTimeframe(signal?.timeframe ?? "");
     setNote(signal?.note ?? "");
-    setExpiresAt(signal?.expiresAt ? toLocalInputValue(signal.expiresAt) : "");
+    setExpiryChoice(signal?.expiresAt ? "keep" : "none");
     setError(null);
     setConflict(false);
     setSymbolOpen(false);
@@ -58,6 +61,10 @@ export function SignalFormModal({
   const targetNum = Number(target);
   const stopNum = Number(stop);
   const rr = computeRR(entryNum, targetNum, stopNum);
+  const selectedExpiryLabel =
+    expiryChoice !== "none" && expiryChoice !== "keep"
+      ? (EXPIRY_PRESETS.find((p) => p.id === expiryChoice)?.label ?? null)
+      : null;
 
   const suggestions = useMemo(() => {
     const q = symbol.trim().toUpperCase();
@@ -98,6 +105,12 @@ export function SignalFormModal({
       return;
     }
     setError(null);
+    const expiresAt =
+      expiryChoice === "keep"
+        ? (signal?.expiresAt ?? null)
+        : expiryChoice === "none"
+          ? null
+          : expiryIsoForPreset(expiryChoice);
     const payload = {
       symbol: symbol.trim().toUpperCase(),
       direction,
@@ -106,7 +119,7 @@ export function SignalFormModal({
       stop: stopNum,
       timeframe: timeframe || null,
       note,
-      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      expiresAt,
     };
     try {
       const result = signal
@@ -214,16 +227,48 @@ export function SignalFormModal({
               ))}
             </select>
           </label>
-          <label className="block">
+          <div>
             <span className="mb-1 block text-xs font-medium text-fg-muted">Expiry (optional)</span>
-            <input
-              type="datetime-local"
-              className={inputCls}
-              value={expiresAt}
-              min={toLocalInputValue(new Date())}
-              onChange={(e) => setExpiresAt(e.target.value)}
-            />
-          </label>
+            <div className="grid grid-cols-5 gap-1.5">
+              {EXPIRY_PRESETS.map((preset) => {
+                const active = expiryChoice === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setExpiryChoice(preset.id)}
+                    aria-pressed={active}
+                    className={
+                      "h-8 rounded-md border text-[11px] font-semibold transition " +
+                      (active
+                        ? "border-accent/40 bg-accent-soft text-accent"
+                        : "border-hairline-strong bg-soft text-fg-muted hover:bg-surface-hover hover:text-fg")
+                    }
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+              <span className="text-fg-faint">
+                {expiryChoice === "keep" && signal?.expiresAt
+                  ? `Current expiry ${formatLocalDateTime(signal.expiresAt)}`
+                  : selectedExpiryLabel
+                    ? `Expires ${selectedExpiryLabel} after publish`
+                    : "No expiry"}
+              </span>
+              {expiryChoice !== "none" && (
+                <button
+                  type="button"
+                  onClick={() => setExpiryChoice("none")}
+                  className="shrink-0 text-fg-muted hover:text-fg"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         <label className="block">
