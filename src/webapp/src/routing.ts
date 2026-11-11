@@ -2,9 +2,10 @@
 // path, while query strings still carry transient state such as a selected
 // breakout note or signal.
 
-export type ViewKey = "trading" | "analysis" | "signals" | "breakouts" | "learn" | "admin";
+export type ViewKey = "home" | "trading" | "analysis" | "signals" | "breakouts" | "learn" | "admin";
 
 export const VIEW_KEYS: readonly ViewKey[] = [
+  "home",
   "trading",
   "analysis",
   "signals",
@@ -20,7 +21,7 @@ export function isViewKey(value: string): value is ViewKey {
 }
 
 export function pathForView(view: ViewKey): string {
-  return `/${view}`;
+  return view === "home" ? "/" : `/${view}`;
 }
 
 function normalizePath(pathname: string): string {
@@ -30,7 +31,7 @@ function normalizePath(pathname: string): string {
 
 export function viewFromPath(pathname: string): ViewKey | null {
   const path = normalizePath(pathname);
-  if (path === "/") return null;
+  if (path === "/") return "home";
   const key = path.slice(1);
   return isViewKey(key) ? key : null;
 }
@@ -60,18 +61,36 @@ export interface RouteMatch {
 /**
  * Resolve a URL to a view and its canonical path.
  *
- * Paths are authoritative. The old `?view=` links and `/?note=` shares are
- * redirected once, then live at their canonical paths.
+ * The root is Home. Paths are authoritative. The old `?view=` links and
+ * `/?note=` shares are redirected once, then live at their canonical paths.
  */
 export function resolveRoute({ pathname, search, hostname }: RouteLocation): RouteMatch {
   const path = normalizePath(pathname);
   const params = new URLSearchParams(search);
   const legacyView = params.get("view");
-  const pathView = viewFromPath(path);
+  const clean = new URLSearchParams(params);
+  clean.delete("view");
 
+  // The root is the public home page. Legacy query links still redirect once,
+  // with the old View param taking precedence over note/learn-host fallbacks.
+  if (path === "/") {
+    if (legacyView && isViewKey(legacyView) && legacyView !== "home") {
+      return {
+        view: legacyView,
+        redirectTo: withSearch(pathForView(legacyView), clean),
+      };
+    }
+    if (params.has("note")) {
+      return { view: "breakouts", redirectTo: withSearch("/breakouts", clean) };
+    }
+    if (isLearnHost(hostname)) {
+      return { view: "learn", redirectTo: withSearch("/learn", clean) };
+    }
+    return { view: "home", redirectTo: params.has("view") ? withSearch("/", clean) : null };
+  }
+
+  const pathView = viewFromPath(path);
   if (pathView) {
-    const clean = new URLSearchParams(params);
-    clean.delete("view");
     const canonical = pathForView(pathView);
     return {
       view: pathView,
@@ -88,7 +107,5 @@ export function resolveRoute({ pathname, search, hostname }: RouteLocation): Rou
           ? "learn"
           : "analysis";
 
-  const clean = new URLSearchParams(params);
-  clean.delete("view");
   return { view, redirectTo: withSearch(pathForView(view), clean) };
 }

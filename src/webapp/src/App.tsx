@@ -6,6 +6,7 @@ import SignalsPage from "./signals/SignalsPage";
 import BreakoutsPage from "./market/BreakoutsPage";
 import AdminPage from "./admin/AdminPage";
 import LearnPage from "./learn/LearnPage";
+import HomePage from "./home/HomePage";
 import { pathForView, resolveRoute, type ViewKey } from "./routing";
 import AppShell from "./AppShell";
 import Dashboard from "./Dashboard";
@@ -55,7 +56,7 @@ export default function App() {
     useAccounts(signedIn);
   const isAdmin = me?.role === "admin";
 
-  // Canonicalize legacy query links and the bare root once on load.
+  // Canonicalize legacy query links once on load.
   useEffect(() => {
     const route = resolveRoute(window.location);
     if (route.redirectTo) window.history.replaceState(null, "", route.redirectTo);
@@ -103,9 +104,13 @@ export default function App() {
     await refreshBalances();
   }
 
-  function openLogin() {
-    setAuthMode("login");
+  function openAuth(mode: "login" | "register") {
+    setAuthMode(mode);
     setShowLogin(true);
+  }
+
+  function openLogin() {
+    openAuth("login");
   }
 
   function handleAuthed(t: string, mode: "login" | "register") {
@@ -173,7 +178,13 @@ export default function App() {
         onSignIn={openLogin}
         onLogout={handleLogout}
       >
-        {view === "admin" ? (
+        {view === "home" ? (
+          <HomePage
+            signedIn={signedIn}
+            onRegister={() => openAuth("register")}
+            onNavigate={handleViewChange}
+          />
+        ) : view === "admin" ? (
           isAdmin ? (
             <AdminPage />
           ) : (

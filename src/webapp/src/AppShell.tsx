@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { LogIn, LogOut, RefreshCw, Settings } from "lucide-react";
 
+import { RouteLink } from "./components/RouteLink";
 import { Button } from "./components/ui";
 import { pathForView, type ViewKey } from "./routing";
 
@@ -54,7 +55,13 @@ export function AppShell({
     <div className="min-h-screen bg-transparent text-fg">
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-page items-center gap-5 px-4 sm:px-6">
-          <div className="flex shrink-0 items-center gap-2.5">
+          <RouteLink
+            view="home"
+            onNavigate={onViewChange}
+            className="flex shrink-0 items-center gap-2.5"
+            aria-label="Doochy home"
+            title="Doochy home"
+          >
             <img
               src="/doochy-mark-80.png"
               srcSet="/doochy-mark-40.png 1x, /doochy-mark-80.png 2x, /doochy-mark-120.png 3x, /doochy-mark-160.png 4x"
@@ -70,7 +77,7 @@ export function AppShell({
                 Market analysis &amp; trading
               </div>
             </div>
-          </div>
+          </RouteLink>
 
           <nav
             className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-soft p-[3px]"

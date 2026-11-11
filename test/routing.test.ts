@@ -7,6 +7,8 @@ const D = "doochy.net";
 
 describe("path routing", () => {
   test("maps canonical paths to views", () => {
+    assert.equal(pathForView("home"), "/");
+    assert.equal(viewFromPath("/"), "home");
     for (const view of ["analysis", "signals", "breakouts", "learn", "trading", "admin"] as const) {
       assert.equal(pathForView(view), `/${view}`);
       assert.equal(viewFromPath(`/${view}`), view);
@@ -17,10 +19,14 @@ describe("path routing", () => {
     }
   });
 
-  test("redirects the root to Analysis", () => {
+  test("renders Home at the root", () => {
     assert.deepEqual(resolveRoute({ pathname: "/", search: "", hostname: D }), {
-      view: "analysis",
-      redirectTo: "/analysis",
+      view: "home",
+      redirectTo: null,
+    });
+    assert.deepEqual(resolveRoute({ pathname: "/home", search: "", hostname: D }), {
+      view: "home",
+      redirectTo: "/",
     });
   });
 
@@ -48,6 +54,14 @@ describe("path routing", () => {
       resolveRoute({ pathname: "/", search: "?view=signals&signal=abc", hostname: D }),
       { view: "signals", redirectTo: "/signals?signal=abc" }
     );
+    assert.deepEqual(resolveRoute({ pathname: "/", search: "?view=home", hostname: D }), {
+      view: "home",
+      redirectTo: "/",
+    });
+    assert.deepEqual(resolveRoute({ pathname: "/", search: "?view=bogus", hostname: D }), {
+      view: "home",
+      redirectTo: "/",
+    });
   });
 
   test("keeps shared note links on Breakouts", () => {

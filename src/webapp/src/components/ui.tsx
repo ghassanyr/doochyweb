@@ -27,6 +27,11 @@ const sizes: Record<Size, string> = {
   lg: "h-11 px-5 text-sm",
 };
 
+/** Shared button styling for anchors that should look like buttons. */
+export function buttonClass(variant: Variant = "secondary", size: Size = "md", className = ""): string {
+  return `${base} ${variants[variant]} ${sizes[size]} ${className}`;
+}
+
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
@@ -70,7 +75,7 @@ export function Button({
 
   return (
     <button
-      className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+      className={buttonClass(variant, size, className)}
       onClick={handle}
       disabled={disabled || loading}
       {...rest}

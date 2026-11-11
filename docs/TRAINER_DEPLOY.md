@@ -13,8 +13,9 @@ browser -> nginx :443 -> 127.0.0.1:9111 (doochyweb) -> API + webapp/dist
 ```
 
 There is no second Node process, database or build. The SPA uses canonical paths:
-`/analysis` is the default, `/learn` opens the trainer, and `/breakouts?note=<id>` keeps
-shared notes on Breakouts. Legacy `?view=` and bare `?note=` links redirect once.
+`/` is the public home page, `/analysis` is the default workspace, `/learn` opens the
+trainer, and `/breakouts?note=<id>` keeps shared notes on Breakouts. Legacy `?view=` and
+bare `?note=` links redirect once.
 
 ## Verified state (2026-11-09)
 
@@ -109,6 +110,7 @@ Expected:
 - `/api/trainer/batch` returns `503 {"error":"no batch published"}` until `v1` is published.
   `v1` was published on 2026-11-10, so the current API returns `200` with `itemCount=50`.
 - After a published batch, both hosts return the same batch metadata.
+- Opening `https://doochy.net/` shows the public home page; the logo also links home.
 - Opening `https://doochy.net/learn` selects the Learn tab without signing in.
 - Legacy `https://doochy.net/?view=learn` redirects to `/learn`.
 - Opening `https://doochy.net/breakouts?note=<id>` opens Breakouts; legacy bare `?note=` links redirect there.
