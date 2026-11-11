@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { LogIn, LogOut, RefreshCw, Settings } from "lucide-react";
+import { LogIn, LogOut, Moon, Settings, Sun } from "lucide-react";
 
 import { RouteLink } from "./components/RouteLink";
 import { Button } from "./components/ui";
@@ -28,7 +28,6 @@ const ADMIN_NAV: { key: ViewKey; label: string } = { key: "admin", label: "Admin
 export function AppShell({
   view,
   onViewChange,
-  onRefresh,
   signedIn,
   isAdmin,
   onOpenSettings,
@@ -38,9 +37,6 @@ export function AppShell({
 }: {
   view: ViewKey;
   onViewChange: (v: ViewKey) => void;
-  // Optional view-level refresh. Omitted for views that own their own refresh
-  // control (the Analysis page has one in its toolbar).
-  onRefresh?: () => Promise<void> | void;
   // The Analysis and Breakouts pages are public; the account-level actions
   // only appear once there is a session.
   signedIn: boolean;
@@ -52,9 +48,10 @@ export function AppShell({
   children: ReactNode;
 }) {
   const nav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
-  const { branding } = useSiteConfig();
+  const { branding, mode, toggleMode } = useSiteConfig();
   const logoUrl = branding.logoUrl || "/doochy-mark-80.png";
   const defaultLogo = !branding.logoUrl;
+  const nextMode = mode === "dark" ? "light" : "dark";
   return (
     <div className="min-h-screen bg-transparent text-fg">
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-xl">
@@ -120,20 +117,16 @@ export function AppShell({
           </nav>
 
           <div className="flex shrink-0 items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={mode === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              onClick={toggleMode}
+              aria-label={`Switch to ${nextMode} theme`}
+              title={`Switch to ${nextMode} theme`}
+            />
             {signedIn ? (
               <>
-                {onRefresh && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={<RefreshCw className="h-4 w-4" />}
-                    onClickAsync={async () => {
-                      await onRefresh();
-                    }}
-                    aria-label="Refresh balances"
-                    title="Refresh balances"
-                  />
-                )}
                 <Button
                   size="sm"
                   variant="ghost"
@@ -169,9 +162,20 @@ export function AppShell({
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
 
-      {branding.footerText && (
+      {(branding.footerText || branding.supportEmail) && (
         <footer className="mx-auto max-w-page px-4 pb-6 pt-2 text-center text-[11px] leading-relaxed text-fg-faint sm:px-6">
           {branding.footerText}
+          {branding.footerText && branding.supportEmail && (
+            <span aria-hidden="true"> • </span>
+          )}
+          {branding.supportEmail && (
+            <a
+              href={`mailto:${branding.supportEmail}`}
+              className="transition hover:text-accent"
+            >
+              {branding.supportEmail}
+            </a>
+          )}
         </footer>
       )}
     </div>

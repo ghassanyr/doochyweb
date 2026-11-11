@@ -23,7 +23,9 @@ import { telegramRouter } from "./telegram/routes";
 import { startTelegram, stopTelegram } from "./telegram/index";
 
 const app = express();
-app.use(express.json({ limit: "100kb" }));
+// Admin settings may carry an inline logo upload, so the JSON limit is larger
+// than the default; ordinary request bodies are still tiny.
+app.use(express.json({ limit: "1mb" }));
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

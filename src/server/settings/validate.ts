@@ -17,12 +17,16 @@ export class SettingsValidationError extends Error {
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HTTP_URL = /^https?:\/\/\S+$/i;
+// Uploaded logos are stored inline as data URLs; only image types the browser
+// can safely render through <img> are accepted.
+const IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|webp|gif|svg\+xml);base64,[a-z0-9+/]+={0,2}$/i;
 
 const BRANDING_LIMITS: Record<keyof BrandingSettings, number> = {
   name: 60,
   tagline: 120,
   description: 300,
-  logoUrl: 500,
+  // 200 KB of image becomes roughly 273 KB of base64.
+  logoUrl: 350_000,
   supportEmail: 200,
   websiteUrl: 300,
   footerText: 300,
@@ -76,8 +80,15 @@ export function normalizeBranding(patch: unknown, base: BrandingSettings): Brand
   if (!name) throw new SettingsValidationError("name is required");
 
   const logoUrl = readString(source, "logoUrl", base.logoUrl, BRANDING_LIMITS.logoUrl);
-  if (logoUrl && !logoUrl.startsWith("/") && !HTTP_URL.test(logoUrl)) {
-    throw new SettingsValidationError("logoUrl must start with / or be an http(s) URL");
+  if (
+    logoUrl &&
+    !logoUrl.startsWith("/") &&
+    !HTTP_URL.test(logoUrl) &&
+    !IMAGE_DATA_URL.test(logoUrl)
+  ) {
+    throw new SettingsValidationError(
+      "logoUrl must start with /, be an http(s) URL, or be an uploaded image"
+    );
   }
 
   const supportEmail = readString(

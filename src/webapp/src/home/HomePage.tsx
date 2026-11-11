@@ -151,10 +151,6 @@ export default function HomePage({
             </StaggerItem>
           ))}
         </Stagger>
-
-        <div className="mt-6 border-t border-hairline pt-4 text-[11px] text-fg-faint">
-          Research and education tools, not financial advice.
-        </div>
       </div>
     </FadeRise>
   );

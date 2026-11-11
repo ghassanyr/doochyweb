@@ -78,6 +78,27 @@ describe("normalizeBranding", () => {
     );
   });
 
+  test("accepts an uploaded image data URL", () => {
+    const logoUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+    assert.equal(normalizeBranding({ logoUrl }, DEFAULT_BRANDING).logoUrl, logoUrl);
+  });
+
+  test("rejects a data URL that is not an allowed image", () => {
+    assert.throws(
+      () =>
+        normalizeBranding(
+          { logoUrl: "data:text/html;base64,PHNjcmlwdD4=" },
+          DEFAULT_BRANDING
+        ),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects an oversized uploaded logo", () => {
+    const logoUrl = "data:image/png;base64," + "A".repeat(350_000);
+    assert.throws(() => normalizeBranding({ logoUrl }, DEFAULT_BRANDING), SettingsValidationError);
+  });
+
   test("rejects a javascript logo URL", () => {
     assert.throws(
       () => normalizeBranding({ logoUrl: "javascript:alert(1)" }, DEFAULT_BRANDING),

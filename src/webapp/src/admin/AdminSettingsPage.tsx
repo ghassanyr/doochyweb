@@ -1,39 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, Check, Palette, RotateCcw, Save, Type } from "lucide-react";
+import { AlertCircle, ArrowLeft, Palette, RotateCcw, Save, Type, Upload } from "lucide-react";
 
 import {
   adminApi,
   type BrandingSettings,
   type SiteSettings,
-  type ThemeMode,
   type ThemeSettings,
 } from "../api";
 import { FadeRise } from "../components/motion";
 import { Button, Card, Flash, Skeleton, inputCls } from "../components/ui";
 import type { ViewKey } from "../routing";
-import { FALLBACK_THEME, applyTheme, useSiteConfig } from "../siteConfig";
+import { FALLBACK_THEME, LIGHT_THEME, applyTheme, useSiteConfig } from "../siteConfig";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
-const LIGHT_PRESET: ThemeSettings = {
-  mode: "light",
-  accent: "#0f766e",
-  accentHover: "#0d9488",
-  accentDeep: "#115e59",
-  accentFg: "#ffffff",
-  canvas: "#f6f7f9",
-  canvasSoft: "#eef1f5",
-  surface: "#ffffff",
-  surfaceHover: "#f3f5f8",
-  surfaceActive: "#e2e8f0",
-  borderStrong: "#cbd5e1",
-  text: "#101828",
-  success: "#059669",
-  danger: "#dc2626",
-  strongSell: "#dc2626",
-  strongBuy: "#16a34a",
-  ratingNeutral: "#64748b",
-};
+// Client-side guard mirrors the server limit; the image travels as a data URL
+// inside the normal settings save, so no upload endpoint is needed.
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"];
+const MAX_LOGO_KB = 200;
+const MAX_LOGO_BYTES = MAX_LOGO_KB * 1024;
+const LOGO_URL_LIMIT = 350_000;
 
 type ColorKey = Exclude<keyof ThemeSettings, "mode">;
 
@@ -153,16 +139,18 @@ export default function AdminSettingsPage({
 }: {
   onNavigate: (view: ViewKey) => void;
 }) {
-  const { setConfig } = useSiteConfig();
+  const { setConfig, restoreTheme } = useSiteConfig();
   const [loaded, setLoaded] = useState<SiteSettings | null>(null);
   const [branding, setBranding] = useState<BrandingSettings | null>(null);
   const [theme, setTheme] = useState<ThemeSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  // The last published theme, re-applied when the editor unmounts without a
-  // save so a preview never leaks onto the rest of the app.
-  const savedThemeRef = useRef<ThemeSettings | null>(null);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  // Re-apply the live theme (including the visitor's mode preference) when the
+  // editor unmounts without a save so a preview never leaks onto the app.
+  const restoreThemeRef = useRef(restoreTheme);
+  restoreThemeRef.current = restoreTheme;
 
   useEffect(() => {
     let alive = true;
@@ -173,7 +161,6 @@ export default function AdminSettingsPage({
         setLoaded(settings);
         setBranding(settings.branding);
         setTheme(settings.theme);
-        savedThemeRef.current = settings.theme;
       })
       .catch((err) => {
         if (alive) setError(err instanceof Error ? err.message : "Failed to load site settings");
@@ -193,7 +180,7 @@ export default function AdminSettingsPage({
 
   useEffect(() => {
     return () => {
-      if (savedThemeRef.current) applyTheme(savedThemeRef.current);
+      restoreThemeRef.current();
     };
   }, []);
 
@@ -230,7 +217,6 @@ export default function AdminSettingsPage({
       setLoaded(settings);
       setBranding(settings.branding);
       setTheme(settings.theme);
-      savedThemeRef.current = settings.theme;
       // Push the saved values into the provider so the header, title and
       // palette update without a reload.
       setConfig(settings);
@@ -238,6 +224,28 @@ export default function AdminSettingsPage({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save site settings");
     }
+  }
+
+  // Read the picked image into a data URL and stash it in the logo field, so
+  // the existing settings save publishes it like any other URL.
+  function pickLogo(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    if (!LOGO_TYPES.includes(file.type)) {
+      setError("Logo must be a PNG, JPEG, WebP, GIF or SVG image.");
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      setError(`Logo must be ${MAX_LOGO_KB} KB or smaller.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      setBranding((current) => (current ? { ...current, logoUrl: reader.result as string } : current));
+    };
+    reader.onerror = () => setError("Could not read that image.");
+    reader.readAsDataURL(file);
   }
 
   if (loading) {
@@ -262,6 +270,7 @@ export default function AdminSettingsPage({
   }
 
   const logoPreview = branding.logoUrl || "/doochy-mark-80.png";
+  const logoIsUpload = branding.logoUrl.startsWith("data:");
 
   return (
     <FadeRise>
@@ -309,9 +318,7 @@ export default function AdminSettingsPage({
         {error && <Flash tone="danger">{error}</Flash>}
         {saved && (
           <Flash tone="success">
-            <span className="inline-flex items-center gap-1.5">
-              <Check className="h-4 w-4" /> Saved. Visitors see the new branding on their next load.
-            </span>
+            Saved. Visitors see the new branding on their next load.
           </Flash>
         )}
         {invalidColors.length > 0 && (
@@ -380,14 +387,52 @@ export default function AdminSettingsPage({
           />
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField
-              label="Logo URL"
-              value={branding.logoUrl}
-              onChange={(logoUrl) => setBranding({ ...branding, logoUrl })}
-              placeholder="/doochy-mark-80.png"
-              hint="A path starting with / or an https URL. Empty uses the bundled mark."
-              maxLength={500}
-            />
+            <div className="space-y-2">
+              <TextField
+                label="Logo URL"
+                value={logoIsUpload ? "" : branding.logoUrl}
+                onChange={(logoUrl) => setBranding({ ...branding, logoUrl })}
+                placeholder={logoIsUpload ? "Uploaded image" : "/doochy-mark-80.png"}
+                hint={
+                  logoIsUpload
+                    ? "Uploaded image in use. Paste a URL or upload another to replace it."
+                    : "A path starting with /, an https URL, or an uploaded image. Empty uses the bundled mark."
+                }
+                maxLength={LOGO_URL_LIMIT}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept={LOGO_TYPES.join(",")}
+                  className="hidden"
+                  onChange={(event) => {
+                    pickLogo(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Upload className="h-3.5 w-3.5" />}
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  Upload logo
+                </Button>
+                {branding.logoUrl && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setBranding({ ...branding, logoUrl: "" })}
+                  >
+                    Clear
+                  </Button>
+                )}
+                <span className="text-[11px] text-fg-faint">
+                  PNG, JPEG, WebP, GIF or SVG up to {MAX_LOGO_KB} KB.
+                </span>
+              </div>
+            </div>
             <TextField
               label="Footer text"
               value={branding.footerText}
@@ -418,7 +463,8 @@ export default function AdminSettingsPage({
             <div>
               <h2 className="text-sm font-semibold tracking-tight text-fg">Theme</h2>
               <p className="text-xs text-fg-muted">
-                Colours map to the same semantic tokens the whole app already uses.
+                Colours map to the same semantic tokens the whole app already uses. This palette
+                is the site default; visitors can flip dark/light from the header.
               </p>
             </div>
           </div>
@@ -432,22 +478,9 @@ export default function AdminSettingsPage({
             >
               Doochy dark
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setTheme({ ...LIGHT_PRESET })}>
+            <Button size="sm" variant="secondary" onClick={() => setTheme({ ...LIGHT_THEME })}>
               Light
             </Button>
-            <label className="ml-auto flex items-center gap-2 text-xs text-fg-muted">
-              Mode
-              <select
-                className={`${compactInput} w-[92px]`}
-                value={theme.mode}
-                onChange={(event) =>
-                  setTheme({ ...theme, mode: event.target.value as ThemeMode })
-                }
-              >
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
-            </label>
           </div>
 
           {COLOR_GROUPS.map((group) => (

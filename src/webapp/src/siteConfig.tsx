@@ -1,10 +1,15 @@
 // Runtime site presentation.
 //
-// The server stores branding and theme in Mongo; this provider fetches the
-// public subset once at boot and translates the colour tokens into the CSS
-// variables every component already uses. Saving from the admin page pushes the
-// new values straight into the same provider, so the header and palette update
-// without a reload.
+// The server stores branding and one admin-edited palette in Mongo; this
+// provider fetches the public subset once at boot and translates the colour
+// tokens into the CSS variables every component already uses. Saving from the
+// admin page pushes the new values straight into the same provider, so the
+// header and palette update without a reload.
+//
+// Visitors can flip dark/light from the header. The stored palette is the site
+// default; the opposite mode is the built-in counterpart palette with the
+// brand's accent colours carried over, and the choice is remembered per
+// browser.
 
 import {
   createContext,
@@ -20,6 +25,7 @@ import {
   configApi,
   type BrandingSettings,
   type SiteConfig,
+  type ThemeMode,
   type ThemeSettings,
 } from "./api";
 
@@ -53,6 +59,29 @@ export const FALLBACK_THEME: ThemeSettings = {
   strongBuy: "#16a34a",
   ratingNeutral: "#94a3b8",
 };
+
+/** Built-in light palette, also offered as a starting point in the editor. */
+export const LIGHT_THEME: ThemeSettings = {
+  mode: "light",
+  accent: "#0f766e",
+  accentHover: "#0d9488",
+  accentDeep: "#115e59",
+  accentFg: "#ffffff",
+  canvas: "#f6f7f9",
+  canvasSoft: "#eef1f5",
+  surface: "#ffffff",
+  surfaceHover: "#f3f5f8",
+  surfaceActive: "#e2e8f0",
+  borderStrong: "#cbd5e1",
+  text: "#101828",
+  success: "#059669",
+  danger: "#dc2626",
+  strongSell: "#dc2626",
+  strongBuy: "#16a34a",
+  ratingNeutral: "#64748b",
+};
+
+const MODE_KEY = "doochyweb_theme_mode";
 
 type ColorKey = Exclude<keyof ThemeSettings, "mode">;
 
@@ -103,14 +132,42 @@ function applyBranding(branding: BrandingSettings): void {
   if (meta && branding.description) meta.setAttribute("content", branding.description);
 }
 
-export function applySiteConfig(config: SiteConfig): void {
-  applyTheme(config.theme);
-  applyBranding(config.branding);
+/**
+ * The palette to paint for `mode`. If the stored palette already matches, it is
+ * used as-is; otherwise the built-in counterpart supplies the surfaces and the
+ * brand accent colours carry over.
+ */
+export function themeForMode(theme: ThemeSettings, mode: ThemeMode): ThemeSettings {
+  if (theme.mode === mode) return theme;
+  const base = mode === "light" ? LIGHT_THEME : FALLBACK_THEME;
+  return {
+    ...base,
+    accent: theme.accent,
+    accentHover: theme.accentHover,
+    accentDeep: theme.accentDeep,
+    accentFg: theme.accentFg,
+    mode,
+  };
+}
+
+function readStoredMode(): ThemeMode | null {
+  try {
+    const value = localStorage.getItem(MODE_KEY);
+    return value === "dark" || value === "light" ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 interface SiteConfigContextValue {
   config: SiteConfig | null;
   branding: BrandingSettings;
+  /** The palette currently painted, after the visitor's mode preference. */
+  theme: ThemeSettings;
+  mode: ThemeMode;
+  toggleMode: () => void;
+  /** Re-apply the live theme, discarding an unsaved admin preview. */
+  restoreTheme: () => void;
   refresh: () => Promise<void>;
   setConfig: (config: SiteConfig) => void;
 }
@@ -119,33 +176,64 @@ const SiteConfigContext = createContext<SiteConfigContextValue | null>(null);
 
 export function SiteConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfigState] = useState<SiteConfig | null>(null);
+  // Null means "follow the site default" until the visitor flips the switch.
+  const [userMode, setUserMode] = useState<ThemeMode | null>(readStoredMode);
+
+  const activeMode: ThemeMode = userMode ?? config?.theme.mode ?? FALLBACK_THEME.mode;
+  const theme = useMemo(
+    () => themeForMode(config?.theme ?? FALLBACK_THEME, activeMode),
+    [config, activeMode]
+  );
+  const branding = config?.branding ?? FALLBACK_BRANDING;
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    applyBranding(branding);
+  }, [branding]);
 
   const setConfig = useCallback((next: SiteConfig) => {
     setConfigState(next);
-    applySiteConfig(next);
   }, []);
 
   const refresh = useCallback(async () => {
     try {
-      const next = await configApi.get();
-      setConfig(next);
+      setConfigState(await configApi.get());
     } catch {
       // Keep the compiled defaults; a config outage must not blank the site.
     }
-  }, [setConfig]);
+  }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
+  const toggleMode = useCallback(() => {
+    const next: ThemeMode = activeMode === "dark" ? "light" : "dark";
+    setUserMode(next);
+    try {
+      localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // Private browsing can reject storage; the toggle still works for this tab.
+    }
+  }, [activeMode]);
+
+  const restoreTheme = useCallback(() => applyTheme(theme), [theme]);
+
   const value = useMemo<SiteConfigContextValue>(
     () => ({
       config,
-      branding: config?.branding ?? FALLBACK_BRANDING,
+      branding,
+      theme,
+      mode: activeMode,
+      toggleMode,
+      restoreTheme,
       refresh,
       setConfig,
     }),
-    [config, refresh, setConfig]
+    [config, branding, theme, activeMode, toggleMode, restoreTheme, refresh, setConfig]
   );
 
   return <SiteConfigContext.Provider value={value}>{children}</SiteConfigContext.Provider>;

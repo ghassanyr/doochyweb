@@ -203,7 +203,6 @@ export default function App() {
       <AppShell
         view={view}
         onViewChange={handleViewChange}
-        onRefresh={signedIn ? refreshBalances : undefined}
         signedIn={signedIn}
         isAdmin={isAdmin}
         onOpenSettings={openSettings}
