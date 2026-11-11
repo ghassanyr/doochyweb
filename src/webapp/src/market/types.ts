@@ -206,6 +206,50 @@ export interface NarrationBriefHistory {
   match_test: number;
 }
 
+export interface MarketContext {
+  bar_hours: number;
+  bars: number;
+  trend: "up" | "down" | "sideways" | null;
+  adx: number | null;
+  ema50: number | null;
+  ema200: number | null;
+  range_position: number | null;
+  range_bars: number;
+  level_touches: number | null;
+  level_age_bars: number | null;
+  touch_lookback: number;
+  atr: number | null;
+  atr_percentile: number | null;
+  atr_percentile_bars: number;
+  volume_ratio: number | null;
+  volume_avg_bars: number;
+}
+
+export type EvidenceGrade = "insufficient" | "weak" | "moderate" | "strong";
+
+export interface Evidence {
+  diff: number;
+  diff_ci95: [number, number] | null;
+  grade: EvidenceGrade;
+  label: string;
+  n_match: number;
+  n_base: number;
+  match_up_share: number;
+  base_up_share: number;
+}
+
+export interface SinceBreak {
+  status: "pending" | "in_progress" | "complete";
+  bars: number;
+  horizon: number;
+  entry: number | null;
+  atr: number | null;
+  mfe: number | null;
+  mae: number | null;
+  first_touch: "up" | "down" | "tie" | "neither" | null;
+  close_change_pct: number | null;
+}
+
 export interface NarrationBrief {
   symbol: string;
   event: string;
@@ -216,6 +260,9 @@ export interface NarrationBrief {
   break_price: number;
   break_atr_mult: number;
   invalidation_level: number;
+  invalidation_atr_buffer: number;
+  context: MarketContext | null;
+  evidence: Evidence | null;
   history: NarrationBriefHistory | null;
   quality: string[];
   limits: string[];
@@ -226,9 +273,11 @@ export interface NarrationNote {
   symbol: string | null;
   text: string;
   model: string;
+  source?: "model" | "deterministic";
   created_at: string;
   prompt_version: number;
   brief?: NarrationBrief | null;
+  since_break?: SinceBreak | null;
 }
 
 export interface BreakoutsResponse {

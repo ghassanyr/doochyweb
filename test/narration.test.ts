@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 
 import type { SearchResult, Summary } from "../src/server/market/analogues";
 import type { RunRecord } from "../src/server/market/breakoutFeed";
+import type { MarketContext } from "../src/server/market/context";
 import {
   NARRATION_MAX_WORDS, RESEARCH_LABEL, buildNarrationInput, canPublish, groundednessWarnings,
   narrationEventKey, narrationFacts, narrationId, narrationModelInput, narrationRunId, narrationWords,
@@ -158,6 +159,89 @@ describe("template narration", () => {
     assert.ok(warnings.some((w) => w.includes("raw field name")));
     assert.ok(warnings.some((w) => w.includes("raw ISO timestamp")));
     assert.ok(warnings.some((w) => w.includes("confidence intervals")));
+  });
+});
+
+describe("market context and evidence", () => {
+  const ctx: MarketContext = {
+    bar_hours: 4,
+    bars: 260,
+    trend: "up",
+    adx: 24.5,
+    ema50: 3990.5,
+    ema200: 3950.25,
+    range_position: 0.82,
+    range_bars: 120,
+    level_touches: 3,
+    level_age_bars: 8,
+    touch_lookback: 60,
+    atr: 2,
+    atr_percentile: 0.7,
+    atr_percentile_bars: 250,
+    volume_ratio: 1.6,
+    volume_avg_bars: 20,
+  };
+
+  const withContext = () => {
+    const key = narrationEventKey(run().breakouts[0]);
+    return buildNarrationInput(run(), new Map([["XAUUSD", search("2026-11-03T16:00:00.000Z")]]), {
+      contexts: new Map([[key, ctx]]),
+    });
+  };
+
+  test("attaches the context snapshot and a graded evidence block", () => {
+    const input = withContext();
+    const brief = input.breakouts[0].brief!;
+    assert.deepEqual(brief.context, ctx);
+    assert.ok(brief.evidence);
+    assert.equal(brief.evidence!.n_match, 14);
+    assert.equal(brief.evidence!.n_base, 280);
+    assert.equal(brief.evidence!.grade, "weak");
+  });
+
+  test("buffers the invalidation level by the context ATR", () => {
+    const brief = withContext().breakouts[0].brief!;
+    assert.equal(brief.invalidation_atr_buffer, 0.75);
+    assert.equal(brief.invalidation_level, 4008.75);
+  });
+
+  test("context and evidence appear in the facts", () => {
+    const brief = withContext().breakouts[0].brief!;
+    const facts = narrationFacts(brief).join(" ");
+    assert.ok(facts.includes("an up trend with ADX 24.5"));
+    assert.ok(facts.includes("82% of the 120-bar range"));
+    assert.ok(facts.includes("70th percentile"));
+    assert.ok(facts.includes("tested on 3 prior bars"));
+    assert.ok(facts.includes("1.6x the 20-bar average"));
+    assert.ok(facts.includes("level with the base rate"));
+    assert.ok(facts.includes("0.75 ATR beyond the level"));
+  });
+
+  test("the contextual template still passes the groundedness lint", () => {
+    const input = withContext();
+    const text = templateNarration(input);
+    assert.deepEqual(groundednessWarnings(input, text), []);
+    assert.ok(narrationWords(text) <= NARRATION_MAX_WORDS, "template stays within the publishable word limit");
+  });
+
+  test("without context the ATR is implied by the break distance", () => {
+    const brief = buildNarrationInput(run(), new Map([["XAUUSD", search("2026-11-03T16:00:00.000Z")]]))
+      .breakouts[0].brief!;
+    assert.equal(brief.context, null);
+    // |4012.5 - 4010.25| / 1.3 = 1.7307..., buffered by 0.75 ATR.
+    const expected = Number((4010.25 - 0.75 * (2.25 / 1.3)).toFixed(6));
+    assert.equal(brief.invalidation_level, expected);
+    assert.ok(brief.limits.some((line) => line.includes("No 4H context")));
+  });
+
+  test("falls back to the raw level when no ATR is available", () => {
+    const noAtr = run();
+    // A zero multiple cannot imply an ATR, so the level stands un-buffered.
+    noAtr.breakouts[0] = { ...noAtr.breakouts[0], break_atr_mult: 0 };
+    const brief = buildNarrationInput(noAtr, new Map()).breakouts[0].brief!;
+    assert.equal(brief.invalidation_level, 4010.25);
+    assert.equal(brief.invalidation_atr_buffer, 0);
+    assert.ok(!narrationFacts(brief).some((line) => line.includes("ATR beyond the level")));
   });
 });
 

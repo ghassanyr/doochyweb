@@ -40,9 +40,11 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       res.status(400).json({ error: "password must be at least 8 characters" });
       return;
     }
-    const existing = await User.findOne({ username: clean }).exec();
+    const existing = await User.findOne({
+      $or: [{ username: clean }, { email: cleanEmail }],
+    }).exec();
     if (existing) {
-      res.status(409).json({ error: "username taken" });
+      res.status(409).json({ error: existing.username === clean ? "username taken" : "email already registered" });
       return;
     }
     const user = await User.create({
@@ -52,6 +54,12 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
     });
     res.json({ token: signToken(String(user._id)) });
   } catch (err: any) {
+    // Two registrations can race past the lookup above; the unique indexes are
+    // the real guard, so translate their duplicate-key error too.
+    if (err?.code === 11000) {
+      res.status(409).json({ error: err.keyPattern?.email ? "email already registered" : "username taken" });
+      return;
+    }
     res.status(500).json({ error: err.message ?? "register failed" });
   }
 });

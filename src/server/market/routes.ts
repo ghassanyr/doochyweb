@@ -23,7 +23,12 @@ import {
   type BreakoutType,
 } from "./breakouts";
 import { latestRun, readRuns } from "./breakoutFeed";
-import { TEMPLATE_MODEL } from "./narration";
+import { closedBars, H4_MS } from "./breakoutEngine";
+import { atrFromBreak } from "./context";
+import { measureSinceBreak, type SinceBreak } from "./followThrough";
+import { TEMPLATE_MODEL, TEMPLATE_PROMPT_VERSION, type NarrationRecord } from "./narration";
+import { ensureDeterministicNote } from "./narrationEvents";
+import { NARRATION_PROMPT_VERSION } from "./narrationModel";
 import { listNarrations } from "./narrationStore";
 import { detectSweep, isLastBarForming, type Sweep } from "./patterns";
 import { authRequired, adminRequired } from "../auth";
@@ -243,9 +248,53 @@ marketRouter.get("/breakouts", async (req, res) => {
   }
 });
 
-// Public research note for one breakout event. Reads saved, published records
-// only; a page view never spends a model call. 404 keeps the feed quiet when a
-// note is still being generated or was withheld by the guard.
+// Public research note for one breakout event. Prefers a current published
+// model note, then the current deterministic note, generating the deterministic
+// one lazily on first request. A page view never spends a model call. 404 only
+// when the event is not in the run log at all.
+function publishedNote(event: string): NarrationRecord | null {
+  const notes = listNarrations().filter(
+    (r) =>
+      r.event_key === event &&
+      r.published !== false &&
+      !r.error &&
+      r.output.trim().length > 0
+  );
+  return (
+    notes.find((r) => r.model !== TEMPLATE_MODEL && r.prompt_version === NARRATION_PROMPT_VERSION) ??
+    notes.find((r) => r.model === TEMPLATE_MODEL && r.prompt_version === TEMPLATE_PROMPT_VERSION) ??
+    notes.find((r) => r.model !== TEMPLATE_MODEL) ??
+    notes.find((r) => r.model === TEMPLATE_MODEL) ??
+    null
+  );
+}
+
+function isCurrentNote(note: NarrationRecord): boolean {
+  return note.model === TEMPLATE_MODEL
+    ? note.prompt_version >= TEMPLATE_PROMPT_VERSION
+    : note.prompt_version >= NARRATION_PROMPT_VERSION;
+}
+
+/** Follow-through is measured on read, so the strip is never stale. */
+async function sinceBreakForNote(note: NarrationRecord): Promise<SinceBreak | null> {
+  const b = note.input.breakouts[0];
+  if (!b) return null;
+  try {
+    const meta = resolveMeta(b.symbol, await cachedCatalog());
+    if (!meta) return null;
+    const { bars } = await getCandles(meta, "4h");
+    const direction = b.brief?.direction ?? (b.type === "support_break" ? "below" : "above");
+    // A forming bar must not decide the first touch or the window status.
+    const closed = closedBars(bars, H4_MS, Date.now());
+    // If the series starts after the event, the follow-through is not measurable.
+    const eventMs = Date.parse(b.timestamp_utc);
+    if (!closed.length || closed[0].time + H4_MS > eventMs) return null;
+    return measureSinceBreak(closed, b.timestamp_utc, direction, b.brief?.context?.atr ?? atrFromBreak(b));
+  } catch {
+    return null;
+  }
+}
+
 marketRouter.get("/narrations", async (req, res) => {
   const event = typeof req.query.event === "string" ? req.query.event.trim() : "";
   if (!event) {
@@ -257,16 +306,13 @@ marketRouter.get("/narrations", async (req, res) => {
     return;
   }
   try {
-    const note = listNarrations().find(
-      (r) =>
-        r.event_key === event &&
-        r.published !== false &&
-        !r.error &&
-        r.model !== TEMPLATE_MODEL &&
-        r.output.trim().length > 0
-    );
+    let note = publishedNote(event);
+    if (!note || !isCurrentNote(note)) {
+      const deterministic = await ensureDeterministicNote(event).catch(() => null);
+      if (deterministic) note = deterministic;
+    }
     if (!note) {
-      res.status(404).json({ error: "no published research note" });
+      res.status(404).json({ error: "no research note for this event" });
       return;
     }
     res.json({
@@ -274,9 +320,11 @@ marketRouter.get("/narrations", async (req, res) => {
       symbol: note.symbol ?? note.input.breakouts[0]?.symbol ?? null,
       text: note.output,
       model: note.model,
+      source: note.source ?? (note.model === TEMPLATE_MODEL ? "deterministic" : "model"),
       created_at: note.created_at,
       prompt_version: note.prompt_version,
       brief: note.input.breakouts[0]?.brief ?? null,
+      since_break: await sinceBreakForNote(note),
     });
   } catch (err) {
     res.status(500).json({ error: message(err) });

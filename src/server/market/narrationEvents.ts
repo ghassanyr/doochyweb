@@ -4,22 +4,28 @@
 
 import { connectDb } from "../db";
 import { H4_MS, searchAnalogues, type SearchResult } from "./analogues";
-import type { RunRecord } from "./breakoutFeed";
+import { readRuns, type RunRecord } from "./breakoutFeed";
+import { buildMarketContext, type MarketContext } from "./context";
 import { loadHistory, readHistory } from "./history";
 import {
-  TEMPLATE_MODEL, buildNarrationInput, canPublish, groundednessWarnings, narrationEventKey,
-  narrationId, templateNarration, type NarrationRecord,
+  NARRATION_MAX_WORDS, TEMPLATE_MODEL, TEMPLATE_PROMPT_VERSION, buildNarrationInput, canPublish,
+  groundednessWarnings, narrationEventKey, narrationId, narrationWords, templateNarration,
+  type NarrationRecord,
 } from "./narration";
 import { NARRATION_PROMPT_VERSION, modelNarration, narrationConfig, type NarrationConfig } from "./narrationModel";
 import { listNarrations, saveNarration } from "./narrationStore";
 import { loadCatalog, resolveMeta } from "./catalog";
+import type { Candle } from "./types";
 
 /** Analogue results for every symbol in one run. Missing symbols are explicit errors. */
-export async function loadAnaloguesForRun(run: RunRecord, k: number, days: number) {
+export async function loadAnaloguesForRun(run: RunRecord, k: number, days: number, onlySymbols?: string[]) {
   const results = new Map<string, SearchResult>();
   const errors = new Map<string, string>();
-  const symbols = [...new Set(run.breakouts.map((b) => b.symbol))];
-  if (!symbols.length) return { results, errors };
+  const bars = new Map<string, Candle[]>();
+  const symbols = onlySymbols?.length
+    ? [...new Set(onlySymbols)]
+    : [...new Set(run.breakouts.map((b) => b.symbol))];
+  if (!symbols.length) return { results, errors, bars };
 
   await connectDb();
   const catalog = await loadCatalog();
@@ -28,16 +34,33 @@ export async function loadAnaloguesForRun(run: RunRecord, k: number, days: numbe
     try {
       const meta = resolveMeta(symbol, catalog.items);
       if (!meta) throw new Error("not tradable on the market account");
-      const bars = await loadHistory(meta, "4h", days, asOf);
+      const series = await loadHistory(meta, "4h", days, asOf);
+      bars.set(symbol, series);
       const all = readHistory(symbol, "4h");
       const newest = all.length ? all[all.length - 1].time : 0;
-      if (!bars.length || newest + 2 * H4_MS < asOf) throw new Error("history is stale; refusing to search");
-      results.set(symbol, searchAnalogues(bars, asOf, k));
+      if (!series.length || newest + 2 * H4_MS < asOf) throw new Error("history is stale; refusing to search");
+      results.set(symbol, searchAnalogues(series, asOf, k));
     } catch (err) {
       errors.set(symbol, err instanceof Error ? err.message : String(err));
     }
   }
-  return { results, errors };
+  return { results, errors, bars };
+}
+
+export function buildContextsForRun(
+  run: RunRecord,
+  bars: Map<string, Candle[]>,
+  eventKeys?: string[]
+): Map<string, MarketContext | null> {
+  const out = new Map<string, MarketContext | null>();
+  for (const b of run.breakouts) {
+    const key = narrationEventKey(b);
+    if (eventKeys && !eventKeys.includes(key)) continue;
+    if (out.has(key)) continue;
+    const series = bars.get(b.symbol);
+    out.set(key, series?.length ? buildMarketContext(series, b, b.timestamp_utc) : null);
+  }
+  return out;
 }
 
 export interface EventNarrationOptions {
@@ -76,13 +99,23 @@ export async function narrateRunEvents(
   if (!run.breakouts.length) return out;
 
   const isTemplate = opts.model === TEMPLATE_MODEL;
+  const promptVersion = isTemplate ? TEMPLATE_PROMPT_VERSION : NARRATION_PROMPT_VERSION;
   const cfg = isTemplate ? null : opts.cfg ?? narrationConfig();
   if (!isTemplate && !cfg) throw new Error("NVIDIA_API_KEY / NARRATION_MODEL is not configured");
 
-  const { results, errors } = await loadAnaloguesForRun(run, opts.k, opts.days);
+  const scoped = opts.eventKeys
+    ? run.breakouts.filter((b) => opts.eventKeys!.includes(narrationEventKey(b)))
+    : run.breakouts;
+  const { results, errors, bars } = await loadAnaloguesForRun(
+    run,
+    opts.k,
+    opts.days,
+    [...new Set(scoped.map((b) => b.symbol))]
+  );
+  const contexts = buildContextsForRun(run, bars, opts.eventKeys);
   const existing = new Set(
     listNarrations()
-      .filter((r) => r.event_key && r.model === opts.model && r.prompt_version === NARRATION_PROMPT_VERSION)
+      .filter((r) => r.event_key && r.model === opts.model && r.prompt_version === promptVersion)
       .map((r) => r.event_key as string)
   );
 
@@ -98,7 +131,7 @@ export async function narrateRunEvents(
     }
 
     const input = buildNarrationInput(run, results, {
-      eventKey, k: opts.k, analogueErrors: errors, now: opts.now,
+      eventKey, k: opts.k, analogueErrors: errors, now: opts.now, contexts,
     });
     if (input.breakouts.length !== 1) {
       out.skipped++;
@@ -129,21 +162,26 @@ export async function narrateRunEvents(
     }
     if (attempts > maxAttempts) attempts = maxAttempts;
 
-    const published = !isTemplate && !error && canPublish(output, warnings);
+    // Deterministic notes are grounded by construction: publish a non-empty one
+    // within the word limit even if a rounding check flags something for audit.
+    const published = isTemplate
+      ? Boolean(output.trim()) && narrationWords(output) <= NARRATION_MAX_WORDS
+      : !error && canPublish(output, warnings);
     const record: NarrationRecord = {
-      id: narrationId(input.run_id, opts.model, NARRATION_PROMPT_VERSION, eventKey),
+      id: narrationId(input.run_id, opts.model, promptVersion, eventKey),
       run_id: input.run_id,
       event_key: eventKey,
       symbol: input.symbol ?? input.breakouts[0]?.symbol ?? null,
       created_at: new Date(opts.now ?? Date.now()).toISOString(),
       model: opts.model,
-      prompt_version: NARRATION_PROMPT_VERSION,
+      prompt_version: promptVersion,
       input,
       output,
       groundedness: warnings,
       published,
       attempts,
       error,
+      source: isTemplate ? "deterministic" : "model",
     };
     if (opts.save !== false) saveNarration(record);
     out.records.push(record);
@@ -153,6 +191,52 @@ export async function narrateRunEvents(
   }
 
   return out;
+}
+
+const deterministicInflight = new Map<string, Promise<NarrationRecord | null>>();
+
+/**
+ * Return the current deterministic note for one event, generating it on first
+ * request. This never spends a model call: it is the always-available note.
+ */
+export async function ensureDeterministicNote(
+  eventKey: string,
+  opts: { now?: number; save?: boolean } = {}
+): Promise<NarrationRecord | null> {
+  const existing = listNarrations().find(
+    (r) =>
+      r.event_key === eventKey &&
+      r.model === TEMPLATE_MODEL &&
+      r.prompt_version === TEMPLATE_PROMPT_VERSION &&
+      r.published !== false &&
+      !r.error &&
+      r.output.trim().length > 0
+  );
+  if (existing) return existing;
+
+  const pending = deterministicInflight.get(eventKey);
+  if (pending) return pending;
+
+  const task = (async () => {
+    const run = readRuns().find((r) => r.breakouts.some((b) => narrationEventKey(b) === eventKey));
+    if (!run) return null;
+    const res = await narrateRunEvents(run, {
+      k: 20,
+      days: 730,
+      model: TEMPLATE_MODEL,
+      eventKeys: [eventKey],
+      maxAttempts: 1,
+      now: opts.now,
+      save: opts.save,
+      // A published note was not found above, so regenerate even if an older
+      // unpublished template record exists for this event.
+      force: true,
+    });
+    return res.records[0] ?? null;
+  })().finally(() => deterministicInflight.delete(eventKey));
+
+  deterministicInflight.set(eventKey, task);
+  return task;
 }
 
 /** Live hook: only when explicitly enabled and a model is configured. */

@@ -8,11 +8,16 @@
 import { HORIZON, type SearchResult, type Summary } from "./analogues";
 import { breakoutKey, classifyAsset, normalizeBreakout, type BreakoutType } from "./breakouts";
 import type { RunRecord } from "./breakoutFeed";
+import { atrFromBreak, contextFacts, type MarketContext } from "./context";
+import { buildEvidence, evidenceFacts, type Evidence } from "./evidence";
 
-export const NARRATION_VERSION = 2;
-export const TEMPLATE_PROMPT_VERSION = 3;
+export const NARRATION_VERSION = 3;
+/** Bumped independently: old template records used the model prompt version. */
+export const TEMPLATE_PROMPT_VERSION = 5;
 export const TEMPLATE_MODEL = "template";
-export const NARRATION_MAX_WORDS = 150;
+export const NARRATION_MAX_WORDS = 240;
+/** A close this far beyond the level invalidates the break. */
+export const INVALIDATION_ATR_BUFFER = 0.75;
 /** Legacy disclaimer kept in the audit snapshot only; it is no longer shown in public notes. */
 export const RESEARCH_LABEL =
   "RESEARCH ONLY. Past analogue outcomes do not predict future results. Not financial advice.";
@@ -80,7 +85,13 @@ export interface NarrationBrief {
   level_type: string;
   break_price: number;
   break_atr_mult: number;
+  /** Level ± an ATR buffer, not the raw level. */
   invalidation_level: number;
+  invalidation_atr_buffer: number;
+  /** 4H backdrop at the break; null when no bars were available. */
+  context: MarketContext | null;
+  /** Matched-vs-base difference with its interval and grade; null without history. */
+  evidence: Evidence | null;
   history: NarrationBriefHistory | null;
   quality: string[];
   limits: string[];
@@ -139,6 +150,8 @@ export interface NarrationRecord {
   attempts?: number;
   /** Set when a model call was attempted and failed; the input snapshot is kept. */
   error?: string | null;
+  /** How the text was produced. Old records leave it undefined. */
+  source?: "model" | "deterministic";
 }
 
 const rates = (s: Summary): OutcomeRates => ({
@@ -178,11 +191,17 @@ const recentConflicts = (matchUp: number | null, recentUp: number | null): boole
   return Math.abs(matchLean) >= 0.05 && matchUp !== recentUp && matchLean * recentLean < 0;
 };
 
-function buildNarrationBrief(b: NarrationBreakout): NarrationBrief {
+export interface NarrationBriefExtras {
+  context?: MarketContext | null;
+}
+
+function buildNarrationBrief(b: NarrationBreakout, extras: NarrationBriefExtras = {}): NarrationBrief {
   const direction: "above" | "below" =
     b.type === "resistance_break" ? "above" : b.type === "support_break" ? "below" : b.break_price >= b.level_price ? "above" : "below";
   const quality: string[] = [];
   let history: NarrationBriefHistory | null = null;
+  let evidence: Evidence | null = null;
+  const context = extras.context ?? null;
 
   if (b.analogue) {
     const a = b.analogue;
@@ -214,11 +233,28 @@ function buildNarrationBrief(b: NarrationBreakout): NarrationBrief {
       match_train: a.out_of_sample.match_split.train,
       match_test: a.out_of_sample.match_split.test,
     };
+    evidence = buildEvidence({
+      up_first: a.match.up_first,
+      down_first: a.match.down_first,
+      base_up_first: a.base_rate.up_first,
+      base_down_first: a.base_rate.down_first,
+    });
     if (a.sample_size < 30) quality.push(`Small sample (${a.sample_size} matches).`);
     if (a.out_of_sample.match_split.test < 10) {
       quality.push(`${a.out_of_sample.match_split.test} of ${a.sample_size} matches are from the recent pool.`);
     }
   }
+
+  const atr = context?.atr ?? atrFromBreak(b);
+  const buffer = atr != null && atr > 0 ? INVALIDATION_ATR_BUFFER * atr : 0;
+  const invalidationLevel = direction === "above" ? b.level_price - buffer : b.level_price + buffer;
+
+  const limits: string[] = [];
+  if (history) {
+    limits.push("Nearby bars are generic 4H bars, not prior breakouts.");
+    limits.push(`A first touch is not a profit or loss; outcomes use a ${HORIZON}-bar horizon from the next open.`);
+  }
+  if (!context) limits.push("No 4H context was available at the break.");
 
   return {
     symbol: b.symbol,
@@ -229,15 +265,13 @@ function buildNarrationBrief(b: NarrationBreakout): NarrationBrief {
     level_type: humanize(b.level_type),
     break_price: b.break_price,
     break_atr_mult: b.break_atr_mult,
-    invalidation_level: b.level_price,
+    invalidation_level: Number(invalidationLevel.toFixed(6)),
+    invalidation_atr_buffer: buffer > 0 ? INVALIDATION_ATR_BUFFER : 0,
+    context,
+    evidence,
     history,
     quality,
-    limits: history
-      ? [
-          "Nearby bars are generic 4H bars, not prior breakouts.",
-          `A first touch is not a profit or loss; outcomes use a ${HORIZON}-bar horizon from the next open.`,
-        ]
-      : [],
+    limits,
   };
 }
 
@@ -312,7 +346,14 @@ const toAnalogue = (r: SearchResult, k: number): AnalogueInput => ({
 export function buildNarrationInput(
   run: RunRecord,
   analogues: Map<string, SearchResult>,
-  opts: { now?: number; k?: number; analogueErrors?: Map<string, string>; eventKey?: string | null } = {}
+  opts: {
+    now?: number;
+    k?: number;
+    analogueErrors?: Map<string, string>;
+    eventKey?: string | null;
+    /** Market context keyed by event key (not symbol: one symbol can fire twice). */
+    contexts?: Map<string, MarketContext | null>;
+  } = {}
 ): NarrationInput {
   const k = opts.k ?? 20;
   const source = opts.eventKey
@@ -320,6 +361,7 @@ export function buildNarrationInput(
     : run.breakouts;
   const breakouts: NarrationBreakout[] = source.map((b) => {
     const a = analogues.get(b.symbol);
+    const eventKey = narrationEventKey(b);
     const nb: NarrationBreakout = {
       symbol: b.symbol,
       type: b.type,
@@ -334,7 +376,7 @@ export function buildNarrationInput(
       analogue: a ? toAnalogue(a, k) : null,
       analogue_error: a ? null : analogueError(b.symbol, opts.analogueErrors) ?? "no analogue result",
     };
-    nb.brief = buildNarrationBrief(nb);
+    nb.brief = buildNarrationBrief(nb, { context: opts.contexts?.get(eventKey) ?? null });
     return nb;
   });
 
@@ -393,7 +435,8 @@ export function groundednessWarnings(input: NarrationInput, output: string): str
   if (!output.trim()) return ["output is empty"];
 
   const allowed = numberTokens(JSON.stringify(input));
-  for (const v of [95, 180]) allowed.push(v);
+  // Constants used by the prose that are not fields on the snapshot.
+  for (const v of [4, 6, 20, 95, 120, 180, INVALIDATION_ATR_BUFFER]) allowed.push(v);
   const magnitudes = allowed.map(Math.abs);
   for (const v of numberTokens(output)) {
     const hit = (a: number): boolean =>
@@ -419,7 +462,10 @@ export function groundednessWarnings(input: NarrationInput, output: string): str
   if (/\b(?:overlap|significan)\w*/i.test(output)) {
     warnings.push("output makes an inference claim; report the brief without interpreting significance");
   }
-  if (numberTokens(output).length > 18) {
+  // The deterministic template now carries the context and evidence blocks, so
+  // its ceiling is higher than a model rewrite's. The model is told to use at
+  // most seven statistics, well under this limit.
+  if (numberTokens(output).length > 32) {
     warnings.push("output is number-heavy; move details to the stats panel");
   }
   return [...new Set(warnings)];
@@ -436,6 +482,7 @@ export function narrationFacts(brief: NarrationBrief): string[] {
       `${num(brief.break_atr_mult)} ATR ${brief.direction} the ${briefPrice(brief.level_price)} ` +
       `${brief.level_type} in ${brief.session}.`,
   ];
+  if (brief.context) facts.push(...contextFacts(brief.context));
   const h = brief.history;
   if (!h) {
     facts.push("No nearby-bar history was available for this event, so no historical odds are implied.");
@@ -462,10 +509,14 @@ export function narrationFacts(brief: NarrationBrief): string[] {
         `Median excursion was ${num(h.median_mfe)} ATR in favour and ${num(Math.abs(h.median_mae))} ATR against.`
       );
     }
+    if (brief.evidence) facts.push(...evidenceFacts(brief.evidence));
   }
+  const side = brief.direction === "above" ? "below" : "above";
   facts.push(
-    `A close back ${brief.direction === "above" ? "below" : "above"} ` +
-      `${briefPrice(brief.invalidation_level)} would invalidate the break.`
+    brief.invalidation_atr_buffer > 0
+      ? `A close back ${side} ${briefPrice(brief.invalidation_level)} ` +
+          `(${brief.invalidation_atr_buffer.toFixed(2)} ATR beyond the level) would invalidate the break.`
+      : `A close back ${side} ${briefPrice(brief.invalidation_level)} would invalidate the break.`
   );
   return [...facts, ...brief.limits, ...brief.quality];
 }

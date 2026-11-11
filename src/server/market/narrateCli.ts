@@ -28,7 +28,7 @@ import {
   narrationEventKey, narrationId, templateNarration, type NarrationRecord,
 } from "./narration";
 import { NARRATION_PROMPT_VERSION, modelNarration, narrationConfig } from "./narrationModel";
-import { loadAnaloguesForRun, narrateRunEvents } from "./narrationEvents";
+import { loadAnaloguesForRun, buildContextsForRun, narrateRunEvents } from "./narrationEvents";
 import { listNarrations, loadNarration, saveNarration } from "./narrationStore";
 
 const arg = (name: string): string | undefined =>
@@ -84,8 +84,10 @@ async function bakeoff(runs: RunRecord[], k: number, days: number, models: strin
   const selected = eventRuns.slice(-limit);
   const rows: Record<string, unknown>[] = [];
   for (const run of selected) {
-    const { results, errors } = await loadAnaloguesForRun(run, k, days);
-    const input = buildNarrationInput(run, results, { k, analogueErrors: errors });
+    const { results, errors, bars } = await loadAnaloguesForRun(run, k, days);
+    const input = buildNarrationInput(run, results, {
+      k, analogueErrors: errors, contexts: buildContextsForRun(run, bars),
+    });
     for (const model of models) {
       const { output, error, ms } = await render(input, model);
       const groundedness = groundednessWarnings(input, output);
@@ -184,8 +186,10 @@ async function main(): Promise<unknown> {
     return bakeoff(runs, k, days, [...new Set(models)]);
   }
   const run = pickRun(runs, arg("run") ?? "latest");
-  const { results, errors } = await loadAnaloguesForRun(run, k, days);
-  const input = buildNarrationInput(run, results, { k, analogueErrors: errors });
+  const { results, errors, bars } = await loadAnaloguesForRun(run, k, days);
+  const input = buildNarrationInput(run, results, {
+    k, analogueErrors: errors, contexts: buildContextsForRun(run, bars),
+  });
   const useModel = (arg("model") ?? process.env.NARRATION_MODEL ?? "").trim();
   const tryModel = !flag("template") && Boolean(useModel);
 

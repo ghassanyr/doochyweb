@@ -13,8 +13,9 @@ export type UserRole = "user" | "admin";
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
   // Registration requires an email, but accounts created before this field
-  // existed have no stored value.
-  email: { type: String, trim: true, lowercase: true },
+  // existed have no stored value. Sparse keeps those legacy documents out of
+  // the unique index instead of treating them all as duplicate nulls.
+  email: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
   passwordHash: { type: String, required: true },
   // Existing accounts predate this field; a missing value is read as "user".
   role: { type: String, enum: ["user", "admin"], default: "user", index: true },
