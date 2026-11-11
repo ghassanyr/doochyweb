@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LogIn } from "lucide-react";
 import { api, getToken, setToken, type ConnectInput } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import SignalsPage from "./signals/SignalsPage";
@@ -12,7 +13,8 @@ import Login from "./Login";
 import SettingsPage from "./Settings";
 import TradingConnect from "./TradingConnect";
 import { useAccounts } from "./useAccounts";
-import { Skeleton } from "./components/ui";
+import { AnimatedModal } from "./components/Modal";
+import { Button, Card, Skeleton } from "./components/ui";
 
 // The Analysis, Breakouts and Learn pages are public: market quotes, the shared
 // watchlist, the breakout feed and the anonymous drill carry no account data.
@@ -26,6 +28,12 @@ export default function App() {
     return initialView(window.location.search, window.location.hostname);
   });
   const [showSettings, setShowSettings] = useState(false);
+  // Auth is a modal over the current view, not a tab. Clicking Sign in must not
+  // move the visitor to Trading (or anywhere else); after auth they stay where
+  // they were, and registration lands on Analysis only because a fresh account
+  // has nothing to show on Trading yet.
+  const [showLogin, setShowLogin] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const signedIn = !!token;
   const { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect } =
     useAccounts(signedIn);
@@ -51,9 +59,16 @@ export default function App() {
     await refreshBalances();
   }
 
+  function openLogin() {
+    setAuthMode("login");
+    setShowLogin(true);
+  }
+
   function handleAuthed(t: string, mode: "login" | "register") {
     setToken(t);
     setTokenState(t);
+    setShowLogin(false);
+    setAuthMode("login");
     // Registration is finished at this point. New accounts have no cTrader
     // credentials, so land on Analysis instead of the Trading tab's connect
     // card; Trading keeps the connection action when they want it.
@@ -84,6 +99,7 @@ export default function App() {
     setToken(null);
     setTokenState(null);
     setShowSettings(false);
+    setShowLogin(false);
     handleViewChange("analysis");
   }
 
@@ -104,52 +120,84 @@ export default function App() {
   }
 
   return (
-    <AppShell
-      view={view}
-      onViewChange={handleViewChange}
-      onRefresh={signedIn ? refreshBalances : undefined}
-      signedIn={signedIn}
-      isAdmin={isAdmin}
-      onOpenSettings={() => setShowSettings(true)}
-      onSignIn={() => handleViewChange("trading")}
-      onLogout={handleLogout}
-    >
-      {view === "admin" ? (
-        isAdmin ? (
-          <AdminPage />
-        ) : (
-          <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
-        )
-      ) : view === "analysis" ? (
-        <AnalysisPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
-      ) : view === "signals" ? (
-        <SignalsPage canRefresh={signedIn} canManageSignals={isAdmin} />
-      ) : view === "breakouts" ? (
-        <BreakoutsPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
-      ) : view === "learn" ? (
-        <LearnPage />
-      ) : !signedIn ? (
-        <div className="flex justify-center py-8">
-          <Login
-            variant="inline"
-            onAuthed={handleAuthed}
-            hint="Sign in to view and manage your cTrader accounts. Market analysis above is public."
+    <>
+      <AppShell
+        view={view}
+        onViewChange={handleViewChange}
+        onRefresh={signedIn ? refreshBalances : undefined}
+        signedIn={signedIn}
+        isAdmin={isAdmin}
+        onOpenSettings={() => setShowSettings(true)}
+        onSignIn={openLogin}
+        onLogout={handleLogout}
+      >
+        {view === "admin" ? (
+          isAdmin ? (
+            <AdminPage />
+          ) : (
+            <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
+          )
+        ) : view === "analysis" ? (
+          <AnalysisPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
+        ) : view === "signals" ? (
+          <SignalsPage canRefresh={signedIn} canManageSignals={isAdmin} />
+        ) : view === "breakouts" ? (
+          <BreakoutsPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
+        ) : view === "learn" ? (
+          <LearnPage />
+        ) : !signedIn ? (
+          <div className="mx-auto w-full max-w-lg">
+            <Card className="p-8 text-center shadow-overlay">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                <LogIn className="h-5 w-5" />
+              </div>
+              <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">
+                Sign in to view trading
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+                The Trading tab shows your cTrader balances, positions and orders. Sign in to view
+                them, or keep using the public market pages.
+              </p>
+              <div className="mt-5 flex justify-center">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={<LogIn className="h-4 w-4" />}
+                  onClick={openLogin}
+                >
+                  Sign in
+                </Button>
+              </div>
+            </Card>
+          </div>
+        ) : hasCredentials === null ? (
+          <div className="mx-auto w-full max-w-sm space-y-3 py-8">
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : !hasCredentials ? (
+          <TradingConnect
+            onConnected={handleConnected}
+            onSkip={() => handleViewChange("analysis")}
           />
-        </div>
-      ) : hasCredentials === null ? (
-        <div className="mx-auto w-full max-w-sm space-y-3 py-8">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      ) : !hasCredentials ? (
-        <TradingConnect
-          onConnected={handleConnected}
-          onSkip={() => handleViewChange("analysis")}
-        />
-      ) : (
-        <Dashboard accounts={accounts} />
-      )}
-    </AppShell>
+        ) : (
+          <Dashboard accounts={accounts} />
+        )}
+      </AppShell>
+
+      <AnimatedModal
+        open={showLogin && !signedIn}
+        onClose={() => setShowLogin(false)}
+        title={authMode === "login" ? "Sign in" : "Create account"}
+        subtitle={
+          authMode === "login"
+            ? "Sign in to manage your cTrader accounts"
+            : "Create an account to get started"
+        }
+      >
+        <Login mode={authMode} onModeChange={setAuthMode} onAuthed={handleAuthed} />
+      </AnimatedModal>
+    </>
   );
 }
 
