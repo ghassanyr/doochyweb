@@ -297,7 +297,7 @@ export default function App() {
                 onSkip={() => handleViewChange("analysis")}
               />
             ) : (
-              <Dashboard accounts={accounts} />
+              <Dashboard accounts={accounts} isAdmin={isAdmin} />
             )}
           </>
         )}

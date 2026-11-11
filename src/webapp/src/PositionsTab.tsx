@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowDownRight, ArrowUpRight, Plus, RefreshCw, XOctagon } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Megaphone, Plus, RefreshCw, XOctagon } from "lucide-react";
 import { AccountView, ApiError, PositionRow, api } from "./api";
 import { ViewMode, fmtLots, fmtMoney, fmtPrice } from "./Dashboard";
 import FilterBar, {
@@ -14,6 +14,8 @@ import FilterBar, {
 import { AccountChip, Badge, BareInput, Button, Card, Chevron, Collapse, Field, Flash, Skeleton } from "./components/ui";
 import { FadeRise, Stagger, StaggerItem } from "./components/motion";
 import { ConfirmModal } from "./components/Modal";
+import { PublishSignalModal } from "./signals/PublishSignalModal";
+import type { SignalDraft } from "./signals/types";
 import OrderTicket from "./trading/OrderTicket";
 import { num } from "./trading/ui";
 
@@ -44,11 +46,14 @@ export default function PositionsTab({
   accounts,
   ctid,
   isLive,
+  isAdmin,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
   isLive: boolean;
+  /** Only admins can publish signals. */
+  isAdmin: boolean;
 }) {
   const [rows, setRows] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +67,14 @@ export default function PositionsTab({
   // clobber half-typed SL/TP, so expansion lives here keyed by position.
   const [openId, setOpenId] = useState<number | null>(null);
   const [closeErr, setCloseErr] = useState<string | null>(null);
+  const [publishDraft, setPublishDraft] = useState<SignalDraft | null>(null);
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!publishNotice) return;
+    const id = window.setTimeout(() => setPublishNotice(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [publishNotice]);
 
   const rowCtid = useCallback((p: PositionRow): number => p.account?.ctid ?? ctid ?? 0, [ctid]);
 
@@ -193,6 +206,8 @@ export default function PositionsTab({
         </div>
       )}
 
+      {publishNotice && <Flash tone="success">{publishNotice}</Flash>}
+
       <FilterBar mode={mode} positions orders={false} state={filters} onChange={patchFilters} symbols={symbols} orderTypes={[]} />
 
       {error && (
@@ -225,6 +240,16 @@ export default function PositionsTab({
                 onToggle={() => setOpenId(openId === p.positionId ? null : p.positionId)}
                 onChanged={load}
                 onClose={() => setClosePos(p)}
+                canPublish={isAdmin}
+                onPublish={() =>
+                  setPublishDraft({
+                    symbol: p.symbol,
+                    direction: p.side === "BUY" ? "buy" : "sell",
+                    entry: p.entryPrice,
+                    target: p.takeProfit,
+                    stop: p.stopLoss,
+                  })
+                }
               />
             </StaggerItem>
           ))}
@@ -239,6 +264,14 @@ export default function PositionsTab({
         symbols={symbols}
         accountLabel={selectedLabel(accounts, ctid)}
       />
+
+      {isAdmin && (
+        <PublishSignalModal
+          draft={publishDraft}
+          onClose={() => setPublishDraft(null)}
+          onSaved={(signal) => setPublishNotice(`Signal published for ${signal.symbol}.`)}
+        />
+      )}
 
       <ConfirmModal
         open={closePos != null}
@@ -285,6 +318,8 @@ function PositionCard({
   onToggle,
   onChanged,
   onClose,
+  canPublish,
+  onPublish,
 }: {
   p: PositionRow;
   ctid: number;
@@ -292,6 +327,8 @@ function PositionCard({
   onToggle: () => void;
   onChanged: () => void;
   onClose: () => void;
+  canPublish: boolean;
+  onPublish: () => void;
 }) {
   const isBuy = p.side === "BUY";
   const [sl, setSl] = useState("");
@@ -408,8 +445,17 @@ function PositionCard({
             </div>
           </div>
 
-          <div className="border-t border-hairline pt-3">
-            <Button variant="danger" size="md" className="w-full" onClick={onClose}>
+          <div
+            className={
+              "grid gap-2 border-t border-hairline pt-3 " + (canPublish ? "grid-cols-2" : "grid-cols-1")
+            }
+          >
+            {canPublish && (
+              <Button variant="secondary" size="md" onClick={onPublish}>
+                <Megaphone className="h-4 w-4" /> Publish signal
+              </Button>
+            )}
+            <Button variant="danger" size="md" onClick={onClose}>
               <XOctagon className="h-4 w-4" /> Close position
             </Button>
           </div>

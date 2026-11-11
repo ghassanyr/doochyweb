@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowDownRight, ArrowUpRight, Ban, Hourglass, Pencil, Plus, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Ban, Hourglass, Megaphone, Pencil, Plus, RefreshCw } from "lucide-react";
 import { ApiError, AccountView, OrderRow, RowAccount, api } from "./api";
 import { ViewMode, fmtLots, fmtPrice } from "./Dashboard";
 import FilterBar, {
@@ -14,6 +14,8 @@ import FilterBar, {
 import { AccountChip, Badge, Button, Card, Collapse, Flash, Skeleton } from "./components/ui";
 import { FadeRise, Stagger, StaggerItem } from "./components/motion";
 import { ConfirmModal } from "./components/Modal";
+import { PublishSignalModal } from "./signals/PublishSignalModal";
+import type { SignalDraft } from "./signals/types";
 import OrderTicket from "./trading/OrderTicket";
 import { posNum } from "./trading/ui";
 
@@ -37,11 +39,14 @@ export default function OrdersTab({
   accounts,
   ctid,
   isLive,
+  isAdmin,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
   isLive: boolean;
+  /** Only admins can publish signals. */
+  isAdmin: boolean;
 }) {
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +57,14 @@ export default function OrdersTab({
   const [ticketOpen, setTicketOpen] = useState(false);
   const [cancelOrder, setCancelOrder] = useState<OrderRow | null>(null);
   const [cancelErr, setCancelErr] = useState<string | null>(null);
+  const [publishDraft, setPublishDraft] = useState<SignalDraft | null>(null);
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!publishNotice) return;
+    const id = window.setTimeout(() => setPublishNotice(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [publishNotice]);
 
   const patchOrderFilters = useCallback((pn: FilterPatch) => {
     setOrderFilters((s) => {
@@ -164,6 +177,8 @@ export default function OrdersTab({
         </div>
       </div>
 
+      {publishNotice && <Flash tone="success">{publishNotice}</Flash>}
+
       <FilterBar
         mode={mode}
         orders
@@ -203,7 +218,22 @@ export default function OrdersTab({
           <Stagger className="space-y-3">
             {sortedOrders.map((o) => (
               <StaggerItem key={combined && o.account ? `${o.account.ctid}:${o.orderId}` : o.orderId}>
-                <PendingCard o={o} ctid={rowCtid(o)} onChanged={load} onCancel={() => setCancelOrder(o)} />
+                <PendingCard
+                  o={o}
+                  ctid={rowCtid(o)}
+                  onChanged={load}
+                  onCancel={() => setCancelOrder(o)}
+                  canPublish={isAdmin}
+                  onPublish={() =>
+                    setPublishDraft({
+                      symbol: o.symbol,
+                      direction: o.side === "BUY" ? "buy" : "sell",
+                      entry: o.price,
+                      target: o.takeProfit,
+                      stop: o.stopLoss,
+                    })
+                  }
+                />
               </StaggerItem>
             ))}
           </Stagger>
@@ -218,6 +248,14 @@ export default function OrdersTab({
         symbols={syms}
         accountLabel={accountLabel}
       />
+
+      {isAdmin && (
+        <PublishSignalModal
+          draft={publishDraft}
+          onClose={() => setPublishDraft(null)}
+          onSaved={(signal) => setPublishNotice(`Signal published for ${signal.symbol}.`)}
+        />
+      )}
 
       <ConfirmModal
         open={cancelOrder != null}
@@ -266,11 +304,15 @@ function PendingCard({
   ctid,
   onChanged,
   onCancel,
+  canPublish,
+  onPublish,
 }: {
   o: OrderRow;
   ctid: number;
   onChanged: () => void;
   onCancel: () => void;
+  canPublish: boolean;
+  onPublish: () => void;
 }) {
   const isBuy = o.side === "BUY";
   const isLimit = o.orderType === "LIMIT";
@@ -364,7 +406,15 @@ function PendingCard({
           </div>
         </Collapse>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        {canPublish && (
+          <div className="mt-4">
+            <Button variant="secondary" size="sm" className="w-full" onClick={onPublish}>
+              <Megaphone className="h-3.5 w-3.5" /> Publish signal
+            </Button>
+          </div>
+        )}
+
+        <div className={"grid grid-cols-2 gap-2 " + (canPublish ? "mt-2" : "mt-4")}>
           <Button variant="secondary" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing((e) => !e)}>
             {editing ? "Done" : "Edit"}
           </Button>

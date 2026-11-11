@@ -19,7 +19,13 @@ type PageKey = (typeof PAGES)[number]["key"];
 // The trading view: account selector plus the positions / pending-orders tabs.
 // Chrome (header + primary nav) lives in AppShell; credential entry and
 // settings are full-screen takeovers owned by App.
-export default function Dashboard({ accounts }: { accounts: AccountView[] }) {
+export default function Dashboard({
+  accounts,
+  isAdmin,
+}: {
+  accounts: AccountView[];
+  isAdmin: boolean;
+}) {
   const [selectedCtid, setSelectedCtid] = useState<number | null>(null);
   const [mode, setMode] = useState<ViewMode>(() =>
     localStorage.getItem(MODE_KEY) === "combined" ? "combined" : "separate"
@@ -93,7 +99,13 @@ export default function Dashboard({ accounts }: { accounts: AccountView[] }) {
         </Card>
 
         {(mode === "combined" && accounts.length > 0) || selected ? (
-          <Tabs mode={mode} accounts={accounts} ctid={selected?.ctid ?? null} isLive={selected?.isLive ?? false} />
+          <Tabs
+            mode={mode}
+            accounts={accounts}
+            ctid={selected?.ctid ?? null}
+            isLive={selected?.isLive ?? false}
+            isAdmin={isAdmin}
+          />
         ) : (
           <Card className="p-8 text-center">
             <div className="text-sm text-fg-muted">No cTrader accounts found.</div>
@@ -110,11 +122,13 @@ function Tabs({
   accounts,
   ctid,
   isLive,
+  isAdmin,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
   isLive: boolean;
+  isAdmin: boolean;
 }) {
   const [tab, setTab] = useState<PageKey>("positions");
   return (
@@ -136,9 +150,9 @@ function Tabs({
         ))}
       </div>
       {tab === "positions" ? (
-        <PositionsTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} />
+        <PositionsTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
       ) : (
-        <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} />
+        <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
       )}
     </div>
   );

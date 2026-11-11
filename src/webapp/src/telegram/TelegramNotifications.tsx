@@ -279,14 +279,6 @@ export default function TelegramNotifications({
               <ExternalLink className="h-4 w-4" /> Open @{link.botUsername}
             </a>
             <Button
-              variant="secondary"
-              size="sm"
-              icon={<RefreshCw className="h-4 w-4" />}
-              onClickAsync={refreshTelegram}
-            >
-              Check connection
-            </Button>
-            <Button
               variant="ghost"
               size="sm"
               icon={<Link2 className="h-4 w-4" />}

@@ -7,13 +7,14 @@ import type { CatalogEntry } from "../market/types";
 import { formatLocalDateTime } from "../time";
 import { EXPIRY_PRESETS, computeRR, expiryIsoForPreset, fmtRR } from "./signalFormat";
 import type { ExpiryPresetId } from "./signalFormat";
-import type { Signal, SignalDirection } from "./types";
+import type { Signal, SignalDirection, SignalDraft } from "./types";
 
 type ExpiryChoice = ExpiryPresetId | "none" | "keep";
 
 export function SignalFormModal({
   open,
   signal,
+  initial,
   catalog,
   timeframes,
   onClose,
@@ -22,6 +23,8 @@ export function SignalFormModal({
   open: boolean;
   /** Null creates; a signal edits it. */
   signal: Signal | null;
+  /** Prefill for a new signal, e.g. from a position or pending order. */
+  initial?: SignalDraft | null;
   catalog: CatalogEntry[];
   timeframes: { id: string; label: string }[];
   onClose: () => void;
@@ -44,18 +47,19 @@ export function SignalFormModal({
   // create form.
   useEffect(() => {
     if (!open) return;
-    setSymbol(signal?.symbol ?? "");
-    setDirection(signal?.direction ?? "buy");
-    setEntry(signal?.entry != null ? String(signal.entry) : "");
-    setTarget(signal ? String(signal.target) : "");
-    setStop(signal ? String(signal.stop) : "");
+    const draft = signal ?? initial ?? null;
+    setSymbol(draft?.symbol ?? "");
+    setDirection(draft?.direction ?? "buy");
+    setEntry(draft?.entry != null ? String(draft.entry) : "");
+    setTarget(draft?.target != null ? String(draft.target) : "");
+    setStop(draft?.stop != null ? String(draft.stop) : "");
     setTimeframe(signal?.timeframe ?? "");
     setNote(signal?.note ?? "");
     setExpiryChoice(signal?.expiresAt ? "keep" : "none");
     setError(null);
     setConflict(false);
     setSymbolOpen(false);
-  }, [open, signal]);
+  }, [open, signal, initial]);
 
   const entryNum = entry.trim() === "" ? null : Number(entry);
   const targetNum = Number(target);
