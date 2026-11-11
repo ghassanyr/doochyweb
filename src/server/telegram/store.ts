@@ -1,7 +1,7 @@
 // Persistence for Telegram links, one-time link codes and the delivery outbox.
 //
 // Kept feature-local, mirroring `signals/store.ts`, rather than growing `db.ts`.
-// The unique indexes are the real guards: one chat per DoochyWeb user, one user
+// The unique indexes are the real guards: one chat per Doochy user, one user
 // per chat, and one delivery per (signal, event, chat).
 
 import mongoose from "mongoose";

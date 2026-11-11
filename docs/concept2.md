@@ -79,7 +79,7 @@ gives a natural "no-trade" class.
 
 - **Free only.** Paid/pro is deferred.
 - **CLI + CSV** review workflow first; a polished labeling UI comes later.
-- Reuse doochyweb's market layer (providers, indicators, patterns, breakout engine,
+- Reuse doochy's market layer (providers, indicators, patterns, breakout engine,
   Mongo/JWT, React/Tailwind design system).
 
 ## Non-goals (for now)

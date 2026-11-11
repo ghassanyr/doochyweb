@@ -1,10 +1,10 @@
-# DoochyWeb: Phase 1 project plan & build brief
+# Doochy: Phase 1 project plan & build brief
 
 Status: plan approved, awaiting build. Reference implementation for all cTrader
 Open API protocol details: the `doochy` repository on this machine
 (`/home/san/doochy`). Build the new app as a **separate sibling project** at
 `/home/san/doochyweb` (own package, own git repo). It shares protocol knowledge
-with `doochy`, but is **not wired into doochybot**; DoochyWeb is a manual
+with `doochy`, but is **not wired into doochybot**; Doochy is a manual
 management view, DoochyBot stays fully automated.
 
 ## 1. Purpose
@@ -26,11 +26,11 @@ Open API app credentials once; the app discovers every account under that grant
 ## 2. Locked-in decisions (from planning)
 
 - **Dual demo/live, no toggle.** Each account self-classifies (`isLive`) from the
-  account-list call; DoochyWeb routes it to the correct host automatically. One
+  account-list call; Doochy routes it to the correct host automatically. One
   credential set exposes all accounts of the cTrader ID.
 - **Database:** reuse the running `mongo` Docker container on `127.0.0.1:27017`
   (mongo:7.0). The container was previously used by an inactive project; its
-  DBs are being purged by the owner (backup already taken). DoochyWeb gets its
+  DBs are being purged by the owner (backup already taken). Doochy gets its
   **own database** in that container, name `doochyweb`. Connection via
   `MONGO_URI` + `MONGO_DB` env vars. The owner handles the server-side DB
   cleanup; the app just connects.
@@ -125,7 +125,7 @@ Open API app credentials once; the app discovers every account under that grant
   → `{ accessToken, refreshToken, expiresIn }`.
 - **Refresh tokens are single-use and ROTATE.** Persist the rotated pair back
   to Mongo on every refresh, or the next login breaks when the old refresh
-  token dies. (doochy writes the new pair to `.env`; DoochyWeb writes to the
+  token dies. (doochy writes the new pair to `.env`; Doochy writes to the
   user's credentials doc.)
 - Trigger refresh on token error codes:
   `CH_ACCESS_TOKEN_INVALID`, `ACCESS_TOKEN_EXPIRED`, `OA_AUTH_TOKEN_EXPIRED`,

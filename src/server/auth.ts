@@ -44,7 +44,7 @@ export function signToken(userId: string): string {
 }
 
 // Short-lived state carried through the cTrader OAuth browser round-trip. The
-// signature is what proves which DoochyWeb user started the flow: the callback
+// signature is what proves which Doochy user started the flow: the callback
 // is a top-level navigation and cannot send the normal Authorization header.
 const OAUTH_STATE_PURPOSE = "ctrader-oauth";
 const OAUTH_STATE_TTL = "10m";

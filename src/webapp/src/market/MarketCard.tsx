@@ -105,6 +105,17 @@ function EngulfBadge({
   );
 }
 
+function UpdatedBadge({ at }: { at: number }) {
+  return (
+    <span
+      className="shrink-0 text-[10.5px] text-fg-faint"
+      title={`Analysis refreshed ${timeAgo(at)}`}
+    >
+      updated {timeAgo(at)}
+    </span>
+  );
+}
+
 // Gauge lays these out as two side-by-side recessed panels under the dial.
 function SubSummary({ title, section }: { title: string; section: Section }) {
   return (
@@ -226,18 +237,20 @@ function MarketCardInner({ analysis, strongRatio, refreshing, canRefresh, canRem
 
       <div className="pointer-events-none relative mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-hairline pt-2">
         <SourceBadge a={a} />
-        <span className="ml-auto flex flex-wrap items-center justify-end gap-1">
-          {a.engulfing && (
-            <EngulfBadge kind={a.engulfing} barClose={a.engulfingBarClose} stale={a.stale} />
-          )}
-          {a.sweep4h && <SweepBadge kind={a.sweep4h} stale={a.sweep4hStale} />}
-          <span
-            className="shrink-0 text-[10.5px] text-fg-faint"
-            title={`Analysis refreshed ${timeAgo(a.updatedAt)}`}
-          >
-            updated {timeAgo(a.updatedAt)}
+        {a.engulfing ? (
+          <span className="ml-auto flex flex-col items-end gap-0.5">
+            <span className="flex flex-wrap items-center justify-end gap-1">
+              <EngulfBadge kind={a.engulfing} barClose={a.engulfingBarClose} stale={a.stale} />
+              {a.sweep4h && <SweepBadge kind={a.sweep4h} stale={a.sweep4hStale} />}
+            </span>
+            <UpdatedBadge at={a.updatedAt} />
           </span>
-        </span>
+        ) : (
+          <span className="ml-auto flex flex-wrap items-center justify-end gap-1">
+            {a.sweep4h && <SweepBadge kind={a.sweep4h} stale={a.sweep4hStale} />}
+            <UpdatedBadge at={a.updatedAt} />
+          </span>
+        )}
       </div>
     </Card>
   );

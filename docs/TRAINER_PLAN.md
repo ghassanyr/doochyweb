@@ -14,7 +14,7 @@ short delivery note. The worker updates the checkboxes and status table in this 
 
 | Decision | Value |
 |---|---|
-| Product | Free chart-reading trainer, `learn.doochy.net`, part of doochyweb |
+| Product | Free chart-reading trainer, `learn.doochy.net`, part of doochy |
 | Symbols | BTC, ETH, SOL |
 | Timeframes | 15m, 1h |
 | History mined | 2 years |

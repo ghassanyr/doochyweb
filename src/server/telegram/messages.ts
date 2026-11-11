@@ -85,13 +85,13 @@ export function signalButtonUrl(baseUrl: string, signalId: string): string {
 }
 
 export function buildTestMessage(): string {
-  return "✅ <b>DoochyWeb test</b>\nTelegram notifications are working.";
+  return "✅ <b>Doochy test</b>\nTelegram notifications are working.";
 }
 
 export function buildWelcomeMessage(settingsUrl: string): string {
   const safe = escapeHtml(settingsUrl);
   return [
-    "👋 <b>DoochyWeb signals bot</b>",
+    "👋 <b>Doochy signals bot</b>",
     "",
     "Open Settings, choose <b>Connect Telegram</b>, then send the code here.",
     `<a href="${safe}">${safe}</a>`,
@@ -100,7 +100,7 @@ export function buildWelcomeMessage(settingsUrl: string): string {
 
 export function buildLinkedMessage(): string {
   return [
-    "✅ <b>Linked to DoochyWeb</b>",
+    "✅ <b>Linked to Doochy</b>",
     "",
     "You'll get a message here when a new signal is published.",
     "/status · /stop · /unlink",
@@ -109,7 +109,7 @@ export function buildLinkedMessage(): string {
 
 export function buildAlreadyLinkedMessage(): string {
   return [
-    "✅ This chat is already linked to DoochyWeb.",
+    "✅ This chat is already linked to Doochy.",
     "",
     "/status · /stop · /unlink",
   ].join("\n");
@@ -117,7 +117,7 @@ export function buildAlreadyLinkedMessage(): string {
 
 export function buildChatTakenMessage(): string {
   return [
-    "⚠️ This Telegram account is already linked to another DoochyWeb user.",
+    "⚠️ This Telegram account is already linked to another Doochy user.",
     "",
     "Send /unlink here first, then generate a new code in Settings.",
   ].join("\n");
@@ -141,7 +141,7 @@ export function buildStatusMessage(params: {
   notificationsEnabled: boolean;
   linkedAt: string;
 }): string {
-  const lines = ["📊 <b>DoochyWeb</b>"];
+  const lines = ["📊 <b>Doochy</b>"];
   if (params.account) lines.push(`Account: ${escapeHtml(params.account)}`);
   lines.push(`Notifications: <b>${params.notificationsEnabled ? "on" : "off"}</b>`);
   const at = formatUtc(params.linkedAt);
@@ -163,7 +163,7 @@ export function buildUnlinkedMessage(): string {
 
 export function buildHelpMessage(): string {
   return [
-    "<b>DoochyWeb bot</b>",
+    "<b>Doochy bot</b>",
     "",
     "/status — connection and notification state",
     "/stop — pause notifications",

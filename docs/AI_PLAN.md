@@ -5,8 +5,8 @@ Status as of 2026-11-05. Detector fix and scraper runner are committed (`06897f1
 ## Where things stand
 
 - **Current**: cutover done 2026-11-03. Soak runs to 2026-11-05; check live captures against replay at each 4H close.
-- **Breakouts**: detection runs in the doochyweb server (`src/server/market/breakoutRunner.ts`), hourly at HH:02 UTC, on cTrader and Binance bars. Output: `~/doochyweb/openclaw-breakouts.jsonl`. The old OpenClaw writer is a passthrough and does no detection.
-- **Scrape cron**: live inside doochyweb (`scraperRunner.ts`), `SCRAPER_ENABLED=true`, writing the UI captures file. All OpenClaw Doochy capture crons are disabled. Remaining: a 24-48h ops soak (live vs replay at 4H closes). Scraping is now the only part that no longer depends on the agent.
+- **Breakouts**: detection runs in the doochy server (`src/server/market/breakoutRunner.ts`), hourly at HH:02 UTC, on cTrader and Binance bars. Output: `~/doochyweb/openclaw-breakouts.jsonl`. The old OpenClaw writer is a passthrough and does no detection.
+- **Scrape cron**: live inside doochy (`scraperRunner.ts`), `SCRAPER_ENABLED=true`, writing the UI captures file. All OpenClaw Doochy capture crons are disabled. Remaining: a 24-48h ops soak (live vs replay at 4H closes). Scraping is now the only part that no longer depends on the agent.
 - **Captures file**: repaired again at cutover (9 rows, all parse); backup at `/tmp/opencode/openclaw-captures.bak`. `write_capture.py` now starts a new line if the last write left none.
 - **Agent knowledge**: `doochy-scraper` and `doochy-breakout-storage` SKILL.md updated. Active directives added to the workspace `USER.md`. Summary in `memory/2026-11-02-doochy-changes.md`.
 - **Watchlist**: SPX removed (2026-11-02). US500 stays. 17 symbols.
@@ -78,7 +78,7 @@ Cutover checklist (2026-11-03):
 ## Scrape cron move: assessment (2026-11-02)
 - doochy.net is this same app. Its public /api/market/analysis returns the fields the scraper reads from the browser: summary rating, oscillator and MA rows, sweep4h flags.
 - Spot check against the 12:04 CSV: sweep flags match (4H LOW). Ratings mostly match; XRPUSD differs (scraped Strong Sell, API sell). Prices differ by about 0.5%, probably timing. Not parity yet.
-- Implication: no headless browser and no LLM parsing needed. A deterministic job in doochyweb can read the API, apply the alignment and change rules, and write the capture the website reads.
+- Implication: no headless browser and no LLM parsing needed. A deterministic job in doochy can read the API, apply the alignment and change rules, and write the capture the website reads.
 - Before cutover: (1) port the alignment and change rules from SKILL.md to code, tested against recorded CSV rows; (2) timestamp-matched parity for at least a week; (3) write captures to the UI file; (4) choose the trigger inside the server.
 - Recommendation: no cutover before parity. Run both for a week and compare.
 

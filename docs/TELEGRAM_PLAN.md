@@ -8,7 +8,7 @@ User taps the deep link or sends the code to the bot.
 Bot consumes the code, binds chat_id ↔ userId, replies “Linked”.
 Settings polls /api/telegram/status until linked.
 Admin publishes a signal → createSignal() enqueues one delivery per enabled link → worker sends the DM.
-Open on DoochyWeb button opens /signals?signal=<id>.
+Open on Doochy button opens /signals?signal=<id>.
 Data model
 TelegramLink — unique userId, unique chatId, Telegram identity, notificationsEnabled, linkedAt, lastError.
 TelegramLinkCode — codeHash unique, userId, expiresAt TTL index, usedAt, usedByChatId.

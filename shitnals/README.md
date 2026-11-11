@@ -9,7 +9,7 @@ holdout. Research evidence only. No orders, no bot, no live signals.
 1. **No broker connection from this project.** Price history comes from the cached candle files.
    Costs are hard-coded constants in `src/config.ts`. Do not add code that logs in to cTrader.
 2. **If a cost probe is ever needed,** it runs on a read-only sub-account, never the shared grant that
-   DoochyWeb and DoochyBot use. The token-refresh request is never called, because refresh rotates the
+   Doochy and DoochyBot use. The token-refresh request is never called, because refresh rotates the
    grant for every connection.
 3. **No code path may trade or place orders.** The engine only reads bars and writes files.
 4. **Costs are first class.** A symbol with no measured spread (`US100`) throws and refuses to run.

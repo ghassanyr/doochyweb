@@ -1,6 +1,6 @@
 // One-time link codes.
 //
-// A bot cannot trust a typed DoochyWeb username, so linking is proven by a
+// A bot cannot trust a typed Doochy username, so linking is proven by a
 // short-lived code minted while signed in. Only the SHA-256 hash is stored;
 // the raw code exists in the browser and in the Telegram message.
 

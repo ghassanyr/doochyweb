@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { History, Plus, Radio, Search } from "lucide-react";
+import { Bell, History, Plus, Radio, Search } from "lucide-react";
 
-import { marketApi, signalsApi } from "../api";
+import { marketApi, signalsApi, telegramApi, type TelegramStatus } from "../api";
+import { AnimatedModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
 import { Badge, Button, Card, inputCls } from "../components/ui";
 import { MarketDetail } from "../market/MarketDetail";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "../market/timeframes";
 import type { CatalogEntry } from "../market/types";
+import TelegramNotifications from "../telegram/TelegramNotifications";
 import { detectedTimeZone, timeZoneLabel } from "../time";
 import { DeleteSignalModal } from "./DeleteSignalModal";
 import { InvalidateModal } from "./InvalidateModal";
@@ -57,6 +59,22 @@ export default function SignalsPage({
   const [detail, setDetail] = useState<Signal | null>(null);
   const [chart, setChart] = useState<{ symbol: string; timeframe: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
+  const [telegramOpen, setTelegramOpen] = useState(false);
+
+  // Only offer the shortcut to signed-in users who can still link Telegram.
+  useEffect(() => {
+    let alive = true;
+    telegramApi
+      .status()
+      .then((s) => {
+        if (alive) setTelegram(s);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -193,6 +211,16 @@ export default function SignalsPage({
             </span>
 
             <div className="ml-auto flex items-center gap-2">
+              {telegram?.enabled && !telegram.linked && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Bell className="h-3.5 w-3.5" />}
+                  onClick={() => setTelegramOpen(true)}
+                >
+                  Connect Telegram
+                </Button>
+              )}
               <div
                 role="group"
                 aria-label="Signals view"
@@ -360,6 +388,15 @@ export default function SignalsPage({
         }}
       />
       <SignalDetailModal signal={detail} onClose={closeDetail} onOpenChart={openChart} onCopy={copy} />
+
+      <AnimatedModal
+        open={telegramOpen}
+        onClose={() => setTelegramOpen(false)}
+        title="Telegram notifications"
+        subtitle={`Get a direct message from @${telegram?.botUsername ?? "DoochyBot"} when a new signal is published.`}
+      >
+        <TelegramNotifications showHeading={false} onStatusChange={setTelegram} />
+      </AnimatedModal>
 
       {chart && (
         <MarketDetail

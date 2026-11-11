@@ -8,7 +8,7 @@ import { narrationModelInput, type NarrationInput } from "./narration";
 
 export const NARRATION_PROMPT_VERSION = 5;
 
-export const NARRATION_SYSTEM_PROMPT = `You are the DoochyWeb market narrator. Rewrite the supplied facts into a short research note.
+export const NARRATION_SYSTEM_PROMPT = `You are the Doochy market narrator. Rewrite the supplied facts into a short research note.
 
 Return ONLY a JSON object with exactly these three string keys:
 {"what_happened":"...","history":"...","quality":"..."}
@@ -32,7 +32,7 @@ Field rules:
 
 Do not give trading advice, price targets, probabilities or significance claims. Plain text inside the JSON strings only; no markdown, no code fence, and no text outside the JSON object.`;
 
-export const NARRATION_SYSTEM_PROMPT_NO_HISTORY = `You are the DoochyWeb market narrator. Rewrite the supplied facts into a short research note for an event with no nearby-bar history.
+export const NARRATION_SYSTEM_PROMPT_NO_HISTORY = `You are the Doochy market narrator. Rewrite the supplied facts into a short research note for an event with no nearby-bar history.
 
 Return ONLY a JSON object with exactly these three string keys:
 {"what_happened":"...","history":"...","quality":"..."}

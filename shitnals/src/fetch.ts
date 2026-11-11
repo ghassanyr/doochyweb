@@ -63,7 +63,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 /** Opens the socket, application-auths, and returns the connection. Does NOT refresh tokens:
- *  refresh rotates the grant for every other connection (DoochyWeb, DoochyBot). */
+ *  refresh rotates the grant for every other connection (Doochy, DoochyBot). */
 async function openConnection(creds: Creds): Promise<any> {
   const connection: any = new CTraderConnection({ host: creds.host, port: PORT });
   await withTimeout(connection.open(), REQUEST_TIMEOUT_MS, "socket open");
@@ -106,7 +106,7 @@ async function authAccount(connection: any, ctid: number, accessToken: string): 
   );
 }
 
-/** Resolves a broker symbol name to its symbolId by listing symbols, matching the DoochyWeb approach. */
+/** Resolves a broker symbol name to its symbolId by listing symbols, matching the Doochy approach. */
 async function resolveSymbolId(connection: any, ctid: number, name: string): Promise<number> {
   const res: any = await withTimeout(
     connection.sendCommand("ProtoOASymbolsListReq", {

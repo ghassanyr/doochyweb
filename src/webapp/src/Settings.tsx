@@ -1,32 +1,16 @@
 import { useEffect, useState } from "react";
-import {
-  AlertCircle,
-  ArrowLeft,
-  Bell,
-  BellOff,
-  Check,
-  Copy,
-  ExternalLink,
-  KeyRound,
-  Link2,
-  RefreshCw,
-  Save,
-  Send,
-  Unplug,
-} from "lucide-react";
+import { AlertCircle, ArrowLeft, KeyRound, RefreshCw, Save } from "lucide-react";
 import {
   api,
   ApiError,
   AccountView,
   ConnectInput,
-  telegramApi,
-  type TelegramLinkResponse,
-  type TelegramStatus,
 } from "./api";
 import ConnectPanel from "./ConnectPanel";
 import { fmtMoney } from "./Dashboard";
-import { ACCOUNT_COLORS, Button, Card, Flash, buttonClass, inputCls } from "./components/ui";
+import { ACCOUNT_COLORS, Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
+import TelegramNotifications from "./telegram/TelegramNotifications";
 
 type AccountPrefs = { nickname: string; color: string | null };
 
@@ -52,12 +36,6 @@ export default function SettingsPage({
   const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
   const [oauthAvailable, setOauthAvailable] = useState(false);
   const [reconnectErr, setReconnectErr] = useState<string | null>(null);
-  const [tg, setTg] = useState<TelegramStatus | null>(null);
-  const [tgLoading, setTgLoading] = useState(true);
-  const [tgError, setTgError] = useState<string | null>(null);
-  const [tgNotice, setTgNotice] = useState<string | null>(null);
-  const [tgLink, setTgLink] = useState<TelegramLinkResponse | null>(null);
-  const [tgCopied, setTgCopied] = useState(false);
 
   useEffect(() => {
     setPrefs(prefsFrom(accounts));
@@ -79,50 +57,6 @@ export default function SettingsPage({
       alive = false;
     };
   }, []);
-
-  // Telegram connection state. The card is independent of cTrader credentials.
-  useEffect(() => {
-    let alive = true;
-    telegramApi
-      .status()
-      .then((s) => {
-        if (alive) setTg(s);
-      })
-      .catch((err) => {
-        if (alive) {
-          setTgError(err instanceof ApiError ? err.message : "Could not load Telegram status");
-        }
-      })
-      .finally(() => {
-        if (alive) setTgLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // While a code is on screen, poll until the bot confirms the link.
-  useEffect(() => {
-    if (!tgLink) return;
-    let alive = true;
-    const id = setInterval(() => {
-      telegramApi
-        .status()
-        .then((s) => {
-          if (!alive) return;
-          setTg(s);
-          if (s.linked) {
-            setTgLink(null);
-            setTgNotice("Telegram connected.");
-          }
-        })
-        .catch(() => {});
-    }, 4000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [tgLink]);
 
   function dirtyPairs(): { ctid: number; nickname: string; color: string | null }[] {
     return accounts
@@ -170,93 +104,6 @@ export default function SettingsPage({
     }
   }
 
-  async function connectTelegram() {
-    setTgError(null);
-    setTgNotice(null);
-    setTgCopied(false);
-    try {
-      setTgLink(await telegramApi.link());
-    } catch (err) {
-      setTgError(err instanceof ApiError ? err.message : "Could not create a Telegram link code");
-    }
-  }
-
-  async function refreshTelegram() {
-    setTgError(null);
-    try {
-      const s = await telegramApi.status();
-      setTg(s);
-      if (s.linked) {
-        setTgLink(null);
-        setTgNotice("Telegram connected.");
-      }
-    } catch (err) {
-      setTgError(err instanceof ApiError ? err.message : "Could not refresh Telegram status");
-    }
-  }
-
-  async function toggleTelegram() {
-    if (!tg?.linked) return;
-    setTgError(null);
-    setTgNotice(null);
-    const next = !tg.notificationsEnabled;
-    try {
-      await telegramApi.setPrefs(next);
-      setTg({ ...tg, notificationsEnabled: next });
-      setTgNotice(next ? "Notifications resumed." : "Notifications paused.");
-    } catch (err) {
-      setTgError(err instanceof ApiError ? err.message : "Could not update notifications");
-    }
-  }
-
-  async function sendTelegramTest() {
-    setTgError(null);
-    setTgNotice(null);
-    try {
-      await telegramApi.test();
-      setTgNotice("Test message queued. It should arrive in a few seconds.");
-    } catch (err) {
-      setTgError(err instanceof ApiError ? err.message : "Could not send a test message");
-    }
-  }
-
-  async function disconnectTelegram() {
-    if (!window.confirm("Disconnect Telegram? You will stop receiving signal messages.")) return;
-    setTgError(null);
-    setTgNotice(null);
-    try {
-      await telegramApi.unlink();
-      setTgLink(null);
-      setTg((prev) =>
-        prev
-          ? {
-              ...prev,
-              linked: false,
-              username: null,
-              firstName: null,
-              notificationsEnabled: false,
-              linkedAt: null,
-              lastError: null,
-            }
-          : prev
-      );
-      setTgNotice("Telegram disconnected.");
-    } catch (err) {
-      setTgError(err instanceof ApiError ? err.message : "Could not disconnect Telegram");
-    }
-  }
-
-  async function copyTelegramCode() {
-    if (!tgLink) return;
-    try {
-      await navigator.clipboard.writeText(tgLink.code);
-      setTgCopied(true);
-      setTimeout(() => setTgCopied(false), 2000);
-    } catch {
-      setTgError("Could not copy the code; select it manually.");
-    }
-  }
-
   if (showConnect) {
     return (
       <ConnectPanel
@@ -294,7 +141,7 @@ export default function SettingsPage({
               className="h-6 w-6 shrink-0"
               aria-hidden="true"
             />
-            <div className="text-[15px] font-semibold tracking-tight text-fg">DoochyWeb</div>
+            <div className="text-[15px] font-semibold tracking-tight text-fg">Doochy</div>
             <span className="mt-0.5 rounded bg-surface px-1 py-px text-[11px] font-medium text-fg-faint">settings</span>
           </div>
         </div>
@@ -304,7 +151,7 @@ export default function SettingsPage({
         <FadeRise>
           <div className="space-y-1">
             <h1 className="text-lg font-semibold tracking-tight text-fg">Settings</h1>
-            <p className="text-sm text-fg-muted">Manage how accounts appear and how DoochyWeb connects.</p>
+            <p className="text-sm text-fg-muted">Manage how accounts appear and how Doochy connects.</p>
           </div>
         </FadeRise>
 
@@ -432,157 +279,7 @@ export default function SettingsPage({
         </FadeRise>
 
         <FadeRise>
-          <Card className="p-4">
-            <div className="space-y-1">
-              <h2 className="text-sm font-semibold tracking-tight text-fg">Telegram notifications</h2>
-              <p className="text-sm text-fg-muted">
-                Get a direct message from @{tg?.botUsername ?? "DoochyBot"} when a new signal is published.
-              </p>
-            </div>
-
-            {tgError && (
-              <div className="mt-3">
-                <Flash tone="danger">{tgError}</Flash>
-              </div>
-            )}
-            {tgNotice && (
-              <div className="mt-3">
-                <Flash tone="success">{tgNotice}</Flash>
-              </div>
-            )}
-
-            {tgLoading ? (
-              <p className="mt-3 text-sm text-fg-faint">Checking connection…</p>
-            ) : !tg ? (
-              <div className="mt-4">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={<RefreshCw className="h-4 w-4" />}
-                  onClickAsync={refreshTelegram}
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : !tg.enabled ? (
-              <p className="mt-3 text-sm text-fg-faint">
-                Telegram notifications are not configured on this server.
-              </p>
-            ) : tg.linked ? (
-              <div className="mt-4 space-y-4">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
-                    <Check className="h-3.5 w-3.5" />
-                    {tg.username ? `@${tg.username}` : tg.firstName || "Connected"}
-                  </span>
-                  {tg.linkedAt && (
-                    <span className="text-xs text-fg-faint">
-                      Linked {new Date(tg.linkedAt).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-                {tg.lastError && (
-                  <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">
-                    Last delivery error: {tg.lastError}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant={tg.notificationsEnabled ? "secondary" : "primary"}
-                    size="sm"
-                    icon={
-                      tg.notificationsEnabled ? (
-                        <BellOff className="h-4 w-4" />
-                      ) : (
-                        <Bell className="h-4 w-4" />
-                      )
-                    }
-                    onClickAsync={toggleTelegram}
-                  >
-                    {tg.notificationsEnabled ? "Pause notifications" : "Resume notifications"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Send className="h-4 w-4" />}
-                    onClickAsync={sendTelegramTest}
-                  >
-                    Send test message
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    icon={<Unplug className="h-4 w-4" />}
-                    onClickAsync={disconnectTelegram}
-                  >
-                    Disconnect
-                  </Button>
-                </div>
-              </div>
-            ) : tgLink ? (
-              <div className="mt-4 space-y-3">
-                <p className="text-sm text-fg-muted">
-                  Send this code to{" "}
-                  <span className="font-medium text-fg">@{tgLink.botUsername}</span> in Telegram, or use
-                  the button below.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <code className="rounded-lg border border-hairline bg-surface px-3 py-2 font-mono text-base tracking-[0.2em] text-fg">
-                    {tgLink.code}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={tgCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    onClick={copyTelegramCode}
-                  >
-                    {tgCopied ? "Copied" : "Copy"}
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <a
-                    className={buttonClass("primary", "sm")}
-                    href={tgLink.deepLink}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <ExternalLink className="h-4 w-4" /> Open @{tgLink.botUsername}
-                  </a>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<RefreshCw className="h-4 w-4" />}
-                    onClickAsync={refreshTelegram}
-                  >
-                    Check connection
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Link2 className="h-4 w-4" />}
-                    onClickAsync={connectTelegram}
-                  >
-                    New code
-                  </Button>
-                </div>
-                <p className="text-xs text-fg-faint">
-                  Waiting for the bot to confirm… The code expires{" "}
-                  {new Date(tgLink.expiresAt).toLocaleTimeString()}.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-4">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<Link2 className="h-4 w-4" />}
-                  onClickAsync={connectTelegram}
-                >
-                  Connect Telegram
-                </Button>
-              </div>
-            )}
-          </Card>
+          <TelegramNotifications />
         </FadeRise>
 
         <FadeRise>

@@ -1,7 +1,7 @@
 // cTrader "Connect" OAuth flow.
 //
 // The manual credential form works, but it makes every user register their own
-// Open API app and paste four secrets. This module lets DoochyWeb own one
+// Open API app and paste four secrets. This module lets Doochy own one
 // approved app and send the user through cTrader's consent screen instead.
 //
 // Flow:
