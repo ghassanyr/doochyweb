@@ -126,6 +126,15 @@ export default function SettingsPage({
             aria-label="Back"
           />
           <div className="flex items-center gap-2">
+            <img
+              src="/doochy-mark-64.png"
+              srcSet="/doochy-mark-32.png 1x, /doochy-mark-64.png 2x, /doochy-mark-96.png 3x"
+              alt=""
+              width={24}
+              height={24}
+              className="h-6 w-6 shrink-0"
+              aria-hidden="true"
+            />
             <div className="text-[15px] font-semibold tracking-tight text-fg">DoochyWeb</div>
             <span className="mt-0.5 rounded bg-surface px-1 py-px text-[11px] font-medium text-fg-faint">settings</span>
           </div>

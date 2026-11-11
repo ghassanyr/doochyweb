@@ -56,9 +56,17 @@ export function AppShell({
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-page items-center gap-5 px-4 sm:px-6">
           <div className="flex shrink-0 items-center gap-2.5">
-            <GaugeMark />
+            <img
+              src="/doochy-mark-80.png"
+              srcSet="/doochy-mark-40.png 1x, /doochy-mark-80.png 2x, /doochy-mark-120.png 3x, /doochy-mark-160.png 4x"
+              alt=""
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0"
+              aria-hidden="true"
+            />
             <div className="leading-tight">
-              <div className="text-[17px] font-bold tracking-tight text-fg">DoochyWeb</div>
+              <div className="text-[17px] font-bold tracking-tight text-fg">Doochy</div>
               <div className="hidden text-[11px] text-fg-muted sm:block">
                 Market analysis &amp; trading
               </div>
@@ -140,29 +148,6 @@ export function AppShell({
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
     </div>
-  );
-}
-
-// Gauge's dial mark, kept as the app logo so the branding matches the project
-// the Analysis page came from.
-function GaugeMark() {
-  return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center" aria-hidden="true">
-      <svg viewBox="0 0 32 32" width="30" height="30">
-        <circle cx="16" cy="16" r="15" fill="#14b8a6" />
-        <path d="M7 20a9 9 0 0 1 18 0" stroke="#e7edf5" strokeWidth="2.5" fill="none" />
-        <line
-          x1="16"
-          y1="20"
-          x2="21.5"
-          y2="11"
-          stroke="#e7edf5"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-        <circle cx="16" cy="20" r="1.8" fill="#e7edf5" />
-      </svg>
-    </span>
   );
 }
 
