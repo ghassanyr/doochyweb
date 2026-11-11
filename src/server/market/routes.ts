@@ -50,8 +50,10 @@ import type {
   AnalysisError,
   AnalysisSettings,
   AnalysisResponse,
+  Candle,
   CatalogEntry,
   ConfluenceResponse,
+  ProviderId,
   ProviderWarning,
   SymbolMeta,
   TimeframeRating,
@@ -292,33 +294,65 @@ marketRouter.post("/analysis/:symbol/refresh", authRequired, async (req, res) =>
   const catalog = await cachedCatalog();
   const result = await analyzeSymbol(req.params.symbol, timeframe, catalog, settings, true);
   if (result.ok && (req.query.all === "1" || req.query.all === "true")) {
-    result.timeframeRatings = await ratingsForAllTimeframes(req.params.symbol, catalog, settings);
+    const snapshot = await ratingsForAllTimeframes(req.params.symbol, catalog, settings);
+    result.timeframeRatings = pinSelectedRating(snapshot.timeframes, result);
   }
   res.json(result);
 });
 
-// Compact all-timeframe verdict for the card ribbon. A wide watchlist costs ten
-// bar reads per symbol, so identical requests within a minute share one result
-// and concurrent callers share one in-flight promise.
-const CONFLUENCE_TTL_MS = 60_000;
-const confluenceCache = new Map<string, { at: number; value: ConfluenceResponse }>();
+// Compact all-timeframe verdict for the card ribbon. Reading ten cached series
+// is cheap; the expensive part is rerunning the indicators. Cache one snapshot
+// per symbol and reuse it until any timeframe's bars change, so the ribbon
+// cannot lag behind the card's selected-timeframe analysis.
+interface ConfluenceCacheEntry {
+  version: string;
+  value: ConfluenceResponse;
+}
+const confluenceCache = new Map<string, ConfluenceCacheEntry>();
 const confluenceInFlight = new Map<string, Promise<ConfluenceResponse>>();
+
+interface TimeframeSeries {
+  id: string;
+  bars?: Candle[];
+  provider?: ProviderId;
+  version: string;
+  error?: string;
+}
+
+async function readTimeframes(
+  meta: SymbolMeta,
+  settings: AnalysisSettings
+): Promise<TimeframeSeries[]> {
+  return mapPool(TIMEFRAMES, MAX_SWEEP, async (tf) => {
+    try {
+      const { bars, provider, version } = await getCandles(meta, tf.id, settings);
+      return { id: tf.id, bars, provider, version };
+    } catch (err) {
+      const error = message(err);
+      return { id: tf.id, error, version: `error:${error}` };
+    }
+  });
+}
 
 async function confluenceFor(
   meta: SymbolMeta,
-  catalog: CatalogEntry[],
   settings: AnalysisSettings
 ): Promise<ConfluenceResponse> {
   const key = `${normalizeSymbol(meta.symbol)}|${settings.strongRatio}`;
-  const cached = confluenceCache.get(key);
-  if (cached && Date.now() - cached.at < CONFLUENCE_TTL_MS) return cached.value;
   const running = confluenceInFlight.get(key);
   if (running) return running;
   const task = (async () => {
     try {
-      const timeframes = await ratingsForAllTimeframes(meta.symbol, catalog, settings);
-      const value: ConfluenceResponse = { symbol: meta.symbol, updatedAt: Date.now(), timeframes };
-      confluenceCache.set(key, { at: Date.now(), value });
+      const reads = await readTimeframes(meta, settings);
+      const version = reads.map((r) => `${r.id}=${r.version}`).join("|");
+      const cached = confluenceCache.get(key);
+      if (cached && cached.version === version) return cached.value;
+      const value: ConfluenceResponse = {
+        symbol: meta.symbol,
+        updatedAt: Date.now(),
+        timeframes: ratingsFromReads(meta, reads),
+      };
+      confluenceCache.set(key, { version, value });
       return value;
     } finally {
       confluenceInFlight.delete(key);
@@ -341,7 +375,7 @@ marketRouter.get("/analysis/:symbol/confluence", async (req, res) => {
     return;
   }
   try {
-    res.json(await confluenceFor(meta, catalog, settings));
+    res.json(await confluenceFor(meta, settings));
   } catch (err) {
     res.status(500).json({ error: message(err) });
   }
@@ -354,7 +388,8 @@ marketRouter.get("/analysis/:symbol", async (req, res) => {
   const { items: catalog, brokerError } = await cachedCatalogFull();
   const result = await analyzeSymbol(symbol, timeframe, catalog, settings, false, brokerError);
   if ((req.query.all === "1" || req.query.all === "true") && result.ok) {
-    result.timeframeRatings = await ratingsForAllTimeframes(symbol, catalog, settings);
+    const snapshot = await ratingsForAllTimeframes(symbol, catalog, settings);
+    result.timeframeRatings = pinSelectedRating(snapshot.timeframes, result);
   }
   res.json(result);
 });
@@ -431,34 +466,66 @@ async function analyzeSymbol(
   }
 }
 
+function ratingsFromReads(
+  meta: SymbolMeta,
+  reads: TimeframeSeries[]
+): Record<string, TimeframeRating> {
+  return Object.fromEntries(
+    reads.map((read) => {
+      if (read.error || !read.bars || !read.provider) {
+        return [read.id, { error: read.error ?? "bars unavailable" }] as const;
+      }
+      try {
+        const a = analyze(read.bars, meta, read.id);
+        const rating: TimeframeRating = {
+          rating: a.summary.rating,
+          score: a.summary.score,
+          buy: a.summary.buy,
+          sell: a.summary.sell,
+          neutral: a.summary.neutral,
+          price: a.price,
+          provider: read.provider,
+        };
+        return [read.id, rating] as const;
+      } catch (err) {
+        return [read.id, { error: message(err) }] as const;
+      }
+    })
+  );
+}
+
+function pinSelectedRating(
+  ratings: Record<string, TimeframeRating>,
+  result: AnalysisResponse
+): Record<string, TimeframeRating> {
+  return {
+    ...ratings,
+    [result.timeframe]: {
+      rating: result.summary.rating,
+      score: result.summary.score,
+      buy: result.summary.buy,
+      sell: result.summary.sell,
+      neutral: result.summary.neutral,
+      price: result.price,
+      provider: result.provider,
+    },
+  };
+}
+
 // Compact verdict per timeframe, so the detail view can show every timeframe at
 // once without a second round of user input.
 async function ratingsForAllTimeframes(
   symbol: string,
   catalog: CatalogEntry[],
   settings: AnalysisSettings
-): Promise<Record<string, TimeframeRating>> {
+): Promise<{ timeframes: Record<string, TimeframeRating>; version: string }> {
   const meta = resolveMeta(symbol, catalog);
-  if (!meta) return {};
-  const entries = await mapPool(TIMEFRAMES, MAX_SWEEP, async (tf) => {
-    try {
-      const { bars, provider } = await getCandles(meta, tf.id, settings);
-      const a = analyze(bars, meta, tf.id);
-      const rating: TimeframeRating = {
-        rating: a.summary.rating,
-        score: a.summary.score,
-        buy: a.summary.buy,
-        sell: a.summary.sell,
-        neutral: a.summary.neutral,
-        price: a.price,
-        provider,
-      };
-      return [tf.id, rating] as const;
-    } catch (err) {
-      return [tf.id, { error: message(err) }] as const;
-    }
-  });
-  return Object.fromEntries(entries);
+  if (!meta) return { timeframes: {}, version: "unresolved" };
+  const reads = await readTimeframes(meta, settings);
+  return {
+    timeframes: ratingsFromReads(meta, reads),
+    version: reads.map((r) => `${r.id}=${r.version}`).join("|"),
+  };
 }
 
 /** Run `fn` over `items` with bounded concurrency, preserving input order. */

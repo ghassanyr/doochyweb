@@ -183,7 +183,7 @@ export const marketApi = {
     ),
 
   // Compact all-timeframe verdict for the card's MTF ribbon. Cached server-side
-  // for 60s; independent of the selected timeframe.
+  // until a timeframe's bars change; independent of the selected timeframe.
   confluence: (symbol: string) =>
     request<import("./market/types").ConfluenceResponse>(
       `/api/market/analysis/${encodeURIComponent(symbol)}/confluence`

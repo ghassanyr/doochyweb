@@ -9,7 +9,7 @@
 
 import { RATINGS } from "./ratings";
 import { timeframes } from "./timeframes";
-import type { Rating, TimeframeRating } from "./types";
+import type { MarketAnalysis, Rating, TimeframeRating } from "./types";
 
 export const CONFLUENCE_WEIGHTS: Record<string, number> = {
   "1m": 0.5,
@@ -64,6 +64,25 @@ function isBullish(rating: Rating): boolean {
 
 function isBearish(rating: Rating): boolean {
   return rating === "sell" || rating === "strong_sell";
+}
+
+export function pinSelectedTimeframe(
+  ratings: Record<string, TimeframeRating>,
+  analysis: Pick<MarketAnalysis, "timeframe" | "summary" | "price" | "provider">
+): Record<string, TimeframeRating> {
+  const summary = analysis.summary;
+  return {
+    ...ratings,
+    [analysis.timeframe]: {
+      rating: summary.rating,
+      score: summary.score,
+      buy: summary.buy,
+      sell: summary.sell,
+      neutral: summary.neutral,
+      price: analysis.price,
+      provider: analysis.provider,
+    },
+  };
 }
 
 /** Fold a per-timeframe rating map into one weighted verdict. */

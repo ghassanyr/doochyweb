@@ -9,6 +9,7 @@ import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
 import { SortableGrid } from "./SortableGrid";
+import { pinSelectedTimeframe } from "./confluence";
 import { applyOrder } from "./order";
 import { SymbolSearch } from "./SymbolSearch";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes";
@@ -112,7 +113,7 @@ export default function AnalysisPage({
           if (!r.ok) return r;
           const old = previous.get(r.symbol);
           if (old?.ok && old.timeframeRatings && r.timeframeRatings === undefined) {
-            return { ...r, timeframeRatings: old.timeframeRatings };
+            return { ...r, timeframeRatings: pinSelectedTimeframe(old.timeframeRatings, r) };
           }
           return r;
         });
@@ -139,7 +140,7 @@ export default function AnalysisPage({
         const next = prev.map((r) => {
           if (r.symbol !== symbol || !r.ok) return r;
           changed = true;
-          return { ...r, timeframeRatings: res.timeframes };
+          return { ...r, timeframeRatings: pinSelectedTimeframe(res.timeframes, r) };
         });
         return changed ? next : prev;
       });
@@ -190,14 +191,12 @@ export default function AnalysisPage({
     return () => window.clearInterval(poll);
   }, [load, refreshSeconds]);
 
-  // MTF confluence: deliberately NOT keyed to the selected timeframe. It
-  // restarts when the symbol set, sensitivity or cadence changes, and otherwise
-  // just polls alongside the main grid.
+  // MTF confluence: deliberately NOT keyed to the selected timeframe. It runs
+  // after each main sweep so both sides describe the same moment in time.
   useEffect(() => {
+    if (updatedAt === 0) return;
     void loadConfluence();
-    const poll = window.setInterval(() => void loadConfluence(), Math.max(10, refreshSeconds) * 1000);
-    return () => window.clearInterval(poll);
-  }, [loadConfluence, symbolsKey, strongRatio, refreshSeconds]);
+  }, [loadConfluence, updatedAt, symbolsKey, strongRatio, refreshSeconds]);
 
   // Countdown ticker. Lives in StatusLine so a tick re-renders only that strip
   // and not the whole grid.
@@ -261,7 +260,16 @@ export default function AnalysisPage({
       try {
         const result = await marketApi.refreshSymbol(symbol, timeframe);
         // Splice just this card in, so the rest of the grid is untouched.
-        setResults((prev) => prev.map((r) => (r.symbol === symbol ? result : r)));
+        setResults((prev) =>
+          prev.map((r) => {
+            if (r.symbol !== symbol) return r;
+            if (!result.ok) return result;
+            const ratings = result.timeframeRatings ?? (r.ok ? r.timeframeRatings : undefined);
+            return ratings
+              ? { ...result, timeframeRatings: pinSelectedTimeframe(ratings, result) }
+              : result;
+          })
+        );
         setError(null);
         void applyConfluence(symbol);
       } catch (err) {

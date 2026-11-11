@@ -22,7 +22,7 @@ import * as breaker from "../src/server/market/providers/breaker";
 import type { Candle, Timeframe } from "../src/server/market/types";
 import { applyOrder, moveTo, dropIndex } from "../src/webapp/src/market/order";
 import { changedSymbolCount, dayKey, dayLabel, fmtCaptureTime, groupChanges, matchesCapture, relativeTime } from "../src/webapp/src/market/captures";
-import { computeConfluence } from "../src/webapp/src/market/confluence";
+import { computeConfluence, pinSelectedTimeframe } from "../src/webapp/src/market/confluence";
 import { timeframes as uiTimeframes } from "../src/webapp/src/market/timeframes";
 import type { Rating as UiRating, TimeframeRating as UiTimeframeRating } from "../src/webapp/src/market/types";
 
@@ -1048,5 +1048,23 @@ describe("MTF confluence", () => {
       c.segments.map((s) => s.weight),
       [0.5, 0.6, 0.7, 0.9, 1, 1.1, 1.3, 1.6, 1.8, 2]
     );
+  });
+
+  test("the selected timeframe is pinned to the card while the aggregate stays weighted", () => {
+    const ratings = uniform("sell");
+    const pinned = pinSelectedTimeframe(ratings, {
+      timeframe: "4h",
+      summary: { buy: 15, sell: 2, neutral: 1, score: 0.72, rating: "strong_buy" },
+      price: 123.45,
+      provider: "ctrader",
+    });
+
+    assert.equal(pinned["4h"].rating, "strong_buy");
+    assert.equal(pinned["4h"].price, 123.45);
+    assert.equal(pinned["1h"].rating, "sell");
+
+    const c = computeConfluence(pinned, "4h");
+    assert.equal(c.segments.find((s) => s.id === "4h")?.rating, "strong_buy");
+    assert.equal(c.rating, "sell");
   });
 });

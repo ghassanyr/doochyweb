@@ -113,6 +113,12 @@ export interface BarsResult {
   cached: boolean;
   /** True when the source is updating this series but we served stored bars. */
   stale: boolean;
+  version: string;
+}
+
+function seriesVersion(pid: ProviderId, bars: Candle[], at: number): string {
+  const last = bars.length ? bars[bars.length - 1] : null;
+  return `${pid}:${bars.length}:${last?.time ?? 0}:${at}`;
 }
 
 export async function getCandles(
@@ -157,7 +163,14 @@ async function readThrough(
   const hot = cache.get(key);
   if (!force && hot && Date.now() - hot.at < tf.ttl * 1000) {
     breaker.recordSuccess(pid);
-    return { provider: pid, bars: hot.series, warnings, cached: true, stale: false };
+    return {
+      provider: pid,
+      bars: hot.series,
+      warnings,
+      cached: true,
+      stale: false,
+      version: seriesVersion(pid, hot.series, hot.at),
+    };
   }
 
   const freshAfter = Date.now() - tf.ttl * 1000;
@@ -171,19 +184,41 @@ async function readThrough(
       cache.set(key, { at: stored.fetchedAt, series: stored.bars });
       if (fresh) {
         breaker.recordSuccess(pid);
-        return { provider: pid, bars: stored.bars, warnings, cached: true, stale: false };
+        return {
+          provider: pid,
+          bars: stored.bars,
+          warnings,
+          cached: true,
+          stale: false,
+          version: seriesVersion(pid, stored.bars, stored.fetchedAt),
+        };
       }
       void refreshInBackground(pid, meta, tf, key, ref);
-      return { provider: pid, bars: stored.bars, warnings, cached: true, stale: true };
+      return {
+        provider: pid,
+        bars: stored.bars,
+        warnings,
+        cached: true,
+        stale: true,
+        version: seriesVersion(pid, stored.bars, stored.fetchedAt),
+      };
     }
   }
 
   // 3. Network. Nothing usable stored, so this one has to wait.
   const candles = await fetchFromSource(pid, meta, tf, settings, warnings, ref);
   if (!candles.length) return null;
-  cache.set(key, { at: Date.now(), series: candles });
+  const at = Date.now();
+  cache.set(key, { at, series: candles });
   void writePersist(ref, tf, candles).catch(() => {});
-  return { provider: pid, bars: candles, warnings, cached: false, stale: false };
+  return {
+    provider: pid,
+    bars: candles,
+    warnings,
+    cached: false,
+    stale: false,
+    version: seriesVersion(pid, candles, at),
+  };
 }
 
 /** Read the bars behind a resolved symbol, or null. */
