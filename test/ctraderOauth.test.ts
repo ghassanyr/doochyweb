@@ -4,44 +4,29 @@ import { afterEach, describe, test } from "node:test";
 import { signOAuthState, signToken, verifyOAuthState } from "../src/server/auth";
 import {
   buildAuthorizeUrl,
-  ctraderOAuthConfig,
+  ctraderOAuthConfigFrom,
   exchangeAuthorizationCode,
   type CtraderOAuthConfig,
 } from "../src/server/ctrader/oauth";
 
 const USER_ID = "507f1f77bcf86cd799439011";
 
-const ENV_KEYS = [
-  "CTRADER_CLIENT_ID",
-  "CTRADER_CLIENT_SECRET",
-  "CTRADER_REDIRECT_URI",
-  "CTRADER_OAUTH_SCOPE",
-] as const;
-
-const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (savedEnv[key] === undefined) delete process.env[key];
-    else process.env[key] = savedEnv[key];
-  }
   globalThis.fetch = originalFetch;
 });
 
-describe("ctraderOAuthConfig", () => {
+describe("ctraderOAuthConfigFrom", () => {
   test("stays disabled until both app credentials are present", () => {
-    delete process.env.CTRADER_CLIENT_ID;
-    delete process.env.CTRADER_CLIENT_SECRET;
-    delete process.env.CTRADER_REDIRECT_URI;
-    delete process.env.CTRADER_OAUTH_SCOPE;
+    assert.equal(ctraderOAuthConfigFrom({}), null);
+    assert.equal(ctraderOAuthConfigFrom({ clientId: "28457" }), null);
+    assert.equal(ctraderOAuthConfigFrom({ clientSecret: "secret" }), null);
+    assert.equal(ctraderOAuthConfigFrom({ clientId: "  ", clientSecret: "  " }), null);
+  });
 
-    assert.equal(ctraderOAuthConfig(), null);
-    process.env.CTRADER_CLIENT_ID = "28457";
-    assert.equal(ctraderOAuthConfig(), null);
-
-    process.env.CTRADER_CLIENT_SECRET = "secret";
-    const cfg = ctraderOAuthConfig();
+  test("applies the default callback and scope", () => {
+    const cfg = ctraderOAuthConfigFrom({ clientId: "28457", clientSecret: "secret" });
     assert.deepEqual(cfg, {
       clientId: "28457",
       clientSecret: "secret",
@@ -50,17 +35,25 @@ describe("ctraderOAuthConfig", () => {
     });
   });
 
-  test("honours overrides", () => {
-    process.env.CTRADER_CLIENT_ID = "1";
-    process.env.CTRADER_CLIENT_SECRET = "2";
-    process.env.CTRADER_REDIRECT_URI = "http://localhost:5173/api/ctrader/oauth/callback";
-    process.env.CTRADER_OAUTH_SCOPE = "accounts trading";
-    assert.deepEqual(ctraderOAuthConfig(), {
-      clientId: "1",
-      clientSecret: "2",
-      redirectUri: "http://localhost:5173/api/ctrader/oauth/callback",
-      scope: "accounts trading",
-    });
+  test("honours resolved overrides and trims whitespace", () => {
+    assert.deepEqual(
+      ctraderOAuthConfigFrom({
+        clientId: " 1 ",
+        clientSecret: " 2 ",
+        redirectUri: "http://localhost:5173/api/ctrader/oauth/callback",
+        scope: "accounts trading",
+      }),
+      {
+        clientId: "1",
+        clientSecret: "2",
+        redirectUri: "http://localhost:5173/api/ctrader/oauth/callback",
+        scope: "accounts trading",
+      }
+    );
+  });
+
+  test("ignores non-string resolved values", () => {
+    assert.equal(ctraderOAuthConfigFrom({ clientId: 1, clientSecret: true }), null);
   });
 });
 

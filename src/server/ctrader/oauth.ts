@@ -17,6 +17,7 @@ import { Router, type Request, type Response } from "express";
 
 import { authRequired, signOAuthState, verifyOAuthState, type AuthedRequest } from "../auth";
 import { loadCredentials, saveCredentials, type StoredAccount } from "../db";
+import { resolveIntegration } from "../integrations/store";
 import { discoverAccounts } from "./auth";
 import { userSockets } from "./connection";
 
@@ -34,21 +35,50 @@ export interface CtraderOAuthConfig {
   scope: string;
 }
 
-/** The platform-owned Open API app, or null when OAuth is not configured. */
-export function ctraderOAuthConfig(): CtraderOAuthConfig | null {
-  const clientId = process.env.CTRADER_CLIENT_ID?.trim() ?? "";
-  const clientSecret = process.env.CTRADER_CLIENT_SECRET?.trim() ?? "";
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Map resolved integration values to an OAuth config. Kept pure so the admin
+ * form preview and tests can exercise it without a database.
+ */
+export function ctraderOAuthConfigFrom(
+  values: Record<string, unknown>
+): CtraderOAuthConfig | null {
+  const clientId = text(values.clientId);
+  const clientSecret = text(values.clientSecret);
   if (!clientId || !clientSecret) return null;
   return {
     clientId,
     clientSecret,
-    redirectUri: process.env.CTRADER_REDIRECT_URI?.trim() || DEFAULT_REDIRECT_URI,
-    scope: process.env.CTRADER_OAUTH_SCOPE?.trim() || "trading",
+    redirectUri: text(values.redirectUri) || DEFAULT_REDIRECT_URI,
+    scope: text(values.scope) || "trading",
   };
 }
 
-export function ctraderOAuthAvailable(): boolean {
-  return ctraderOAuthConfig() !== null;
+/**
+ * The platform-owned Open API app, or null when OAuth is not configured.
+ * Database values win over the environment, so a buyer can configure the app
+ * from the admin panel; .env still bootstraps existing deployments.
+ */
+export async function ctraderOAuthConfig(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<CtraderOAuthConfig | null> {
+  const resolved = await resolveIntegration("ctrader", env);
+  return ctraderOAuthConfigFrom(resolved.values);
+}
+
+/** Availability check for the browser; corrupt stored secrets mean "off". */
+export async function ctraderOAuthAvailable(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<boolean> {
+  try {
+    return (await ctraderOAuthConfig(env)) !== null;
+  } catch (err: any) {
+    console.error("[cTrader OAuth] configuration could not be read:", err?.message ?? err);
+    return false;
+  }
 }
 
 /** Consent URL. State is echoed back by cTrader and binds the callback to a user. */
@@ -147,7 +177,14 @@ function redirectError(res: Response, code: string): void {
 
 /** Public callback: verify state, exchange the code, persist tokens + accounts. */
 export async function ctraderOAuthCallback(req: Request, res: Response): Promise<void> {
-  const cfg = ctraderOAuthConfig();
+  let cfg: CtraderOAuthConfig | null;
+  try {
+    cfg = await ctraderOAuthConfig();
+  } catch (err: any) {
+    console.error("[cTrader OAuth] configuration could not be read:", err?.message ?? err);
+    redirectError(res, "not_configured");
+    return;
+  }
   if (!cfg) {
     redirectError(res, "not_configured");
     return;
@@ -219,15 +256,20 @@ export async function ctraderOAuthCallback(req: Request, res: Response): Promise
 
 export const ctraderOAuthRouter = Router();
 
-ctraderOAuthRouter.post("/start", authRequired, (req: AuthedRequest, res: Response) => {
-  const cfg = ctraderOAuthConfig();
-  if (!cfg) {
+ctraderOAuthRouter.post("/start", authRequired, async (req: AuthedRequest, res: Response) => {
+  try {
+    const cfg = await ctraderOAuthConfig();
+    if (!cfg) {
+      res.status(503).json({ error: "cTrader OAuth is not configured" });
+      return;
+    }
+    const state = signOAuthState(req.userId!);
+    res.cookie(STATE_COOKIE, state, stateCookieOptions(req));
+    res.json({ url: buildAuthorizeUrl(cfg, state) });
+  } catch (err: any) {
+    console.error("[cTrader OAuth] start failed:", err?.message ?? err);
     res.status(503).json({ error: "cTrader OAuth is not configured" });
-    return;
   }
-  const state = signOAuthState(req.userId!);
-  res.cookie(STATE_COOKIE, state, stateCookieOptions(req));
-  res.json({ url: buildAuthorizeUrl(cfg, state) });
 });
 
 ctraderOAuthRouter.get("/callback", (req: Request, res: Response) => {

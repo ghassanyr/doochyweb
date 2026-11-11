@@ -122,7 +122,7 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
       // Enough for Settings to say which OpenAPI app is connected without ever
       // sending the secret, or even the whole client id, to the browser.
       clientIdMasked: creds ? maskClientId(creds.clientId) : null,
-      ctraderOAuth: ctraderOAuthAvailable(),
+      ctraderOAuth: await ctraderOAuthAvailable(),
       accounts,
     });
   } catch (err: any) {

@@ -10,7 +10,7 @@ import mongoose from "mongoose";
 
 import type { SignalView } from "../signals/types";
 import { TelegramApiError, sendMessage } from "./client";
-import { telegramConfig } from "./config";
+import { loadTelegramConfig, type TelegramConfig } from "./config";
 import { buildPublishedMessage, buildTestMessage, signalButtonUrl } from "./messages";
 import { TelegramDelivery, TelegramLink } from "./store";
 
@@ -36,7 +36,14 @@ export async function enqueueSignalPublished(
   signal: SignalView,
   now: Date = new Date()
 ): Promise<number> {
-  const config = telegramConfig();
+  let config: TelegramConfig;
+  try {
+    config = await loadTelegramConfig();
+  } catch (err) {
+    // A broken integration secret must not break signal publishing.
+    console.error(`[telegram] configuration could not be read: ${errorText(err)}`);
+    return 0;
+  }
   if (!config.enabled || !mongoose.isValidObjectId(signal.id)) return 0;
 
   const links = await TelegramLink.find({ notificationsEnabled: true })
@@ -77,7 +84,9 @@ export async function enqueueSignalPublished(
 
 /** Queue a one-off test message. Each call gets its own event key. */
 export async function enqueueTest(chatId: string, now: Date = new Date()): Promise<void> {
-  if (!telegramConfig().enabled) throw new Error("Telegram notifications are not configured");
+  if (!(await loadTelegramConfig()).enabled) {
+    throw new Error("Telegram notifications are not configured");
+  }
   await TelegramDelivery.create({
     signalId: null,
     event: `test:${randomUUID()}`,
@@ -104,7 +113,14 @@ export interface OutboxRun {
  * without starting the timer.
  */
 export async function processOutboxOnce(now: Date = new Date()): Promise<OutboxRun> {
-  if (!telegramConfig().enabled) return { sent: 0, failed: 0, retried: 0 };
+  let config: TelegramConfig;
+  try {
+    config = await loadTelegramConfig();
+  } catch (err) {
+    console.error(`[telegram] configuration could not be read: ${errorText(err)}`);
+    return { sent: 0, failed: 0, retried: 0 };
+  }
+  if (!config.enabled) return { sent: 0, failed: 0, retried: 0 };
 
   const due = await TelegramDelivery.find({ status: "pending", nextAttemptAt: { $lte: now } })
     .sort({ nextAttemptAt: 1 })

@@ -12,7 +12,7 @@ import {
   setMyCommands,
   type TelegramUpdate,
 } from "./client";
-import { telegramConfig } from "./config";
+import { loadTelegramConfig } from "./config";
 import { consumeLinkCode, isValidLinkCodeFormat, normalizeLinkCode } from "./link";
 import {
   buildAlreadyLinkedMessage,
@@ -138,7 +138,7 @@ export async function handleUpdate(update: TelegramUpdate, log: (msg: string) =>
     username: from?.username ?? null,
     firstName: from?.first_name ?? null,
   };
-  const config = telegramConfig();
+  const config = await loadTelegramConfig();
   const settingsUrl = `${config.baseUrl}/settings`;
 
   await touchLink(chatId).catch(() => undefined);
@@ -225,7 +225,7 @@ let stopFn: (() => void) | null = null;
 /** Start the long-poll loop. Idempotent; failures are logged, never thrown. */
 export async function startPolling(log: (msg: string) => void = console.log): Promise<void> {
   if (stopFn) return;
-  const config = telegramConfig();
+  const config = await loadTelegramConfig();
   if (!config.enabled || config.mode !== "polling") return;
 
   const me = await getMe();

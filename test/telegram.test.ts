@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 import type { SignalView } from "../src/server/signals/types";
 import { parseCommand } from "../src/server/telegram/bot";
-import { telegramConfig, telegramDeepLink } from "../src/server/telegram/config";
+import { telegramConfig, telegramConfigFromValues, telegramDeepLink } from "../src/server/telegram/config";
 import {
   generateLinkCode,
   hashLinkCode,
@@ -76,6 +76,33 @@ describe("telegram config", () => {
     });
     assert.equal(config.mode, "webhook");
     assert.equal(config.linkTtlMinutes, 60);
+  });
+
+  test("accepts resolved integration values", () => {
+    const config = telegramConfigFromValues({
+      botToken: " 123:abc ",
+      botUsername: "@MyBot",
+      mode: "webhook",
+      baseUrl: "https://example.com/",
+      enabled: true,
+      linkTtlMinutes: 5,
+    });
+    assert.deepEqual(config, {
+      enabled: true,
+      token: "123:abc",
+      mode: "webhook",
+      botUsername: "MyBot",
+      baseUrl: "https://example.com",
+      linkTtlMinutes: 5,
+    });
+  });
+
+  test("stays disabled when the database flag is off", () => {
+    const config = telegramConfigFromValues({
+      botToken: "123:abc",
+      enabled: false,
+    });
+    assert.equal(config.enabled, false);
   });
 });
 

@@ -5,7 +5,7 @@
 // message. All failures are normalized to TelegramApiError with the token
 // redacted.
 
-import { telegramConfig } from "./config";
+import { loadTelegramConfig } from "./config";
 
 export interface TelegramUser {
   id: number;
@@ -47,7 +47,7 @@ async function apiCall<T>(
   payload: Record<string, unknown> = {},
   opts: { timeoutMs?: number; signal?: AbortSignal } = {}
 ): Promise<T> {
-  const config = telegramConfig();
+  const config = await loadTelegramConfig();
   if (!config.token) throw new TelegramApiError("Telegram bot token is not configured", 0);
 
   const controller = new AbortController();

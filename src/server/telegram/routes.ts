@@ -4,7 +4,7 @@
 import { Router, type Response } from "express";
 
 import { authRequired, type AuthedRequest } from "../auth";
-import { telegramConfig, telegramDeepLink } from "./config";
+import { loadTelegramConfig, telegramDeepLink } from "./config";
 import { createLinkCode } from "./link";
 import { enqueueTest } from "./notify";
 import {
@@ -35,16 +35,16 @@ function fail(res: Response, err: unknown, fallback: string): void {
 }
 
 telegramRouter.post("/link", authRequired, async (req: AuthedRequest, res) => {
-  const config = telegramConfig();
-  if (!config.enabled) {
-    res.status(503).json({ error: "Telegram notifications are not configured" });
-    return;
-  }
-  if (!allow(`link:${req.userId}`, 5, 60 * 60_000)) {
-    res.status(429).json({ error: "Too many codes requested. Try again later." });
-    return;
-  }
   try {
+    const config = await loadTelegramConfig();
+    if (!config.enabled) {
+      res.status(503).json({ error: "Telegram notifications are not configured" });
+      return;
+    }
+    if (!allow(`link:${req.userId}`, 5, 60 * 60_000)) {
+      res.status(429).json({ error: "Too many codes requested. Try again later." });
+      return;
+    }
     const { code, expiresAt } = await createLinkCode(req.userId!, config.linkTtlMinutes);
     res.json({
       code,
@@ -59,7 +59,7 @@ telegramRouter.post("/link", authRequired, async (req: AuthedRequest, res) => {
 
 telegramRouter.get("/status", authRequired, async (req: AuthedRequest, res) => {
   try {
-    const config = telegramConfig();
+    const config = await loadTelegramConfig();
     const link = await findLinkByUserId(req.userId!);
     res.json({
       enabled: config.enabled,
@@ -104,15 +104,15 @@ telegramRouter.patch("/prefs", authRequired, async (req: AuthedRequest, res) => 
 });
 
 telegramRouter.post("/test", authRequired, async (req: AuthedRequest, res) => {
-  if (!telegramConfig().enabled) {
-    res.status(503).json({ error: "Telegram notifications are not configured" });
-    return;
-  }
-  if (!allow(`test:${req.userId}`, 3, 10 * 60_000)) {
-    res.status(429).json({ error: "Too many test messages. Try again later." });
-    return;
-  }
   try {
+    if (!(await loadTelegramConfig()).enabled) {
+      res.status(503).json({ error: "Telegram notifications are not configured" });
+      return;
+    }
+    if (!allow(`test:${req.userId}`, 3, 10 * 60_000)) {
+      res.status(429).json({ error: "Too many test messages. Try again later." });
+      return;
+    }
     const link = await findLinkByUserId(req.userId!);
     if (!link) {
       res.status(404).json({ error: "Telegram is not linked" });
