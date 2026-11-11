@@ -109,11 +109,11 @@ export default function HomePage({
               </RouteLink>
               {signedIn ? (
                 <RouteLink
-                  view="trading"
+                  view="signals"
                   onNavigate={onNavigate}
                   className={buttonClass("secondary", "lg")}
                 >
-                  Open Trading
+                  Open Signals
                 </RouteLink>
               ) : (
                 <Button variant="secondary" size="lg" onClick={onRegister}>
