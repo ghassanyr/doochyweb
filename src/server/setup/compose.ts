@@ -122,6 +122,13 @@ export function ensureComposeFile(
   return { written: true, backup };
 }
 
+export function validateCompose(filePath: string): CommandResult {
+  return runDocker(
+    ["compose", "-f", filePath, "--project-directory", path.dirname(filePath), "config", "-q"],
+    { timeoutMs: 15000 }
+  );
+}
+
 export function startCompose(filePath: string): CommandResult {
   return runDocker([
     "compose",

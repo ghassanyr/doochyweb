@@ -1,6 +1,6 @@
 // Read-only diagnostics for an existing installation.
 //
-// pnpm doochy:setup:check answers "why is the app not starting?" without changing any
+// pnpm doochy:check answers "why is the app not starting?" without changing any
 // file or database. It exits non-zero when a required check fails.
 
 import fs from "node:fs";
@@ -15,6 +15,7 @@ import {
   MONGO_CONTAINER,
   containerHealth,
   detectDocker,
+  validateCompose,
 } from "./compose";
 import { checkMongo, isMongoUri, MONGO_DB_NAME, redactMongoUri } from "./mongo";
 import { isUsableJwtSecret, isValidEncryptionKey } from "./secrets";
@@ -198,6 +199,13 @@ export async function runDoctor(repoRoot: string): Promise<number> {
       push(results, "Docker daemon", "fail", "docker is installed but not running");
     } else {
       push(results, "Docker daemon", "pass", "running");
+      const valid = validateCompose(composePath);
+      push(
+        results,
+        "Compose file",
+        valid.ok ? "pass" : "fail",
+        valid.ok ? composePath : valid.output || "docker compose config failed"
+      );
       const health = containerHealth(MONGO_CONTAINER);
       push(
         results,

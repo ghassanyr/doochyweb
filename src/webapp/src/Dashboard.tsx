@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AccountView } from "./api";
 import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
-import { Card, Toggle, accountColorHex } from "./components/ui";
+import { Card, accountColorHex } from "./components/ui";
 import { FadeRise } from "./components/motion";
 
 export type ViewMode = "separate" | "combined";
-const MODE_KEY = "doochyweb_mode";
 
 const PAGES = [
   { key: "positions", label: "Positions" },
@@ -25,98 +24,103 @@ export default function Dashboard({
   accounts: AccountView[];
   isAdmin: boolean;
 }) {
-  const [selectedCtid, setSelectedCtid] = useState<number | null>(null);
-  const [mode, setMode] = useState<ViewMode>(() =>
-    localStorage.getItem(MODE_KEY) === "combined" ? "combined" : "separate"
-  );
-
-  function switchMode(next: ViewMode) {
-    setMode(next);
-    localStorage.setItem(MODE_KEY, next);
-  }
+  const [selectedCtids, setSelectedCtids] = useState<number[]>(() => {
+    const preferred = accounts.find((a) => a.isLive) ?? accounts[0];
+    return preferred ? [preferred.ctid] : [];
+  });
+  const initialized = useRef(selectedCtids.length > 0);
 
   // Default to the first live account once, when accounts first arrive.
   useEffect(() => {
-    if (selectedCtid || accounts.length === 0) return;
+    if (initialized.current || accounts.length === 0) return;
+    initialized.current = true;
     const preferred = accounts.find((a) => a.isLive) ?? accounts[0];
-    setSelectedCtid(preferred.ctid);
-  }, [accounts, selectedCtid]);
+    setSelectedCtids([preferred.ctid]);
+  }, [accounts]);
 
-  const selected = accounts.find((a) => a.ctid === selectedCtid) ?? null;
+  const activeAccounts = accounts.filter((a) => selectedCtids.includes(a.ctid));
+  const allSelected = accounts.length > 0 && activeAccounts.length === accounts.length;
+  const single = activeAccounts.length === 1 ? activeAccounts[0] : null;
+
+  function toggleAccount(ctid: number) {
+    setSelectedCtids((prev) =>
+      prev.includes(ctid) ? prev.filter((id) => id !== ctid) : [...prev, ctid]
+    );
+  }
 
   return (
     <FadeRise>
       <div className="space-y-5">
         <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-2">
-              <span className="text-sm font-medium text-fg-muted">Account</span>
-              {mode === "combined" && (
-                <button type="button" aria-pressed className={accountPillCls(true)}>
-                  All accounts
-                </button>
-              )}
-              {accounts.map((a) => {
-                const active = mode === "separate" && a.ctid === selectedCtid;
-                const hex = accountColorHex(a.color);
-                return (
-                  <button
-                    key={a.ctid}
-                    type="button"
-                    onClick={() => {
-                      switchMode("separate");
-                      setSelectedCtid(a.ctid);
-                    }}
-                    aria-pressed={active}
-                    title={accountTitle(a)}
-                    className={accountPillCls(active)}
-                  >
-                    {hex && (
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ background: hex }}
-                      />
-                    )}
-                    <span className="max-w-[14rem] truncate">{a.nickname?.trim() || a.login}</span>
-                    <span className={"truncate " + (active ? "opacity-80" : "text-fg-faint")}>
-                      · {a.broker}
-                    </span>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+            <span className="text-sm font-medium text-fg-muted">Account</span>
+            <button
+              type="button"
+              onClick={() => setSelectedCtids(accounts.map((a) => a.ctid))}
+              aria-pressed={allSelected}
+              className={accountPillCls(allSelected)}
+            >
+              All accounts
+            </button>
+            {accounts.map((a) => {
+              const active = selectedCtids.includes(a.ctid);
+              const hex = accountColorHex(a.color);
+              return (
+                <button
+                  key={a.ctid}
+                  type="button"
+                  onClick={() => toggleAccount(a.ctid)}
+                  aria-pressed={active}
+                  title={accountTitle(a)}
+                  className={accountPillCls(active)}
+                >
+                  {hex && (
                     <span
-                      className={
-                        "shrink-0 text-[9.5px] font-semibold uppercase tracking-wide " +
-                        (active ? "opacity-70" : "text-fg-faint")
-                      }
-                    >
-                      {a.isLive ? "Live" : "Demo"}
-                    </span>
-                  </button>
-                );
-              })}
-              {accounts.length === 0 && (
-                <span className="text-sm text-fg-faint">No accounts</span>
-              )}
-            </div>
-            <Toggle
-              label="Combined"
-              checked={mode === "combined"}
-              onToggle={(c) => switchMode(c ? "combined" : "separate")}
-            />
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: hex }}
+                    />
+                  )}
+                  <span className="max-w-[14rem] truncate">{a.nickname?.trim() || a.login}</span>
+                  <span className={"truncate " + (active ? "opacity-80" : "text-fg-faint")}>
+                    · {a.broker}
+                  </span>
+                  <span
+                    className={
+                      "shrink-0 text-[9.5px] font-semibold uppercase tracking-wide " +
+                      (active ? "opacity-70" : "text-fg-faint")
+                    }
+                  >
+                    {a.isLive ? "Live" : "Demo"}
+                  </span>
+                </button>
+              );
+            })}
+            {accounts.length === 0 && (
+              <span className="text-sm text-fg-faint">No accounts</span>
+            )}
           </div>
         </Card>
 
-        {(mode === "combined" && accounts.length > 0) || selected ? (
-          <Tabs
-            mode={mode}
-            accounts={accounts}
-            ctid={selected?.ctid ?? null}
-            isLive={selected?.isLive ?? false}
-            isAdmin={isAdmin}
-          />
-        ) : (
+        {accounts.length === 0 ? (
           <Card className="p-8 text-center">
             <div className="text-sm text-fg-muted">No cTrader accounts found.</div>
             <div className="mt-1 text-xs text-fg-faint">Check your credentials.</div>
           </Card>
+        ) : activeAccounts.length === 0 ? (
+          <Card className="p-8 text-center">
+            <div className="text-sm text-fg-muted">Select an account.</div>
+            <div className="mt-1 text-xs text-fg-faint">
+              Use the account pills above, or choose All accounts.
+            </div>
+          </Card>
+        ) : (
+          <Tabs
+            mode={activeAccounts.length > 1 ? "combined" : "separate"}
+            accounts={activeAccounts}
+            ctid={single?.ctid ?? null}
+            isLive={single?.isLive ?? false}
+            isAdmin={isAdmin}
+          />
         )}
       </div>
     </FadeRise>

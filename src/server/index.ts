@@ -560,5 +560,15 @@ async function main() {
 
 main().catch((err) => {
   console.error("[SERVER] Fatal:", err);
+  const message = err instanceof Error ? err.message : String(err);
+  if (
+    /MongooseServerSelectionError|ECONNREFUSED|Server selection timed out|ENOTFOUND|Authentication failed/i.test(
+      message
+    )
+  ) {
+    console.error(
+      "[SERVER] MongoDB is not reachable. Run `pnpm doochy:setup` to configure it, or `pnpm doochy:check` to diagnose."
+    );
+  }
   process.exit(1);
 });

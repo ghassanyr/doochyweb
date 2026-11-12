@@ -117,6 +117,13 @@ describe("setup secrets", () => {
     assert.notEqual(generateJwtSecret(), jwt);
   });
 
+  test("rejects short JWT secrets", () => {
+    assert.equal(isUsableJwtSecret(""), false);
+    assert.equal(isUsableJwtSecret("short"), false);
+    assert.equal(isUsableJwtSecret("x".repeat(31)), false);
+    assert.equal(isUsableJwtSecret("x".repeat(32)), true);
+  });
+
   test("rejects invalid encryption keys", () => {
     assert.equal(isValidEncryptionKey(""), false);
     assert.equal(isValidEncryptionKey("not-base64"), false);

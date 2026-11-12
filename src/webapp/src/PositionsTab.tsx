@@ -167,7 +167,7 @@ export default function PositionsTab({
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Badge tone={combined ? "muted" : isLive ? "accent" : "muted"}>
-            {combined ? "ALL" : isLive ? "LIVE" : "DEMO"}
+            {combined ? "MULTI" : isLive ? "LIVE" : "DEMO"}
           </Badge>
           <span className="truncate text-sm font-medium text-fg-muted">{accountLabel}</span>
           <span className="text-xs text-fg-faint">
@@ -318,8 +318,16 @@ export default function PositionsTab({
 }
 
 function selectedLabel(accounts: AccountView[], ctid: number | null): string {
+  if (ctid == null) {
+    if (accounts.length === 0) return "No account";
+    if (accounts.length === 1) {
+      const only = accounts[0];
+      return `${only.nickname?.trim() || only.login} · ${only.broker}`;
+    }
+    return `${accounts.length} accounts selected`;
+  }
   const a = accounts.find((x) => x.ctid === ctid);
-  if (!a) return ctid != null ? `Account #${ctid}` : "No account";
+  if (!a) return `Account #${ctid}`;
   return `${a.nickname?.trim() || a.login} · ${a.broker}`;
 }
 

@@ -25,6 +25,7 @@ import {
   ensureComposeFile,
   readComposePort,
   startCompose,
+  validateCompose,
   waitForMongoHealthy,
 } from "./compose";
 import { mergeEnvFile, parseEnv, renderNewEnvFile, writeEnvFile } from "./envFile";
@@ -361,16 +362,33 @@ async function runSetup(options: Options, prompter: Prompter): Promise<void> {
       throw new Error("Docker is installed but not running. Start Docker and try again.");
     }
 
-    let mongoPort = options.mongoPort ?? 27017;
-    if (fs.existsSync(COMPOSE_PATH) && !options.force) {
-      const composePort = readComposePort(COMPOSE_PATH);
-      if (composePort) {
-        if (options.mongoPort && options.mongoPort !== composePort) {
-          throw new Error(
-            `The existing ${COMPOSE_FILE} publishes port ${composePort}. Use --force to rewrite it with ${options.mongoPort}.`
-          );
-        }
-        mongoPort = composePort;
+    const existingCompose = fs.existsSync(COMPOSE_PATH) && !options.force;
+    const composePort = existingCompose ? readComposePort(COMPOSE_PATH) : null;
+    let mongoPort = options.mongoPort ?? composePort ?? 27017;
+
+    if (composePort && options.mongoPort && options.mongoPort !== composePort) {
+      throw new Error(
+        `The existing ${COMPOSE_FILE} publishes port ${composePort}. Use --force to rewrite it with ${options.mongoPort}.`
+      );
+    }
+    if (existingCompose && !composePort) {
+      throw new Error(
+        `Could not read the MongoDB port from ${COMPOSE_FILE}. Use --mongo-port or --force.`
+      );
+    }
+    if (!existingCompose && !options.mongoPort && !options.yes) {
+      mongoPort = parsePort(
+        await prompter.ask("MongoDB port", String(mongoPort)),
+        "MongoDB port"
+      );
+    }
+
+    if (existingCompose) {
+      const valid = validateCompose(COMPOSE_PATH);
+      if (!valid.ok) {
+        throw new Error(
+          `${COMPOSE_FILE} is not valid:\n${valid.output}\nFix it or re-run with --force.`
+        );
       }
     }
 
