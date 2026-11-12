@@ -135,6 +135,16 @@ export interface OrderPreview {
   warnings: string[];
 }
 
+// Live bid/ask for one symbol on one account. `time` is the broker tick's epoch
+// milliseconds, so the ticket can tell a fresh quote from the last one seen.
+export interface SymbolQuote {
+  symbol: string;
+  bid: number;
+  ask: number;
+  digits: number;
+  time: number;
+}
+
 export interface WriteResult {
   ok: boolean;
   note?: string;
@@ -570,6 +580,11 @@ export const api = {
   orders: (ctid: number) => request<{ orders: OrderRow[] }>(`/api/accounts/${ctid}/orders`),
 
   accountSymbols: (ctid: number) => request<{ symbols: string[] }>(`/api/accounts/${ctid}/symbols`),
+
+  accountQuote: (ctid: number, symbol: string) =>
+    request<{ quote: SymbolQuote | null }>(
+      `/api/accounts/${ctid}/quote?symbol=${encodeURIComponent(symbol)}`
+    ),
 
   setPrefs: (ctid: number, prefs: { nickname?: string; color?: string | null }, token?: string) =>
     request<{ ok: boolean }>(`/api/accounts/${ctid}/prefs`, {

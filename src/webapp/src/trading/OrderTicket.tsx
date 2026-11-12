@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { AlertTriangle, Check, Search } from "lucide-react";
-import { api, AccountView, OrderKind, OrderPreview, Side } from "../api";
+import { api, AccountView, OrderKind, OrderPreview, Side, SymbolQuote } from "../api";
 import { fmtMoney } from "../Dashboard";
 import { accountColorHex, Button, Metric } from "../components/ui";
 import { ConfirmModal, ModalShell, Seg, TicketField, posNum } from "./ui";
@@ -58,6 +58,9 @@ export default function OrderTicket({
   const [accountSymbols, setAccountSymbols] = useState<Record<number, string[]>>({});
   const [symbolsLoading, setSymbolsLoading] = useState<Record<number, boolean>>({});
   const [symbolsErr, setSymbolsErr] = useState<Record<number, string>>({});
+  // Latest bid/ask per selected account for the chosen symbol. Quotes can differ
+  // between brokers (and live vs demo), so they are kept per account and polled.
+  const [quotes, setQuotes] = useState<Record<number, SymbolQuote | null>>({});
 
   const selectedKey = selectedCtids.join(",");
 
@@ -154,6 +157,7 @@ export default function OrderTicket({
       setTp("");
       setPreviews({});
       setPreviewErrs({});
+      setQuotes({});
       setStatus(null);
       setConfirm(false);
       setSymQuery("");
@@ -215,6 +219,42 @@ export default function OrderTicket({
     if (!open || availableSymbols.length === 0) return;
     setSymbol((cur) => (availableSymbols.includes(cur) ? cur : availableSymbols[0] ?? ""));
   }, [open, availableSymbols]);
+
+  // Poll the live price for the chosen symbol(s) while the ticket is open. The
+  // spot stream is cached server-side, so a poll is a cheap read once the symbol
+  // has been subscribed; the first call waits briefly for the opening tick.
+  useEffect(() => {
+    if (!open || !symbol || selectedCtids.length === 0) {
+      setQuotes({});
+      return;
+    }
+    let alive = true;
+    let inflight = false;
+    const ctids = [...selectedCtids];
+    setQuotes({});
+
+    async function tick() {
+      if (inflight) return;
+      inflight = true;
+      const settled = await Promise.allSettled(ctids.map((id) => api.accountQuote(id, symbol)));
+      inflight = false;
+      if (!alive) return;
+      const next: Record<number, SymbolQuote | null> = {};
+      settled.forEach((result, i) => {
+        next[ctids[i]] = result.status === "fulfilled" ? result.value.quote : null;
+      });
+      setQuotes(next);
+    }
+
+    void tick();
+    const timer = window.setInterval(() => void tick(), 3000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+    // Only the chosen symbol and account set restart the poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, symbol, selectedKey]);
 
   useEffect(() => {
     return () => {
@@ -349,6 +389,14 @@ export default function OrderTicket({
 
   const canPlace = ready && allPreviewed && !previewing;
   const multiple = selectedCtids.length > 1;
+  const singleQuote = selectedCtids.length === 1 ? (quotes[selectedCtids[0]] ?? null) : null;
+  const singlePrice =
+    singleQuote != null
+      ? side === "BUY"
+        ? singleQuote.ask || singleQuote.bid
+        : singleQuote.bid || singleQuote.ask
+      : null;
+  const quoteFresh = singleQuote != null && Date.now() - singleQuote.time < 15_000;
   const allSelected = accounts.length > 0 && selectedCtids.length === accounts.length;
   const subtitle =
     selectedCtids.length === 1
@@ -499,6 +547,56 @@ export default function OrderTicket({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Live price for the chosen symbol */}
+            <div className="rounded-md border border-hairline bg-canvas/60 px-3 py-2">
+              {multiple ? (
+                <>
+                  <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-fg-muted">
+                    <span>Live price</span>
+                    <span className="text-fg-faint">Bid / Ask</span>
+                  </div>
+                  <div className="space-y-1">
+                    {selectedCtids.map((id) => {
+                      const q = quotes[id];
+                      return (
+                        <div key={id} className="flex items-center justify-between gap-2 text-xs">
+                          <span className="min-w-0 truncate text-fg-muted">{accountName(accounts, id)}</span>
+                          {q ? (
+                            <span className="shrink-0 tabular-nums text-fg">
+                              {fmtQuote(q.bid, q.digits)} / {fmtQuote(q.ask, q.digits)}
+                            </span>
+                          ) : (
+                            <span className="shrink-0 text-fg-faint">waiting…</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="flex items-center gap-1.5 font-medium text-fg-muted">
+                    <span
+                      className={"h-1.5 w-1.5 rounded-full " + (quoteFresh ? "bg-success" : "bg-fg-faint")}
+                      title={quoteFresh ? "Live" : "Last tick"}
+                    />
+                    {side === "BUY" ? "Buy at" : "Sell at"}
+                  </span>
+                  {singleQuote && singlePrice != null ? (
+                    <span className="flex items-baseline gap-3 tabular-nums">
+                      <span className="text-sm font-semibold text-fg">{fmtQuote(singlePrice, singleQuote.digits)}</span>
+                      <span className="text-[11px] text-fg-faint">
+                        Bid {fmtQuote(singleQuote.bid, singleQuote.digits)} · Ask{" "}
+                        {fmtQuote(singleQuote.ask, singleQuote.digits)}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-fg-faint">waiting for a live quote…</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Direction + order type */}
@@ -688,6 +786,11 @@ function accountFullLabel(accounts: AccountView[], ctid: number): string {
 function fmtPrice(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "-";
   return String(n);
+}
+
+function fmtQuote(n: number | null | undefined, digits: number): string {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return n.toFixed(Math.max(0, Math.min(8, digits)));
 }
 
 function FlashInputError({ text }: { text: string }) {

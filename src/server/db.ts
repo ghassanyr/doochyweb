@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const MONGO_URI = () => process.env.MONGO_URI || "mongodb://127.0.0.1:27017";
-const MONGO_DB = () => process.env.MONGO_DB || "doochyweb";
+const MONGO_DB = () => process.env.MONGO_DB || "doochy";
 
 export async function connectDb(): Promise<void> {
   await mongoose.connect(MONGO_URI(), { dbName: MONGO_DB() });

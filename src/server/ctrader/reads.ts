@@ -113,6 +113,34 @@ export async function resolveTradableSymbol(
   return { symbolId, spec: specFor(meta, symbolId) };
 }
 
+export interface SymbolQuote {
+  symbol: string;
+  bid: number;
+  ask: number;
+  digits: number;
+  time: number;
+}
+
+// Latest live bid/ask for one symbol on an account. Reads the cached spot when
+// the stream is already open (the order ticket polls this) and otherwise
+// subscribes and waits briefly for the first tick, like the order preview.
+// Returns null when the symbol is unknown or no tick arrives.
+export async function symbolQuote(
+  userId: string,
+  ctid: number,
+  isLive: boolean,
+  name: string
+): Promise<SymbolQuote | null> {
+  const symbol = name.trim().toUpperCase();
+  if (!symbol) return null;
+  const env = envFor(isLive);
+  const resolved = await resolveTradableSymbol(userId, env, ctid, symbol);
+  if (!resolved) return null;
+  const quote = await userSockets(userId).waitForQuote(env, ctid, resolved.symbolId, 1200);
+  if (!quote) return null;
+  return { symbol, bid: quote.bid, ask: quote.ask, digits: resolved.spec.digits ?? 0, time: quote.time };
+}
+
 // USD conversion factor for a symbol's quote currency at the current cached
 // spot (1 for USD-quoted symbols, or when no conversion pair exists yet).
 // Used by the order-ticket preview so risk figures land in USD like the

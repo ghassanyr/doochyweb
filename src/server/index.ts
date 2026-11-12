@@ -9,7 +9,7 @@ import { userSockets } from "./ctrader/connection";
 import { ctraderAppCredentials } from "./ctrader/appConfig";
 import { discoverAccounts } from "./ctrader/auth";
 import { ctraderOAuthAvailable, ctraderOAuthCallback, ctraderOAuthRouter } from "./ctrader/oauth";
-import { reconcileAccount, listAccounts, listTradableNames } from "./ctrader/reads";
+import { reconcileAccount, listAccounts, listTradableNames, symbolQuote } from "./ctrader/reads";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
 import { signalsRouter } from "./signals/routes";
@@ -273,6 +273,34 @@ app.get("/api/accounts/:ctid/symbols", authRequired, async (req: AuthedRequest, 
     }
     const symbols = await listTradableNames(req.userId!, account.isLive ? "live" : "demo", ctid);
     res.json({ symbols: [...symbols].sort((a, b) => a.localeCompare(b)) });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message ?? "failed" });
+  }
+});
+
+// Latest live bid/ask for one symbol, used by the order ticket to show the
+// current price while the admin fills in levels. Returns quote:null rather
+// than an error when the stream has not ticked yet.
+app.get("/api/accounts/:ctid/quote", authRequired, async (req: AuthedRequest, res: Response) => {
+  try {
+    const ctid = Number(req.params.ctid);
+    if (!Number.isFinite(ctid) || ctid <= 0) {
+      res.status(400).json({ error: "invalid account id" });
+      return;
+    }
+    const creds = await loadCredentials(req.userId!);
+    const account = creds?.accounts.find((a) => a.ctid === ctid);
+    if (!account) {
+      res.status(404).json({ error: "account not found" });
+      return;
+    }
+    const symbol = String(req.query.symbol ?? "").trim();
+    if (!symbol) {
+      res.status(400).json({ error: "symbol is required" });
+      return;
+    }
+    const quote = await symbolQuote(req.userId!, ctid, account.isLive, symbol);
+    res.json({ quote });
   } catch (err: any) {
     res.status(502).json({ error: err.message ?? "failed" });
   }

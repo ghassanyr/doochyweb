@@ -28,12 +28,11 @@ Open API app credentials once; the app discovers every account under that grant
 - **Dual demo/live, no toggle.** Each account self-classifies (`isLive`) from the
   account-list call; Doochy routes it to the correct host automatically. One
   credential set exposes all accounts of the cTrader ID.
-- **Database:** reuse the running `mongo` Docker container on `127.0.0.1:27017`
-  (mongo:7.0). The container was previously used by an inactive project; its
-  DBs are being purged by the owner (backup already taken). Doochy gets its
-  **own database** in that container, name `doochyweb`. Connection via
-  `MONGO_URI` + `MONGO_DB` env vars. The owner handles the server-side DB
-  cleanup; the app just connects.
+- **Database:** `pnpm doochy:setup` can start the bundled `mongo:7.0` container with
+  `docker compose up -d`, or connect to an existing MongoDB. Doochy uses its
+  **own database**, name `doochy`. Connection via `MONGO_URI` + `MONGO_DB` env
+  vars. The bundled container publishes `127.0.0.1:27017` only and runs without
+  authentication. Revisit that before exposing the host or sharing the server.
 - **User management:** open self-registration (username + password, bcrypt,
   JWT). Temporary, minimal hardening. Do **not** log secrets/tokens anywhere.
 - **Domain:** `doochy.net` (not yet owned, being purchased). Deploy/nginx step
@@ -207,7 +206,7 @@ GET  /api/accounts/:ctid/orders      → mapped reconcile rows (pending orders)
 - Balance (optional): `ProtoOATraderReq { ctidTraderAccountId }` →
   `trader.balance` / `10^moneyDigits`, per account on connect or on request.
 
-## 6. Data model (Mongo, db `doochyweb`)
+## 6. Data model (Mongo, db `doochy`)
 
 ```
 users        { username (unique), passwordHash (bcrypt), createdAt }
@@ -236,13 +235,15 @@ credentials  { userId, clientId, clientSecret, accessToken, refreshToken,
 
 ## 8. Deploy / run
 
-1. Scaffold `/home/san/doochyweb` per §3; `pnpm install`.
-2. `.env`: `PORT=9111`, `MONGO_URI=mongodb://127.0.0.1:27017`,
-   `MONGO_DB=doochyweb`, `JWT_SECRET=<generated>`.
+1. Scaffold the repo per §3; `pnpm install`.
+2. `pnpm doochy:setup` starts MongoDB with Docker (or connects to an existing one),
+   generates the secrets, writes `.env`, and can create the first admin.
 3. `pnpm build` (tsc + vite) → `dist/server/index.js` serving `webapp/dist`.
 4. Smoke test locally on `127.0.0.1:9111`: register → connect credentials →
    accounts appear → tabs populate for both a demo and a live account.
-5. pm2: `doochyweb` (node `dist/server/index.js`, listen 127.0.0.1:9111).
+5. `pm2 start ecosystem.config.cjs` (process name `doochyweb`, listens on
+   127.0.0.1:9111). The config uses its own directory, so it is not tied to one
+   machine's path.
 6. When `doochy.net` is owned: DNS + nginx `server` block
    (`server_name doochy.net; location / { proxy_pass http://127.0.0.1:9111; }`)
    + `certbot --nginx -d doochy.net`. Certbot is already in use on this box.

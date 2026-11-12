@@ -41,7 +41,7 @@ Use the repo `.env`; never commit it.
 | Variable | Purpose |
 |---|---|
 | `MONGO_URI` | MongoDB connection string, default `mongodb://127.0.0.1:27017` |
-| `MONGO_DB` | Database name, default `doochyweb` |
+| `MONGO_DB` | Database name, default `doochy` |
 | `PORT` | Express port, default `9111`; binds to `127.0.0.1` |
 | `TRAINER_ITEM_SECRET` | Optional stable key for opaque public item ids |
 

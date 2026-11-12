@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, History, Plus, Radio, Search } from "lucide-react";
+import { Bell, Plus, Radio, Search } from "lucide-react";
 
 import { marketApi, signalsApi, telegramApi, type TelegramStatus } from "../api";
 import { AnimatedModal } from "../components/Modal";
@@ -23,7 +23,7 @@ const PAGE = 25;
 const POLL_MS = 30_000;
 const DEBOUNCE_MS = 250;
 
-type Mode = "active" | "history";
+type Mode = "all" | "active";
 
 export default function SignalsPage({
   canRefresh,
@@ -34,7 +34,7 @@ export default function SignalsPage({
   /** Only admins can publish or change signals. */
   canManageSignals: boolean;
 }) {
-  const [mode, setMode] = useState<Mode>("active");
+  const [mode, setMode] = useState<Mode>("all");
   const [symbolInput, setSymbolInput] = useState("");
   const [symbolQuery, setSymbolQuery] = useState("");
   const [direction, setDirection] = useState("");
@@ -112,7 +112,7 @@ export default function SignalsPage({
       });
       setData(res);
       setError(null);
-      if (mode === "history") {
+      if (mode === "all") {
         signalsApi.stats().then(setStats).catch(() => {});
       }
       const symbols = res.signals
@@ -133,10 +133,10 @@ export default function SignalsPage({
 
   useEffect(() => {
     void load();
-    if (mode !== "active") return;
+    // Both views include active signals, so keep them fresh while open.
     const id = window.setInterval(() => void load(), POLL_MS);
     return () => window.clearInterval(id);
-  }, [load, mode]);
+  }, [load]);
 
   // Deep link: /signals?signal=<id> opens the detail sheet.
   useEffect(() => {
@@ -226,7 +226,7 @@ export default function SignalsPage({
                 aria-label="Signals view"
                 className="flex items-center rounded-lg border border-hairline-strong bg-soft p-[3px]"
               >
-                {(["active", "history"] as const).map((v) => (
+                {(["all", "active"] as const).map((v) => (
                   <button
                     key={v}
                     type="button"
@@ -240,16 +240,15 @@ export default function SignalsPage({
                       (mode === v ? "bg-surface text-fg shadow-sm" : "text-fg-muted hover:text-fg")
                     }
                   >
-                    {v === "active" ? (
+                    {v === "all" ? (
                       <>
-                        Active
-                        {counts && <span className="tabular-nums opacity-60">{counts.active}</span>}
+                        All
+                        {counts && <span className="tabular-nums opacity-60">{counts.total}</span>}
                       </>
                     ) : (
                       <>
-                        <History className="h-3 w-3" />
-                        History
-                        {counts && <span className="tabular-nums opacity-60">{counts.history}</span>}
+                        Active
+                        {counts && <span className="tabular-nums opacity-60">{counts.active}</span>}
                       </>
                     )}
                   </button>
@@ -295,7 +294,7 @@ export default function SignalsPage({
             </select>
           </div>
 
-          {mode === "history" && stats && <StatsStrip stats={stats} />}
+          {mode === "all" && stats && <StatsStrip stats={stats} />}
           {error && <p className="mt-3 text-[12.5px] text-danger">{error}</p>}
         </Card>
 
@@ -306,7 +305,7 @@ export default function SignalsPage({
             <GridMessage>
               {mode === "active"
                 ? "No active signals match these filters."
-                : "No history yet. Invalidated and expired signals land here."}
+                : "No signals yet. Published signals appear here."}
             </GridMessage>
           ) : (
             rows.map((signal) => (
@@ -339,7 +338,7 @@ export default function SignalsPage({
           )}
         </div>
 
-        {mode === "history" && pages > 1 && (
+        {pages > 1 && (
           <Card className="flex items-center justify-between p-3">
             <span className="text-[11.5px] text-fg-muted">
               Page {page + 1} of {pages} · {data?.total ?? 0} signals

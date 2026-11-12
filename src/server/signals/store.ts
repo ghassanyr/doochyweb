@@ -140,6 +140,7 @@ export async function listSignals(options: {
   await expireDue(options.now);
   const filter: Record<string, unknown> = {};
   if (options.status === "active") filter.status = "active";
+  // "all" (and an absent status) intentionally leaves status unfiltered.
   else if (options.status === "history") filter.status = { $ne: "active" };
   else if (options.status && (STATUSES as string[]).includes(options.status)) filter.status = options.status;
   if (options.symbol) filter.symbol = options.symbol.toUpperCase();

@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: "doochyweb",
-      cwd: "/home/san/doochyweb",
+      cwd: __dirname,
       script: "dist/server/index.js",
       instances: 1,
       autorestart: true,
