@@ -9,9 +9,12 @@ import { Router } from "express";
 import { adminRequired, type AuthedRequest } from "../auth";
 import { getSiteSettings, saveSiteSettings } from "../settings/store";
 import { SettingsValidationError } from "../settings/validate";
+import { integrationAdminRouter } from "./integrations";
 import { deleteUser, listUsers } from "./users";
 
 export const adminRouter = Router();
+
+adminRouter.use(integrationAdminRouter);
 
 adminRouter.get("/users", adminRequired, async (_req, res) => {
   try {

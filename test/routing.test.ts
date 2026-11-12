@@ -47,6 +47,19 @@ describe("path routing", () => {
     });
   });
 
+  test("admin integrations is a nested admin route", () => {
+    assert.equal(pathForView("admin-integrations"), "/admin/integrations");
+    assert.equal(viewFromPath("/admin/integrations"), "admin-integrations");
+    assert.deepEqual(resolveRoute({ pathname: "/admin/integrations", search: "", hostname: D }), {
+      view: "admin-integrations",
+      redirectTo: null,
+    });
+    assert.deepEqual(resolveRoute({ pathname: "/admin/integrations/", search: "", hostname: D }), {
+      view: "admin-integrations",
+      redirectTo: "/admin/integrations",
+    });
+  });
+
   test("renders Home at the root", () => {
     assert.deepEqual(resolveRoute({ pathname: "/", search: "", hostname: D }), {
       view: "home",

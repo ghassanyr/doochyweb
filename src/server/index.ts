@@ -6,6 +6,7 @@ import { maskClientId, resolveConnectInput } from "./credentials";
 import { connectDb, loadCredentials, saveCredentials, User } from "./db";
 import { signToken, authRequired, AuthedRequest, hashPassword, verifyPassword, findUserByUsername } from "./auth";
 import { userSockets } from "./ctrader/connection";
+import { ctraderAppCredentials } from "./ctrader/appConfig";
 import { discoverAccounts } from "./ctrader/auth";
 import { ctraderOAuthAvailable, ctraderOAuthCallback, ctraderOAuthRouter } from "./ctrader/oauth";
 import { reconcileAccount, listAccounts, listTradableNames } from "./ctrader/reads";
@@ -121,7 +122,7 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
       hasCredentials: !!creds,
       // Enough for Settings to say which OpenAPI app is connected without ever
       // sending the secret, or even the whole client id, to the browser.
-      clientIdMasked: creds ? maskClientId(creds.clientId) : null,
+      clientIdMasked: creds?.clientId ? maskClientId(creds.clientId) : null,
       ctraderOAuth: await ctraderOAuthAvailable(),
       accounts,
     });
@@ -154,17 +155,25 @@ app.put("/api/credentials", authRequired, async (req: AuthedRequest, res: Respon
 app.post("/api/connect", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
     const existing = await loadCredentials(req.userId!);
-    const resolved = resolveConnectInput(req.body, existing);
+    let platform: { clientId: string; clientSecret: string } | null = null;
+    try {
+      platform = await ctraderAppCredentials();
+    } catch (err: any) {
+      // A corrupt platform secret must not block a manual connection; the
+      // fallback below simply will not be available.
+      console.error("[cTrader] platform app could not be read:", err?.message ?? err);
+    }
+    const resolved = resolveConnectInput(req.body, existing, platform);
     if (!resolved.ok) {
       res.status(400).json({ error: resolved.error });
       return;
     }
-    const { clientId, clientSecret, accessToken, refreshToken } = resolved.value;
+    const { clientId, clientSecret, accessToken, refreshToken, storeApp } = resolved.value;
 
     const { accounts, tokens } = await discoverAccounts({ clientId, clientSecret, accessToken, refreshToken });
     await saveCredentials(req.userId!, {
-      clientId,
-      clientSecret,
+      clientId: storeApp ? clientId : undefined,
+      clientSecret: storeApp ? clientSecret : undefined,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       accounts,
@@ -219,8 +228,6 @@ app.put([ "/api/accounts/:ctid/nickname", "/api/accounts/:ctid/prefs" ], authReq
         : a,
     );
     await saveCredentials(req.userId!, {
-      clientId: creds.clientId,
-      clientSecret: creds.clientSecret,
       accessToken: creds.accessToken,
       refreshToken: creds.refreshToken,
       accounts,
@@ -468,9 +475,9 @@ app.use("/api/admin", adminRouter);
 app.use("/api/config", siteConfigRouter);
 app.use("/api/ctrader/oauth", ctraderOAuthRouter);
 
-// Production redirect URI is https://doochy.net/callback (single-segment URLs
-// are what cTrader's portal accepts for real domains). Handled outside /api so
-// the registered URL can stay short.
+// Short callback route registered on the cTrader app. The exact URL is
+// configured in the admin panel (or CTRADER_REDIRECT_URI), so it is no longer
+// hardcoded. Handled outside /api so the registered URL can stay short.
 app.get("/callback", (req: Request, res: Response) => {
   void ctraderOAuthCallback(req, res);
 });

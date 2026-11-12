@@ -219,9 +219,18 @@ export default function PositionsTab({
       )}
 
       {loading && rows.length === 0 ? (
-        <div className="space-y-3">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Card key={i} className="flex flex-col gap-3 p-4">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-6 w-28" />
+              <div className="grid grid-cols-2 gap-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            </Card>
+          ))}
         </div>
       ) : sorted.length === 0 ? (
         <FadeRise>
@@ -230,9 +239,12 @@ export default function PositionsTab({
           </Card>
         </FadeRise>
       ) : (
-        <Stagger className="space-y-3">
+        <Stagger className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]">
           {sorted.map((p) => (
-            <StaggerItem key={combined && p.account ? `${p.account.ctid}:${p.positionId}` : p.positionId}>
+            <StaggerItem
+              key={combined && p.account ? `${p.account.ctid}:${p.positionId}` : p.positionId}
+              className="h-full"
+            >
               <PositionCard
                 p={p}
                 ctid={rowCtid(p)}
@@ -374,32 +386,52 @@ function PositionCard({
   }
 
   return (
-    <Card flat className="overflow-hidden">
-      <button type="button" onClick={onToggle} className="w-full p-4 text-left transition hover:bg-surface-hover">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {p.account && (
-              <AccountChip login={p.account.login} nickname={p.account.nickname} color={p.account.color} />
-            )}
+    <Card flat className="flex h-full flex-col overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex flex-1 flex-col gap-2.5 p-4 pb-3 text-left transition hover:bg-surface-hover"
+      >
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-base font-bold tracking-tight text-fg">{p.symbol}</span>
+            <span className="shrink-0 rounded-[5px] border border-hairline bg-soft px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-fg-faint">
+              {fmtLots(p.lots)}L
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
             <Badge tone={isBuy ? "success" : "danger"}>
               {isBuy ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
               {p.side}
             </Badge>
-            <span className="truncate text-sm font-semibold tracking-tight">{p.symbol}</span>
-            <span className="shrink-0 text-xs text-fg-faint">{fmtLots(p.lots)}L</span>
-          </div>
-          <div className={`shrink-0 text-sm font-semibold tabular-nums ${netTone(p.netUsd)}`}>
-            {fmtNetUsd(p.netUsd)}
+            {p.account && (
+              <AccountChip login={p.account.login} nickname={p.account.nickname} color={p.account.color} />
+            )}
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-4 gap-3">
-          <Field label="Entry" value={fmtPrice(p.entryPrice, p.digits)} />
-          <Field label="SL" value={p.stopLoss != null ? fmtPrice(p.stopLoss, p.digits) : "-"} />
-          <Field label="TP" value={p.takeProfit != null ? fmtPrice(p.takeProfit, p.digits) : "-"} />
-          <Field label="Net USD" value={fmtNetUsd(p.netUsd)} valueClassName={netTone(p.netUsd)} />
+
+        <div className="flex items-end justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[10.5px] uppercase tracking-wide text-fg-faint">Entry</div>
+            <div className="truncate text-[21px] font-bold tabular-nums text-fg">
+              {fmtPrice(p.entryPrice, p.digits)}
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="text-[10.5px] uppercase tracking-wide text-fg-faint">Net USD</div>
+            <div className={`text-[15px] font-bold tabular-nums ${netTone(p.netUsd)}`}>
+              {fmtNetUsd(p.netUsd)}
+            </div>
+          </div>
         </div>
-        <div className="mt-3 flex items-center justify-between border-t border-hairline pt-2.5 text-xs text-fg-faint">
-          <span>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Stat label="Stop loss" value={p.stopLoss != null ? fmtPrice(p.stopLoss, p.digits) : "-"} />
+          <Stat label="Take profit" value={p.takeProfit != null ? fmtPrice(p.takeProfit, p.digits) : "-"} />
+        </div>
+
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-hairline pt-2 text-[10.5px] text-fg-faint">
+          <span className="truncate">
             Held {heldFor(p.openTimestamp)}
             {p.openTimestamp ? ` · ${new Date(p.openTimestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : ""}
           </span>
@@ -411,7 +443,7 @@ function PositionCard({
         <div className="space-y-4 border-t border-hairline p-4">
           {msg && <Flash tone={msg.tone}>{msg.text}</Flash>}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Held for" value={heldFor(p.openTimestamp)} />
             <Field label="Position" value={`#${p.positionId}`} />
             <Field label="Current result" value={fmtNetUsd(p.netUsd)} valueClassName={netTone(p.netUsd)} />
@@ -462,5 +494,16 @@ function PositionCard({
         </div>
       </Collapse>
     </Card>
+  );
+}
+
+// A recessed metric panel, matching the side-by-side section summaries on the
+// analysis cards.
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border border-hairline bg-soft px-2.5 py-1.5">
+      <span className="text-[10.5px] uppercase tracking-wide text-fg-faint">{label}</span>
+      <span className="truncate text-[13px] font-semibold tabular-nums text-fg">{value}</span>
+    </div>
   );
 }

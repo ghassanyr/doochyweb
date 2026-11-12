@@ -55,20 +55,32 @@ export interface IntegrationFieldState {
   hint: string | null;
   /** Set when a stored or environment value could not be read. */
   error: string | null;
+  /** Choices for a select field. */
+  options?: readonly IntegrationFieldOption[];
+  /** Suggested input text for an empty field. */
+  placeholder?: string;
+  maxLength?: number;
 }
 
 export interface IntegrationState {
   provider: IntegrationProvider;
   label: string;
   description: string;
-  /** Every required field has a value and nothing failed to decode. */
+  /** Every required field has a value, nothing failed to decode, and no
+   *  provider-level errors remain. */
   ready: boolean;
   fields: IntegrationFieldState[];
+  /** Cross-field problems that block a usable configuration. */
+  errors: string[];
+  /** Cross-field advice that does not block saving. */
+  warnings: string[];
   updatedAt: string | null;
   updatedBy: string | null;
   lastTestAt: string | null;
   lastTestOk: boolean | null;
   lastTestMessage: string | null;
+  /** True when the last test used unsaved draft values. */
+  lastTestDraft: boolean;
 }
 
 export interface IntegrationTestResult {
@@ -99,4 +111,5 @@ export interface StoredIntegrationProvider {
   lastTestAt?: Date | string | null;
   lastTestOk?: boolean | null;
   lastTestMessage?: string | null;
+  lastTestDraft?: boolean | null;
 }

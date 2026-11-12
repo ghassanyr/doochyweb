@@ -17,13 +17,13 @@ import { Router, type Request, type Response } from "express";
 
 import { authRequired, signOAuthState, verifyOAuthState, type AuthedRequest } from "../auth";
 import { loadCredentials, saveCredentials, type StoredAccount } from "../db";
+import { validateCtraderSetup } from "../integrations/ctraderSetup";
 import { resolveIntegration } from "../integrations/store";
 import { discoverAccounts } from "./auth";
 import { userSockets } from "./connection";
 
 const AUTHORIZE_URL = "https://openapi.ctrader.com/apps/auth";
 const TOKEN_URL = "https://openapi.ctrader.com/apps/token";
-const DEFAULT_REDIRECT_URI = "https://doochy.net/callback";
 const STATE_COOKIE = "ctrader_oauth_state";
 const STATE_TTL_MS = 10 * 60_000;
 const TOKEN_TIMEOUT_MS = 20_000;
@@ -35,8 +35,35 @@ export interface CtraderOAuthConfig {
   scope: string;
 }
 
+/** Why a configuration cannot be used, or null when it can. */
+export type CtraderOAuthIssue =
+  | "app_not_configured"
+  | "redirect_missing"
+  | "redirect_invalid"
+  | "invalid_config";
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Judge the OAuth-relevant values without touching the database. The callback
+ * URL is required and must be one of the routes this server mounts; there is no
+ * compiled-in fallback, because a redirect to someone else's domain cannot
+ * complete the flow.
+ */
+export function ctraderOAuthIssueFrom(values: Record<string, unknown>): CtraderOAuthIssue | null {
+  const clientId = text(values.clientId);
+  const clientSecret = text(values.clientSecret);
+  if (!clientId || !clientSecret) return "app_not_configured";
+
+  const redirectUri = text(values.redirectUri);
+  if (!redirectUri) return "redirect_missing";
+
+  const scope = text(values.scope) || "trading";
+  if (validateCtraderSetup({ redirectUri }).errors.length > 0) return "redirect_invalid";
+  if (validateCtraderSetup({ scope }).errors.length > 0) return "invalid_config";
+  return null;
 }
 
 /**
@@ -46,13 +73,11 @@ function text(value: unknown): string {
 export function ctraderOAuthConfigFrom(
   values: Record<string, unknown>
 ): CtraderOAuthConfig | null {
-  const clientId = text(values.clientId);
-  const clientSecret = text(values.clientSecret);
-  if (!clientId || !clientSecret) return null;
+  if (ctraderOAuthIssueFrom(values)) return null;
   return {
-    clientId,
-    clientSecret,
-    redirectUri: text(values.redirectUri) || DEFAULT_REDIRECT_URI,
+    clientId: text(values.clientId),
+    clientSecret: text(values.clientSecret),
+    redirectUri: text(values.redirectUri),
     scope: text(values.scope) || "trading",
   };
 }
@@ -237,8 +262,10 @@ export async function ctraderOAuthCallback(req: Request, res: Response): Promise
     }));
 
     await saveCredentials(userId, {
-      clientId: cfg.clientId,
-      clientSecret: cfg.clientSecret,
+      // The tokens belong to the platform app, so a manual app pair left over
+      // from an earlier connection must not keep overriding it.
+      clientId: null,
+      clientSecret: null,
       accessToken: rotated.accessToken,
       refreshToken: rotated.refreshToken,
       accounts,
@@ -254,21 +281,39 @@ export async function ctraderOAuthCallback(req: Request, res: Response): Promise
   }
 }
 
+function startErrorMessage(issue: CtraderOAuthIssue): string {
+  if (issue === "redirect_missing") {
+    return "cTrader OAuth is missing its callback URL. Finish the cTrader setup in the admin panel.";
+  }
+  if (issue === "redirect_invalid") {
+    return "cTrader OAuth callback URL is not valid for this deployment. Check the cTrader setup.";
+  }
+  if (issue === "invalid_config") {
+    return "cTrader OAuth settings are invalid. Check the cTrader setup.";
+  }
+  return "cTrader OAuth is not configured";
+}
+
 export const ctraderOAuthRouter = Router();
 
 ctraderOAuthRouter.post("/start", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
-    const cfg = await ctraderOAuthConfig();
-    if (!cfg) {
-      res.status(503).json({ error: "cTrader OAuth is not configured" });
+    const resolved = await resolveIntegration("ctrader");
+    const issue = ctraderOAuthIssueFrom(resolved.values);
+    if (issue) {
+      res.status(503).json({ error: startErrorMessage(issue), code: issue });
       return;
     }
+    const cfg = ctraderOAuthConfigFrom(resolved.values)!;
     const state = signOAuthState(req.userId!);
     res.cookie(STATE_COOKIE, state, stateCookieOptions(req));
     res.json({ url: buildAuthorizeUrl(cfg, state) });
   } catch (err: any) {
     console.error("[cTrader OAuth] start failed:", err?.message ?? err);
-    res.status(503).json({ error: "cTrader OAuth is not configured" });
+    res.status(503).json({
+      error: "cTrader OAuth is not configured",
+      code: "not_configured",
+    });
   }
 });
 

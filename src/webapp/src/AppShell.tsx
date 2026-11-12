@@ -93,7 +93,9 @@ export function AppShell({
           >
             {items.map((n) => {
               const active =
-                view === n.key || (n.key === "admin" && view === "admin-settings");
+                view === n.key ||
+                (n.key === "admin" &&
+                  (view === "admin-settings" || view === "admin-integrations"));
               return (
                 <a
                   key={n.key}

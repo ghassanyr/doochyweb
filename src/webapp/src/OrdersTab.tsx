@@ -198,9 +198,18 @@ export default function OrdersTab({
       )}
 
       {loading && rows.length === 0 ? (
-        <div className="space-y-3">
-          <Skeleton className="h-36 w-full" />
-          <Skeleton className="h-36 w-full" />
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Card key={i} className="flex flex-col gap-3 p-4">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-6 w-28" />
+              <div className="grid grid-cols-2 gap-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            </Card>
+          ))}
         </div>
       ) : sortedOrders.length === 0 ? (
         <FadeRise>
@@ -215,9 +224,12 @@ export default function OrdersTab({
           <div className="flex items-center gap-1.5 px-1 text-xs font-medium uppercase tracking-wide text-fg-faint">
             <Hourglass className="h-3.5 w-3.5" /> Resting orders ({sortedOrders.length})
           </div>
-          <Stagger className="space-y-3">
+          <Stagger className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]">
             {sortedOrders.map((o) => (
-              <StaggerItem key={combined && o.account ? `${o.account.ctid}:${o.orderId}` : o.orderId}>
+              <StaggerItem
+                key={combined && o.account ? `${o.account.ctid}:${o.orderId}` : o.orderId}
+                className="h-full"
+              >
                 <PendingCard
                   o={o}
                   ctid={rowCtid(o)}
@@ -356,38 +368,44 @@ function PendingCard({
   }
 
   return (
-    <Card flat className="overflow-hidden">
-      <div className="p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {o.account && <AccountChip login={o.account.login} nickname={o.account.nickname} color={o.account.color} />}
+    <Card flat className="flex h-full flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col gap-2.5 p-4 pb-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-base font-bold tracking-tight text-fg">{o.symbol}</span>
+            <span className="shrink-0 rounded-[5px] border border-hairline bg-soft px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-fg-faint">
+              {orderTypeLabel(o.orderType)}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
             <Badge tone={isBuy ? "success" : "danger"}>
               {isBuy ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
               {o.side}
             </Badge>
-            <span className="truncate text-sm font-semibold tracking-tight">{o.symbol}</span>
-            <span className="shrink-0 text-xs text-fg-faint">{fmtLots(o.lots)}L</span>
-            <Badge tone="muted">{orderTypeLabel(o.orderType)}</Badge>
-          </div>
-          <div className="shrink-0 text-xs tabular-nums text-fg-faint">
-            @ {fmtPrice(o.price, o.digits)}
+            {o.account && <AccountChip login={o.account.login} nickname={o.account.nickname} color={o.account.color} />}
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <FieldLabel label={levelLabel} value={fmtPrice(o.price, o.digits)} />
-          <FieldLabel label="SL" value={o.stopLoss != null ? fmtPrice(o.stopLoss, o.digits) : "-"} />
-          <FieldLabel label="TP" value={o.takeProfit != null ? fmtPrice(o.takeProfit, o.digits) : "-"} />
+        <div className="flex items-end justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[10.5px] uppercase tracking-wide text-fg-faint">{levelLabel}</div>
+            <div className="truncate text-[21px] font-bold tabular-nums text-fg">{fmtPrice(o.price, o.digits)}</div>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="text-[10.5px] uppercase tracking-wide text-fg-faint">Size</div>
+            <div className="text-[15px] font-bold tabular-nums text-fg">{fmtLots(o.lots)}</div>
+          </div>
         </div>
 
-        {msg && (
-          <div className="mt-3">
-            <Flash tone={msg.tone}>{msg.text}</Flash>
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-2">
+          <FieldLabel label="Stop loss" value={o.stopLoss != null ? fmtPrice(o.stopLoss, o.digits) : "-"} />
+          <FieldLabel label="Take profit" value={o.takeProfit != null ? fmtPrice(o.takeProfit, o.digits) : "-"} />
+        </div>
+
+        {msg && <Flash tone={msg.tone}>{msg.text}</Flash>}
 
         <Collapse open={editing}>
-          <div className="mt-4 space-y-2 border-t border-hairline pt-4">
+          <div className="space-y-2 border-t border-hairline pt-3">
             <div className="text-sm font-medium text-fg-muted">Edit order</div>
             <div className="grid grid-cols-3 gap-2">
               <BareFields value={entry} onChange={setEntry} placeholder={`${levelLabel} ${o.price}`} />
@@ -406,21 +424,20 @@ function PendingCard({
           </div>
         </Collapse>
 
-        {canPublish && (
-          <div className="mt-4">
+        <div className="mt-auto space-y-2 border-t border-hairline pt-2.5">
+          {canPublish && (
             <Button variant="secondary" size="sm" className="w-full" onClick={onPublish}>
               <Megaphone className="h-3.5 w-3.5" /> Publish signal
             </Button>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing((e) => !e)}>
+              {editing ? "Done" : "Edit"}
+            </Button>
+            <Button variant="danger" size="sm" icon={<Ban className="h-3.5 w-3.5" />} onClick={onCancel}>
+              Cancel
+            </Button>
           </div>
-        )}
-
-        <div className={"grid grid-cols-2 gap-2 " + (canPublish ? "mt-2" : "mt-4")}>
-          <Button variant="secondary" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing((e) => !e)}>
-            {editing ? "Done" : "Edit"}
-          </Button>
-          <Button variant="danger" size="sm" icon={<Ban className="h-3.5 w-3.5" />} onClick={onCancel}>
-            Cancel
-          </Button>
         </div>
       </div>
     </Card>
@@ -429,9 +446,9 @@ function PendingCard({
 
 function FieldLabel({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="text-xs text-fg-faint">{label}</div>
-      <div className="mt-0.5 text-sm tabular-nums text-fg">{value}</div>
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border border-hairline bg-soft px-2.5 py-1.5">
+      <span className="text-[10.5px] uppercase tracking-wide text-fg-faint">{label}</span>
+      <span className="truncate text-[13px] font-semibold tabular-nums text-fg">{value}</span>
     </div>
   );
 }

@@ -428,6 +428,76 @@ export interface SiteSettings extends SiteConfig {
   updatedBy: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Integrations, see src/server/integrations
+// ---------------------------------------------------------------------------
+
+export type IntegrationProvider = "ctrader" | "telegram";
+
+export type IntegrationFieldKind = "text" | "secret" | "number" | "boolean" | "select";
+
+export type IntegrationSource = "database" | "environment" | "default" | "unset";
+
+export interface IntegrationFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface IntegrationFieldState {
+  key: string;
+  label: string;
+  kind: IntegrationFieldKind;
+  required: boolean;
+  /** Non-secret effective value; always null for secrets. */
+  value: string | number | boolean | null;
+  configured: boolean;
+  source: IntegrationSource;
+  hint: string | null;
+  error: string | null;
+  options?: readonly IntegrationFieldOption[];
+  placeholder?: string;
+  maxLength?: number;
+}
+
+export interface IntegrationState {
+  provider: IntegrationProvider;
+  label: string;
+  description: string;
+  ready: boolean;
+  fields: IntegrationFieldState[];
+  errors: string[];
+  warnings: string[];
+  updatedAt: string | null;
+  updatedBy: string | null;
+  lastTestAt: string | null;
+  lastTestOk: boolean | null;
+  lastTestMessage: string | null;
+  lastTestDraft: boolean;
+}
+
+export interface IntegrationTestResult {
+  ok: boolean;
+  message: string;
+}
+
+export interface IntegrationPatch {
+  values?: Record<string, unknown>;
+  clear?: string[];
+}
+
+export interface CallbackCandidates {
+  baseUrl: string | null;
+  primary: string | null;
+  api: string | null;
+}
+
+export interface AdminIntegrationsResponse {
+  integrations: IntegrationState[];
+  encryptionAvailable: boolean;
+  requestOrigin: string | null;
+  callbacks: CallbackCandidates;
+}
+
 export const configApi = {
   get: () => request<SiteConfig>("/api/config"),
 };
@@ -451,6 +521,20 @@ export const adminApi = {
       method: "PUT",
       body: patch,
     }),
+
+  integrations: () => request<AdminIntegrationsResponse>("/api/admin/integrations"),
+
+  saveIntegration: (provider: IntegrationProvider, patch: IntegrationPatch) =>
+    request<{ integration: IntegrationState }>(
+      `/api/admin/integrations/${encodeURIComponent(provider)}`,
+      { method: "PUT", body: patch }
+    ),
+
+  testIntegration: (provider: IntegrationProvider, patch: IntegrationPatch) =>
+    request<{ result: IntegrationTestResult; integration: IntegrationState }>(
+      `/api/admin/integrations/${encodeURIComponent(provider)}/test`,
+      { method: "POST", body: patch }
+    ),
 };
 
 export const api = {

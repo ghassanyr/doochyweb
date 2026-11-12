@@ -14,12 +14,19 @@ import mongoose from "mongoose";
 import {
   ENCRYPTION_KEY_ENV,
   decryptSecret,
+  encryptSecret,
   encryptionKeyFromEnv,
   isEncryptedSecret,
   maskSecret,
   requireEncryptionKey,
 } from "./crypto";
-import { INTEGRATION_DEFS, INTEGRATION_PROVIDERS, integrationAad } from "./registry";
+import { providerIssues } from "./ctraderSetup";
+import {
+  INTEGRATION_DEFS,
+  INTEGRATION_PROVIDERS,
+  integrationAad,
+  integrationField,
+} from "./registry";
 import type {
   IntegrationFieldDef,
   IntegrationFieldState,
@@ -34,6 +41,7 @@ import {
   IntegrationValidationError,
   applyIntegrationPatch,
   coerceFieldValue,
+  normalizeIntegrationPatch,
 } from "./validate";
 
 const integrationsSchema = new mongoose.Schema(
@@ -90,6 +98,9 @@ function describeField(
     source: "unset",
     hint: null,
     error: null,
+    options: def.options,
+    placeholder: def.placeholder,
+    maxLength: def.maxLength,
   };
 
   const stored = values[def.key];
@@ -182,9 +193,11 @@ export function describeIntegration(
   const def = INTEGRATION_DEFS[provider];
   const values = storedValues(stored);
   const fields = def.fields.map((field) => describeField(provider, field, values, env, key));
+  const issues = providerIssues(provider, fields);
   const ready =
     fields.every((field) => field.error === null) &&
-    fields.every((field) => !field.required || field.configured);
+    fields.every((field) => !field.required || field.configured) &&
+    issues.errors.length === 0;
 
   return {
     provider,
@@ -192,6 +205,8 @@ export function describeIntegration(
     description: def.description,
     ready,
     fields,
+    errors: issues.errors,
+    warnings: issues.warnings,
     updatedAt: iso(stored?.updatedAt),
     updatedBy: typeof stored?.updatedBy === "string" ? stored.updatedBy : null,
     lastTestAt: iso(stored?.lastTestAt),
@@ -199,7 +214,92 @@ export function describeIntegration(
       stored?.lastTestOk === true ? true : stored?.lastTestOk === false ? false : null,
     lastTestMessage:
       typeof stored?.lastTestMessage === "string" ? stored.lastTestMessage : null,
+    lastTestDraft: stored?.lastTestDraft === true,
   };
+}
+
+/**
+ * Decrypt the stored overrides into plaintext, without touching the
+ * environment. Throws on corrupt stored secrets or a missing key rather than
+ * silently falling back.
+ */
+function plainStoredValues(
+  provider: IntegrationProvider,
+  stored: StoredIntegrationProvider | null | undefined,
+  key: Buffer | null,
+  skip?: ReadonlySet<string>
+): Record<string, unknown> {
+  const def = INTEGRATION_DEFS[provider];
+  const values = storedValues(stored);
+  const out: Record<string, unknown> = {};
+
+  for (const field of def.fields) {
+    if (skip?.has(field.key)) continue;
+    const storedValue = values[field.key];
+    if (storedValue === undefined || storedValue === null || storedValue === "") continue;
+
+    if (field.kind === "secret") {
+      if (typeof storedValue !== "string" || !isEncryptedSecret(storedValue)) {
+        throw new IntegrationValidationError(
+          `${provider}.${field.key} is not an encrypted secret`
+        );
+      }
+      if (!key) {
+        throw new IntegrationValidationError(
+          `${provider}.${field.key} needs ${ENCRYPTION_KEY_ENV} to decrypt`
+        );
+      }
+      out[field.key] = decryptSecret(storedValue, integrationAad(provider, field.key), key);
+    } else {
+      out[field.key] = storedValue;
+    }
+  }
+
+  return out;
+}
+
+/** Apply environment/default fallbacks to a set of plaintext overrides. */
+function resolvePlainValues(
+  provider: IntegrationProvider,
+  overrides: Record<string, unknown>,
+  env: NodeJS.ProcessEnv
+): ResolvedIntegration {
+  const def = INTEGRATION_DEFS[provider];
+  const resolved: Record<string, string | number | boolean> = {};
+  const sources: Record<string, IntegrationSource> = {};
+  const missing: string[] = [];
+
+  for (const field of def.fields) {
+    const raw = overrides[field.key];
+    if (raw !== undefined && raw !== null && raw !== "") {
+      const value = coerceFieldValue(field, raw);
+      if (value !== null) {
+        resolved[field.key] = value;
+        sources[field.key] = "database";
+        continue;
+      }
+    }
+
+    const envRaw = envValue(env, field.env);
+    if (envRaw !== null) {
+      const value = coerceFieldValue(field, envRaw);
+      if (value !== null) {
+        resolved[field.key] = value;
+        sources[field.key] = "environment";
+        continue;
+      }
+    }
+
+    if (field.defaultValue !== undefined) {
+      resolved[field.key] = field.defaultValue;
+      sources[field.key] = "default";
+      continue;
+    }
+
+    if (field.required) missing.push(field.key);
+  }
+
+  return { provider, values: resolved, sources, missing };
 }
 
 /**
@@ -213,61 +313,33 @@ export function resolveIntegrationValues(
   env: NodeJS.ProcessEnv = process.env,
   key: Buffer | null = encryptionKeyFromEnv(env)
 ): ResolvedIntegration {
-  const def = INTEGRATION_DEFS[provider];
-  const values = storedValues(stored);
-  const resolved: Record<string, string | number | boolean> = {};
-  const sources: Record<string, IntegrationSource> = {};
-  const missing: string[] = [];
+  return resolvePlainValues(provider, plainStoredValues(provider, stored, key), env);
+}
 
-  for (const field of def.fields) {
-    let value: string | number | boolean | null = null;
-    let source: IntegrationSource = "unset";
-    const storedValue = values[field.key];
+/**
+ * Resolve what a save would produce, without writing anything. Draft secrets
+ * stay plaintext in memory; an empty secret keeps the stored one and an empty
+ * non-secret drops the database override, exactly like the PUT.
+ */
+export function resolveDraftValues(
+  provider: IntegrationProvider,
+  stored: StoredIntegrationProvider | null | undefined,
+  patch: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+  key: Buffer | null = encryptionKeyFromEnv(env)
+): ResolvedIntegration {
+  const { set, clear } = normalizeIntegrationPatch(provider, patch);
+  const overrides = plainStoredValues(
+    provider,
+    stored,
+    key,
+    new Set([...Object.keys(set), ...clear])
+  );
 
-    if (field.kind === "secret") {
-      if (storedValue !== undefined && storedValue !== null && storedValue !== "") {
-        if (typeof storedValue !== "string" || !isEncryptedSecret(storedValue)) {
-          throw new IntegrationValidationError(
-            `${provider}.${field.key} is not an encrypted secret`
-          );
-        }
-        if (!key) {
-          throw new IntegrationValidationError(
-            `${provider}.${field.key} needs ${ENCRYPTION_KEY_ENV} to decrypt`
-          );
-        }
-        value = decryptSecret(storedValue, integrationAad(provider, field.key), key);
-        source = "database";
-      } else {
-        const raw = envValue(env, field.env);
-        if (raw !== null) {
-          value = coerceFieldValue(field, raw);
-          source = "environment";
-        }
-      }
-    } else if (storedValue !== undefined && storedValue !== null && storedValue !== "") {
-      value = coerceFieldValue(field, storedValue);
-      source = "database";
-    } else {
-      const raw = envValue(env, field.env);
-      if (raw !== null) {
-        value = coerceFieldValue(field, raw);
-        source = "environment";
-      } else if (field.defaultValue !== undefined) {
-        value = field.defaultValue;
-        source = "default";
-      }
-    }
+  for (const fieldKey of clear) delete overrides[fieldKey];
+  for (const [fieldKey, value] of Object.entries(set)) overrides[fieldKey] = value;
 
-    if (value === null) {
-      if (field.required) missing.push(field.key);
-      continue;
-    }
-    resolved[field.key] = value;
-    sources[field.key] = source;
-  }
-
-  return { provider, values: resolved, sources, missing };
+  return resolvePlainValues(provider, overrides, env);
 }
 
 export async function getIntegrationStates(
@@ -295,6 +367,25 @@ export async function resolveIntegration(
 ): Promise<ResolvedIntegration> {
   const providers = await loadProviders();
   return resolveIntegrationValues(provider, providers[provider], env, encryptionKeyFromEnv(env));
+}
+
+/**
+ * Runtime read that merges an unsaved draft patch over the stored values.
+ * Used only by the admin test endpoint; never persists the draft.
+ */
+export async function resolveDraftIntegration(
+  provider: IntegrationProvider,
+  patch: unknown,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<ResolvedIntegration> {
+  const providers = await loadProviders();
+  return resolveDraftValues(
+    provider,
+    providers[provider],
+    patch,
+    env,
+    encryptionKeyFromEnv(env)
+  );
 }
 
 /**
@@ -332,6 +423,7 @@ export async function saveIntegration(
 export async function recordIntegrationTest(
   provider: IntegrationProvider,
   result: IntegrationTestResult,
+  draft = false,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<IntegrationState> {
   const message = result.message.trim().slice(0, 300);
@@ -342,6 +434,7 @@ export async function recordIntegrationTest(
         [`providers.${provider}.lastTestAt`]: new Date(),
         [`providers.${provider}.lastTestOk`]: result.ok,
         [`providers.${provider}.lastTestMessage`]: message,
+        [`providers.${provider}.lastTestDraft`]: draft,
       },
     },
     { upsert: true, setDefaultsOnInsert: true }

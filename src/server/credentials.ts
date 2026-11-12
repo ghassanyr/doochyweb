@@ -7,10 +7,17 @@
 // saved, and only new tokens are required.
 
 export interface StoredCredentials {
-  clientId: string;
-  clientSecret: string;
+  /** Null for OAuth connections, which use the platform app. */
+  clientId?: string | null;
+  clientSecret?: string | null;
   accessToken: string;
   refreshToken: string;
+}
+
+/** Platform app pair, used when the user has not supplied their own. */
+export interface PlatformAppCredentials {
+  clientId: string;
+  clientSecret: string;
 }
 
 export interface ConnectPayload {
@@ -18,6 +25,8 @@ export interface ConnectPayload {
   clientSecret: string;
   accessToken: string;
   refreshToken: string;
+  /** True when this app pair belongs to the user and must be persisted. */
+  storeApp: boolean;
 }
 
 /** Trimmed string, or "" for anything missing. */
@@ -30,27 +39,66 @@ export type ConnectResolution =
   | { ok: false; error: string };
 
 /**
- * Merge what was sent with what is already stored.
+ * Merge what was sent with what is already stored, falling back to the
+ * platform app.
  *
  * Sent app fields always win when present, so recreating the app still works.
- * Missing ones fall back to storage, and only fail if neither exists.
+ * Otherwise a previously saved manual pair is reused. If neither exists, the
+ * platform app is used for the socket but not copied onto the user document.
  */
 export function resolveConnectInput(
   body: Record<string, unknown> | undefined | null,
-  existing: Pick<StoredCredentials, "clientId" | "clientSecret"> | null | undefined
+  existing: Pick<StoredCredentials, "clientId" | "clientSecret"> | null | undefined,
+  platform?: PlatformAppCredentials | null
 ): ConnectResolution {
-  const clientId = str(body?.clientId) || existing?.clientId || "";
-  const clientSecret = str(body?.clientSecret) || existing?.clientSecret || "";
+  const sentId = str(body?.clientId);
+  const sentSecret = str(body?.clientSecret);
+  const storedId = str(existing?.clientId);
+  const storedSecret = str(existing?.clientSecret);
   const accessToken = str(body?.accessToken);
   const refreshToken = str(body?.refreshToken);
 
   if (!accessToken || !refreshToken) {
     return { ok: false, error: "accessToken and refreshToken are required" };
   }
-  if (!clientId || !clientSecret) {
-    return { ok: false, error: "clientId and clientSecret have not been saved yet" };
+  if (!!sentId !== !!sentSecret) {
+    return {
+      ok: false,
+      error: "clientId and clientSecret must be provided together",
+    };
   }
-  return { ok: true, value: { clientId, clientSecret, accessToken, refreshToken } };
+
+  if (sentId && sentSecret) {
+    return {
+      ok: true,
+      value: { clientId: sentId, clientSecret: sentSecret, accessToken, refreshToken, storeApp: true },
+    };
+  }
+  if (storedId && storedSecret) {
+    return {
+      ok: true,
+      value: {
+        clientId: storedId,
+        clientSecret: storedSecret,
+        accessToken,
+        refreshToken,
+        storeApp: true,
+      },
+    };
+  }
+  if (platform?.clientId && platform?.clientSecret) {
+    return {
+      ok: true,
+      value: {
+        clientId: platform.clientId,
+        clientSecret: platform.clientSecret,
+        accessToken,
+        refreshToken,
+        storeApp: false,
+      },
+    };
+  }
+  return { ok: false, error: "clientId and clientSecret have not been saved yet" };
 }
 
 /**

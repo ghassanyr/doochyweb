@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { GripVertical, Palette, Trash2, X } from "lucide-react";
+import { GripVertical, Palette, Plug, Trash2, X } from "lucide-react";
 
 import { adminApi, marketApi, type AdminUser } from "../api";
 import { ConfirmModal } from "../components/Modal";
@@ -161,6 +161,14 @@ export default function AdminPage({
           >
             <Palette className="h-4 w-4" />
             Site settings
+          </RouteLink>
+          <RouteLink
+            view="admin-integrations"
+            onNavigate={onNavigate}
+            className={buttonClass("secondary")}
+          >
+            <Plug className="h-4 w-4" />
+            Integrations
           </RouteLink>
         </div>
 

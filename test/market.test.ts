@@ -778,7 +778,7 @@ describe("cTrader credential input", () => {
     // The whole point: retyping an app secret on every reconnect is busywork.
     const r = resolveConnectInput({ accessToken: "a", refreshToken: "r" }, saved);
     assert.ok(r.ok, r.ok ? "" : r.error);
-    assert.deepEqual(r.value, { ...saved, accessToken: "a", refreshToken: "r" });
+    assert.deepEqual(r.value, { ...saved, accessToken: "a", refreshToken: "r", storeApp: true });
   });
 
   test("the first ever connect still requires all four fields", () => {

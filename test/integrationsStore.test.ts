@@ -17,6 +17,7 @@ import {
 } from "../src/server/integrations/registry";
 import {
   describeIntegration,
+  resolveDraftValues,
   resolveIntegrationValues,
 } from "../src/server/integrations/store";
 import type { IntegrationFieldDef } from "../src/server/integrations/types";
@@ -211,6 +212,15 @@ describe("normalizeIntegrationPatch", () => {
     );
   });
 
+  test("an empty number or boolean clears the override too", () => {
+    assert.deepEqual(
+      normalizeIntegrationPatch("telegram", {
+        values: { linkTtlMinutes: "  ", enabled: "" },
+      }),
+      { set: {}, clear: ["linkTtlMinutes", "enabled"] }
+    );
+  });
+
   test("validates and normalises supplied values", () => {
     const patch = normalizeIntegrationPatch("telegram", {
       values: {
@@ -339,17 +349,32 @@ describe("describeIntegration", () => {
     }
   });
 
-  test("marks cTrader ready only with both required credentials", () => {
+  test("marks cTrader ready only with both credentials and a callback", () => {
     const missing = describeIntegration("ctrader", null, EMPTY_ENV, null);
     assert.equal(missing.ready, false);
     assert.equal(field(missing, "clientId").configured, false);
     assert.equal(field(missing, "clientSecret").configured, false);
     assert.equal(field(missing, "scope").source, "default");
     assert.equal(field(missing, "scope").value, "trading");
+    assert.equal(missing.errors.length, 0);
+
+    const noCallback = describeIntegration(
+      "ctrader",
+      { values: { clientId: "id", clientSecret: storedSecret("ctrader", "clientSecret", "shh") } },
+      EMPTY_ENV,
+      KEY
+    );
+    assert.equal(noCallback.ready, false);
 
     const ready = describeIntegration(
       "ctrader",
-      { values: { clientId: "id", clientSecret: storedSecret("ctrader", "clientSecret", "shh") } },
+      {
+        values: {
+          clientId: "id",
+          clientSecret: storedSecret("ctrader", "clientSecret", "shh"),
+          redirectUri: "https://example.com/callback",
+        },
+      },
       EMPTY_ENV,
       KEY
     );
@@ -381,7 +406,7 @@ describe("describeIntegration", () => {
       {
         CTRADER_CLIENT_ID: "env-id",
         CTRADER_CLIENT_SECRET: "env-secret",
-        CTRADER_REDIRECT_URI: "https://example.com/cb",
+        CTRADER_REDIRECT_URI: "https://example.com/callback",
       },
       null
     );
@@ -393,7 +418,7 @@ describe("describeIntegration", () => {
     // Environment secrets are never hinted at.
     assert.equal(field(state, "clientSecret").hint, null);
     assert.equal(field(state, "clientSecret").value, null);
-    assert.equal(field(state, "redirectUri").value, "https://example.com/cb");
+    assert.equal(field(state, "redirectUri").value, "https://example.com/callback");
   });
 
   test("database values win over the environment", () => {
@@ -403,7 +428,7 @@ describe("describeIntegration", () => {
         values: {
           clientId: "db-id",
           clientSecret: storedSecret("ctrader", "clientSecret", "db-secret"),
-          scope: "trading accounts",
+          scope: "accounts",
         },
       },
       {
@@ -415,7 +440,7 @@ describe("describeIntegration", () => {
     );
     assert.equal(field(state, "clientId").value, "db-id");
     assert.equal(field(state, "clientId").source, "database");
-    assert.equal(field(state, "scope").value, "trading accounts");
+    assert.equal(field(state, "scope").value, "accounts");
     assert.equal(field(state, "scope").source, "database");
     assert.equal(field(state, "clientSecret").source, "database");
   });
@@ -535,6 +560,7 @@ describe("describeIntegration", () => {
         lastTestAt,
         lastTestOk: false,
         lastTestMessage: "401 Unauthorized",
+        lastTestDraft: true,
       },
       EMPTY_ENV,
       null
@@ -544,6 +570,7 @@ describe("describeIntegration", () => {
     assert.equal(state.lastTestAt, lastTestAt.toISOString());
     assert.equal(state.lastTestOk, false);
     assert.equal(state.lastTestMessage, "401 Unauthorized");
+    assert.equal(state.lastTestDraft, true);
   });
 
   test("ignores malformed metadata", () => {
@@ -565,17 +592,19 @@ describe("describeIntegration", () => {
     assert.equal(state.lastTestAt, null);
     assert.equal(state.lastTestOk, null);
     assert.equal(state.lastTestMessage, null);
+    assert.equal(state.lastTestDraft, false);
   });
 });
 
 describe("resolveIntegrationValues", () => {
   test("resolves defaults and reports missing required fields", () => {
     const resolved = resolveIntegrationValues("ctrader", null, EMPTY_ENV, null);
-    assert.deepEqual(resolved.missing, ["clientId", "clientSecret"]);
+    assert.deepEqual(resolved.missing, ["clientId", "clientSecret", "redirectUri"]);
     assert.equal(resolved.values.scope, "trading");
     assert.equal(resolved.sources.scope, "default");
     assert.equal("clientId" in resolved.values, false);
     assert.equal("clientSecret" in resolved.values, false);
+    assert.equal("redirectUri" in resolved.values, false);
   });
 
   test("decrypts database secrets and applies database precedence", () => {
@@ -585,6 +614,7 @@ describe("resolveIntegrationValues", () => {
         values: {
           clientId: "db-id",
           clientSecret: storedSecret("ctrader", "clientSecret", "db-secret"),
+          redirectUri: "https://example.com/callback",
           scope: "trading",
         },
       },
@@ -743,5 +773,77 @@ describe("resolveIntegrationValues", () => {
       linkTtlMinutes: 10,
     });
     assert.deepEqual(resolved.missing, []);
+  });
+});
+
+describe("resolveDraftValues", () => {
+  const stored = {
+    values: {
+      clientId: "saved-id",
+      clientSecret: storedSecret("ctrader", "clientSecret", "saved-secret"),
+      redirectUri: "https://example.com/callback",
+    },
+  };
+
+  test("merges a draft over the saved values without writing", () => {
+    const resolved = resolveDraftValues(
+      "ctrader",
+      stored,
+      { values: { clientId: "draft-id" } },
+      EMPTY_ENV,
+      KEY
+    );
+    assert.equal(resolved.values.clientId, "draft-id");
+    assert.equal(resolved.values.clientSecret, "saved-secret");
+    assert.equal(resolved.values.redirectUri, "https://example.com/callback");
+    assert.deepEqual(resolved.missing, []);
+  });
+
+  test("an empty secret keeps the saved one", () => {
+    const resolved = resolveDraftValues(
+      "ctrader",
+      stored,
+      { values: { clientSecret: "  " } },
+      EMPTY_ENV,
+      KEY
+    );
+    assert.equal(resolved.values.clientSecret, "saved-secret");
+  });
+
+  test("clear removes a stored override and falls back to the environment", () => {
+    const resolved = resolveDraftValues(
+      "ctrader",
+      stored,
+      { clear: ["redirectUri"] },
+      { CTRADER_REDIRECT_URI: "https://env.example/callback" },
+      KEY
+    );
+    assert.equal(resolved.values.redirectUri, "https://env.example/callback");
+    assert.equal(resolved.sources.redirectUri, "environment");
+  });
+
+  test("a draft secret can replace one that cannot be decrypted", () => {
+    const resolved = resolveDraftValues(
+      "ctrader",
+      { values: { clientSecret: storedSecret("ctrader", "clientSecret", "shh") } },
+      { values: { clientSecret: "replacement" } },
+      EMPTY_ENV,
+      OTHER_KEY
+    );
+    assert.equal(resolved.values.clientSecret, "replacement");
+  });
+
+  test("rejects an unknown draft field", () => {
+    assert.throws(
+      () =>
+        resolveDraftValues(
+          "ctrader",
+          stored,
+          { values: { nope: "x" } },
+          EMPTY_ENV,
+          KEY
+        ),
+      IntegrationValidationError
+    );
   });
 });

@@ -35,8 +35,10 @@ export interface StoredAccount {
 
 const credentialsSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
-  clientId: { type: String, required: true },
-  clientSecret: { type: String, required: true },
+  // Only manual-mode connections store their own Open API app pair. OAuth
+  // connections use the platform app, so these fields stay absent.
+  clientId: { type: String },
+  clientSecret: { type: String },
   accessToken: { type: String, required: true },
   refreshToken: { type: String, required: true },
   accounts: { type: [{ ctid: Number, login: Number, broker: String, isLive: Boolean, nickname: String, color: String }], default: [] },
@@ -45,31 +47,54 @@ const credentialsSchema = new mongoose.Schema({
 
 export const Credentials = mongoose.model("Credentials", credentialsSchema);
 
-export async function loadCredentials(userId: string): Promise<{
-  clientId: string;
-  clientSecret: string;
+export interface StoredCredentials {
+  /** Null for OAuth connections, which use the platform app. */
+  clientId: string | null;
+  clientSecret: string | null;
   accessToken: string;
   refreshToken: string;
   accounts: StoredAccount[];
-} | null> {
+}
+
+export async function loadCredentials(userId: string): Promise<StoredCredentials | null> {
   const doc = await Credentials.findOne({ userId: new mongoose.Types.ObjectId(userId) }).lean().exec();
   if (!doc) return null;
   return {
-    clientId: doc.clientId,
-    clientSecret: doc.clientSecret,
+    clientId: typeof doc.clientId === "string" && doc.clientId ? doc.clientId : null,
+    clientSecret: typeof doc.clientSecret === "string" && doc.clientSecret ? doc.clientSecret : null,
     accessToken: doc.accessToken,
     refreshToken: doc.refreshToken,
     accounts: (doc.accounts || []) as StoredAccount[],
   };
 }
 
+export interface SaveCredentialsFields {
+  /** Undefined keeps the stored value; null removes it. */
+  clientId?: string | null;
+  /** Undefined keeps the stored value; null removes it. */
+  clientSecret?: string | null;
+  accessToken: string;
+  refreshToken: string;
+  accounts: StoredAccount[];
+}
+
 export async function saveCredentials(
   userId: string,
-  fields: { clientId: string; clientSecret: string; accessToken: string; refreshToken: string; accounts: StoredAccount[] }
+  fields: SaveCredentialsFields
 ): Promise<void> {
+  const { clientId, clientSecret, ...rest } = fields;
+  const $set: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+  const $unset: Record<string, unknown> = {};
+
+  if (clientId === null) $unset.clientId = "";
+  else if (clientId !== undefined) $set.clientId = clientId;
+
+  if (clientSecret === null) $unset.clientSecret = "";
+  else if (clientSecret !== undefined) $set.clientSecret = clientSecret;
+
   await Credentials.findOneAndUpdate(
     { userId: new mongoose.Types.ObjectId(userId) },
-    { $set: { ...fields, updatedAt: new Date() } },
+    Object.keys($unset).length > 0 ? { $set, $unset } : { $set },
     { upsert: true }
   );
 }

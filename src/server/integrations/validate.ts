@@ -133,6 +133,13 @@ export function normalizeIntegrationPatch(
     // which omits untouched inputs.
     if (raw === undefined || raw === null) continue;
 
+    // An empty non-secret clears the database override. Check this before
+    // coercion so number and boolean fields behave like text and select ones.
+    if (def.kind !== "secret" && typeof raw === "string" && raw.trim() === "") {
+      clear.push(key);
+      continue;
+    }
+
     const value = coerceFieldValue(def, raw);
     if (value === null) {
       // An empty secret is not a request to erase it; clear does that

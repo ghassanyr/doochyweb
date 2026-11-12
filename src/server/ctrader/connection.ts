@@ -1,5 +1,6 @@
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
 import { loadCredentials, saveCredentials } from "../db";
+import { ctraderAppCredentials } from "./appConfig";
 
 // Per-user, per-environment socket pool. One process-level map of UserSockets,
 // each holding at most two CTraderConnection instances (one demo, one live).
@@ -232,6 +233,24 @@ export class UserSockets {
     return c;
   }
 
+  /**
+   * The app pair to open a socket with: the user's manual pair when present,
+   * otherwise the platform app. A missing platform configuration fails closed
+   * instead of reusing a stale pair.
+   */
+  private async appCredentials(c: Awaited<ReturnType<typeof loadCredentials>>) {
+    if (c?.clientId && c.clientSecret) {
+      return { clientId: c.clientId, clientSecret: c.clientSecret };
+    }
+    const platform = await ctraderAppCredentials();
+    if (!platform) {
+      throw new Error(
+        "No cTrader app credentials configured. An admin must finish the cTrader setup."
+      );
+    }
+    return platform;
+  }
+
   private async channel(env: CtraderEnv): Promise<Channel> {
     const opening = env === "demo" ? this.demoOpening : this.liveOpening;
     if (opening) return opening;
@@ -246,12 +265,13 @@ export class UserSockets {
 
   private async openChannel(env: CtraderEnv): Promise<Channel> {
     const c = await this.creds();
+    const app = await this.appCredentials(c);
     // Re-check after the await: a concurrent caller may have opened it already.
     let ch = env === "demo" ? this.demo : this.live;
     if (ch?.healthy) return ch;
     ch?.close();
     ch = new Channel(env);
-    await ch.open(c.clientId, c.clientSecret);
+    await ch.open(app.clientId, app.clientSecret);
     if (env === "demo") this.demo = ch; else this.live = ch;
     return ch;
   }
@@ -420,8 +440,6 @@ export class UserSockets {
     const refreshToken = res?.refreshToken;
     if (!accessToken || !refreshToken) throw new Error("Refresh response missing tokens");
     await saveCredentials(this.userId, {
-      clientId: c.clientId,
-      clientSecret: c.clientSecret,
       accessToken,
       refreshToken,
       accounts: c.accounts,
