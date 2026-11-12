@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { AccountView } from "./api";
 import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
-import { Card, Toggle } from "./components/ui";
+import { Card, Toggle, accountColorHex } from "./components/ui";
 import { FadeRise } from "./components/motion";
 
 export type ViewMode = "separate" | "combined";
@@ -44,51 +43,58 @@ export default function Dashboard({
   }, [accounts, selectedCtid]);
 
   const selected = accounts.find((a) => a.ctid === selectedCtid) ?? null;
-  const demoAccounts = accounts.filter((a) => !a.isLive);
-  const liveAccounts = accounts.filter((a) => a.isLive);
 
   return (
     <FadeRise>
       <div className="space-y-5">
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-2">
               <span className="text-sm font-medium text-fg-muted">Account</span>
-              <div className="relative min-w-0 flex-1">
-                <select
-                  id="account-select"
-                  value={mode === "combined" ? "" : selectedCtid ?? ""}
-                  disabled={mode === "combined"}
-                  onChange={(e) => setSelectedCtid(Number(e.target.value))}
-                  className="w-full appearance-none rounded-lg border border-hairline-strong bg-soft py-2 pl-3 pr-8 text-sm font-medium text-fg focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50"
-                >
-                  {mode === "combined" && <option value="">All accounts</option>}
-                  {liveAccounts.length > 0 && (
-                    <option value="__live" disabled>
-                      Live
-                    </option>
-                  )}
-                  {liveAccounts.map((a) => (
-                    <option key={a.ctid} value={a.ctid}>
-                      {(a.nickname?.trim() || a.login)} · {a.broker}
-                      {a.balance != null ? ` · ${fmtMoney(a.balance)} ${a.currency ?? ""}` : ""}
-                    </option>
-                  ))}
-                  {demoAccounts.length > 0 && (
-                    <option value="__demo" disabled>
-                      Demo
-                    </option>
-                  )}
-                  {demoAccounts.map((a) => (
-                    <option key={a.ctid} value={a.ctid}>
-                      {(a.nickname?.trim() || a.login)} · {a.broker}
-                      {a.balance != null ? ` · ${fmtMoney(a.balance)} ${a.currency ?? ""}` : ""}
-                    </option>
-                  ))}
-                  {accounts.length === 0 && <option value="">No accounts</option>}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
-              </div>
+              {mode === "combined" && (
+                <button type="button" aria-pressed className={accountPillCls(true)}>
+                  All accounts
+                </button>
+              )}
+              {accounts.map((a) => {
+                const active = mode === "separate" && a.ctid === selectedCtid;
+                const hex = accountColorHex(a.color);
+                return (
+                  <button
+                    key={a.ctid}
+                    type="button"
+                    onClick={() => {
+                      switchMode("separate");
+                      setSelectedCtid(a.ctid);
+                    }}
+                    aria-pressed={active}
+                    title={accountTitle(a)}
+                    className={accountPillCls(active)}
+                  >
+                    {hex && (
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: hex }}
+                      />
+                    )}
+                    <span className="max-w-[14rem] truncate">{a.nickname?.trim() || a.login}</span>
+                    <span className={"truncate " + (active ? "opacity-80" : "text-fg-faint")}>
+                      · {a.broker}
+                    </span>
+                    <span
+                      className={
+                        "shrink-0 text-[9.5px] font-semibold uppercase tracking-wide " +
+                        (active ? "opacity-70" : "text-fg-faint")
+                      }
+                    >
+                      {a.isLive ? "Live" : "Demo"}
+                    </span>
+                  </button>
+                );
+              })}
+              {accounts.length === 0 && (
+                <span className="text-sm text-fg-faint">No accounts</span>
+              )}
             </div>
             <Toggle
               label="Combined"
@@ -156,6 +162,21 @@ function Tabs({
       )}
     </div>
   );
+}
+
+function accountPillCls(active: boolean): string {
+  return (
+    "inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition " +
+    (active
+      ? "border-accent/30 bg-accent-soft text-accent"
+      : "border-hairline-strong bg-soft text-fg-muted hover:bg-surface-hover hover:text-fg")
+  );
+}
+
+function accountTitle(a: AccountView): string {
+  const name = a.nickname?.trim() || a.login;
+  const balance = a.balance != null ? ` · ${fmtMoney(a.balance)} ${a.currency ?? ""}` : "";
+  return `${name} · ${a.broker}${balance} · ${a.isLive ? "Live" : "Demo"}`;
 }
 
 export function fmtMoney(n: number | null | undefined): string {
