@@ -226,7 +226,7 @@ let stopFn: (() => void) | null = null;
 export async function startPolling(log: (msg: string) => void = console.log): Promise<void> {
   if (stopFn) return;
   const config = await loadTelegramConfig();
-  if (!config.enabled || config.mode !== "polling") return;
+  if (!config.enabled) return;
 
   const me = await getMe();
   log(`[telegram] getMe ok @${me.username ?? config.botUsername}`);

@@ -165,11 +165,11 @@ export function buildHelpMessage(): string {
   return [
     "<b>Doochy bot</b>",
     "",
-    "/status — connection and notification state",
-    "/stop — pause notifications",
-    "/resume — resume notifications",
-    "/unlink — disconnect this chat",
-    "/help — this message",
+    "/status: connection and notification state",
+    "/stop: pause notifications",
+    "/resume: resume notifications",
+    "/unlink: disconnect this chat",
+    "/help: this message",
   ].join("\n");
 }
 

@@ -100,17 +100,6 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         hint: "Without the @. Used for the t.me link.",
       },
       {
-        key: "mode",
-        label: "Update mode",
-        kind: "select",
-        env: "TELEGRAM_MODE",
-        defaultValue: "polling",
-        options: [
-          { value: "polling", label: "Polling (no public URL needed)" },
-          { value: "webhook", label: "Webhook" },
-        ],
-      },
-      {
         key: "baseUrl",
         label: "Public base URL",
         kind: "text",

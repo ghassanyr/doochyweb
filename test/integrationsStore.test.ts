@@ -153,12 +153,12 @@ describe("coerceFieldValue", () => {
   });
 
   test("restricts select fields to their options", () => {
-    const mode = def("telegram", "mode");
-    assert.equal(coerceFieldValue(mode, "polling"), "polling");
-    assert.equal(coerceFieldValue(mode, " webhook "), "webhook");
-    const err = errorOf(() => coerceFieldValue(mode, "carrier-pigeon"));
+    const scope = def("ctrader", "scope");
+    assert.equal(coerceFieldValue(scope, "trading"), "trading");
+    assert.equal(coerceFieldValue(scope, " accounts "), "accounts");
+    const err = errorOf(() => coerceFieldValue(scope, "carrier-pigeon"));
     assert.ok(err instanceof IntegrationValidationError);
-    assert.equal(err.message.includes("polling, webhook"), true);
+    assert.equal(err.message.includes("trading, accounts"), true);
   });
 });
 
@@ -226,7 +226,6 @@ describe("normalizeIntegrationPatch", () => {
       values: {
         botToken: " 123:abc ",
         botUsername: "DoochyBot",
-        mode: "webhook",
         enabled: "yes",
         linkTtlMinutes: "30",
       },
@@ -234,7 +233,6 @@ describe("normalizeIntegrationPatch", () => {
     assert.deepEqual(patch.set, {
       botToken: "123:abc",
       botUsername: "DoochyBot",
-      mode: "webhook",
       enabled: true,
       linkTtlMinutes: 30,
     });
@@ -396,7 +394,6 @@ describe("describeIntegration", () => {
     assert.equal(field(state, "baseUrl").value, "https://doochy.net");
     assert.equal(field(state, "enabled").value, true);
     assert.equal(field(state, "linkTtlMinutes").value, 15);
-    assert.equal(field(state, "mode").value, "polling");
   });
 
   test("falls back to the environment when nothing is stored", () => {
@@ -636,7 +633,6 @@ describe("resolveIntegrationValues", () => {
       {
         TELEGRAM_BOT_TOKEN: "123:env",
         TELEGRAM_BOT_USERNAME: "EnvBot",
-        TELEGRAM_MODE: "webhook",
         PUBLIC_BASE_URL: "https://env.example",
         TELEGRAM_ENABLED: "false",
         TELEGRAM_LINK_TTL_MINUTES: "5",
@@ -646,7 +642,7 @@ describe("resolveIntegrationValues", () => {
     assert.deepEqual(resolved.missing, []);
     assert.equal(resolved.values.botToken, "123:env");
     assert.equal(resolved.values.botUsername, "EnvBot");
-    assert.equal(resolved.values.mode, "webhook");
+    assert.equal("mode" in resolved.values, false);
     assert.equal(resolved.values.baseUrl, "https://env.example");
     assert.equal(resolved.values.enabled, false);
     assert.equal(resolved.values.linkTtlMinutes, 5);
@@ -755,7 +751,6 @@ describe("resolveIntegrationValues", () => {
         values: {
           botToken: storedSecret("telegram", "botToken", "123:abc"),
           botUsername: "MyBot",
-          mode: "webhook",
           baseUrl: "https://bot.example",
           enabled: true,
           linkTtlMinutes: 10,
@@ -767,7 +762,6 @@ describe("resolveIntegrationValues", () => {
     assert.deepEqual(resolved.values, {
       botToken: "123:abc",
       botUsername: "MyBot",
-      mode: "webhook",
       baseUrl: "https://bot.example",
       enabled: true,
       linkTtlMinutes: 10,

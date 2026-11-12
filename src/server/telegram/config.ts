@@ -1,19 +1,16 @@
 // Telegram configuration.
 //
-// Effective values come from the integrations store (database → environment →
-// default), so a buyer can configure the bot from the admin panel while an
+// Effective values come from the integrations store (database, then environment,
+// then default), so a buyer can configure the bot from the admin panel while an
 // existing .env deployment keeps working. The bot stays disabled unless a token
 // is present, so local development and the test suite never reach
-// api.telegram.org by accident.
+// api.telegram.org by accident. Updates are always fetched by long polling.
 
 import { resolveIntegration } from "../integrations/store";
-
-export type TelegramMode = "polling" | "webhook";
 
 export interface TelegramConfig {
   enabled: boolean;
   token: string;
-  mode: TelegramMode;
   botUsername: string;
   baseUrl: string;
   linkTtlMinutes: number;
@@ -47,8 +44,6 @@ export function telegramConfigFromValues(
 ): TelegramConfig {
   const token = text(values.botToken);
   const enabled = token.length > 0 && asBoolean(values.enabled, true);
-  const mode: TelegramMode =
-    text(values.mode).toLowerCase() === "webhook" ? "webhook" : "polling";
   const baseUrl =
     (text(values.baseUrl) || "https://doochy.net").replace(/\/+$/, "") || "https://doochy.net";
   const botUsername =
@@ -56,7 +51,7 @@ export function telegramConfigFromValues(
   const ttlRaw = Number(values.linkTtlMinutes);
   const linkTtlMinutes =
     Number.isFinite(ttlRaw) && ttlRaw > 0 ? Math.min(60, Math.floor(ttlRaw)) : 15;
-  return { enabled, token, mode, botUsername, baseUrl, linkTtlMinutes };
+  return { enabled, token, botUsername, baseUrl, linkTtlMinutes };
 }
 
 /** Environment-only view, kept for tests and bootstrap callers. */
@@ -64,7 +59,6 @@ export function telegramConfig(env: NodeJS.ProcessEnv = process.env): TelegramCo
   return telegramConfigFromValues({
     botToken: env.TELEGRAM_BOT_TOKEN,
     enabled: env.TELEGRAM_ENABLED,
-    mode: env.TELEGRAM_MODE,
     baseUrl: env.PUBLIC_BASE_URL,
     botUsername: env.TELEGRAM_BOT_USERNAME,
     linkTtlMinutes: env.TELEGRAM_LINK_TTL_MINUTES,

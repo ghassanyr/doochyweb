@@ -168,8 +168,8 @@ export default function OrdersTab({
             size="sm"
             variant="secondary"
             icon={<Plus className="h-4 w-4" />}
-            disabled={combined || ctid == null}
-            title={combined ? "Switch to a single account to place orders" : "New order"}
+            disabled={accounts.length === 0}
+            title="New order"
             onClick={() => setTicketOpen(true)}
           >
             New order
@@ -256,9 +256,9 @@ export default function OrdersTab({
         open={ticketOpen}
         onClose={() => setTicketOpen(false)}
         onDone={load}
-        ctid={ctid ?? 0}
+        accounts={accounts}
+        defaultCtids={mode === "combined" ? accounts.map((a) => a.ctid) : ctid != null ? [ctid] : []}
         symbols={syms}
-        accountLabel={accountLabel}
       />
 
       {isAdmin && (

@@ -185,7 +185,7 @@ function Field({
           spellCheck={false}
           placeholder={
             field.kind === "secret" && field.configured && !cleared
-              ? "Saved — leave empty to keep it"
+              ? "Saved. Leave empty to keep it"
               : field.placeholder
           }
           onChange={(event) => onChange(event.target.value)}
@@ -336,7 +336,7 @@ function ProviderCard({
               >
                 openapi.ctrader.com/apps
               </a>{" "}
-              and create an app. Spotware approves new apps by email.
+              and create an app.
             </li>
             <li>Copy the app's Client ID and Client secret into the fields below.</li>
             <li>Add one of the callback URLs below to the app's redirect URIs. It must match exactly.</li>

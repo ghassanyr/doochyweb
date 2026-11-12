@@ -44,7 +44,7 @@ describe("telegram config", () => {
   test("is disabled without a token", () => {
     const config = telegramConfig({});
     assert.equal(config.enabled, false);
-    assert.equal(config.mode, "polling");
+    assert.equal("mode" in config, false);
     assert.equal(config.baseUrl, "https://doochy.net");
     assert.equal(config.botUsername, "DoochyBot");
     assert.equal(config.linkTtlMinutes, 15);
@@ -68,13 +68,11 @@ describe("telegram config", () => {
     assert.equal(config.enabled, false);
   });
 
-  test("accepts webhook mode and clamps the TTL", () => {
+  test("clamps the TTL", () => {
     const config = telegramConfig({
       TELEGRAM_BOT_TOKEN: "123:abc",
-      TELEGRAM_MODE: "webhook",
       TELEGRAM_LINK_TTL_MINUTES: "999",
     });
-    assert.equal(config.mode, "webhook");
     assert.equal(config.linkTtlMinutes, 60);
   });
 
@@ -82,7 +80,6 @@ describe("telegram config", () => {
     const config = telegramConfigFromValues({
       botToken: " 123:abc ",
       botUsername: "@MyBot",
-      mode: "webhook",
       baseUrl: "https://example.com/",
       enabled: true,
       linkTtlMinutes: 5,
@@ -90,7 +87,6 @@ describe("telegram config", () => {
     assert.deepEqual(config, {
       enabled: true,
       token: "123:abc",
-      mode: "webhook",
       botUsername: "MyBot",
       baseUrl: "https://example.com",
       linkTtlMinutes: 5,

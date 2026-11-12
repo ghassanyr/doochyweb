@@ -742,7 +742,7 @@ export default function AdminSettingsPage({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <SelectField
-              label="Landing page — signed in"
+              label="Landing page: signed in"
               value={navigation.landing.signedIn}
               onChange={(signedIn) =>
                 setNavigation({
@@ -754,7 +754,7 @@ export default function AdminSettingsPage({
               hint="Applied when a signed-in visitor opens the site root."
             />
             <SelectField
-              label="Landing page — signed out"
+              label="Landing page: signed out"
               value={navigation.landing.signedOut}
               onChange={(signedOut) =>
                 setNavigation({

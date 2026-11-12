@@ -31,14 +31,10 @@ export async function startTelegram(log: (msg: string) => void = console.log): P
 
   startOutbox(log);
 
-  if (config.mode === "polling") {
-    try {
-      await startPolling(log);
-    } catch (err) {
-      log(`[telegram] bot failed to start: ${errorText(err)}`);
-    }
-  } else {
-    log("[telegram] webhook mode selected; polling not started");
+  try {
+    await startPolling(log);
+  } catch (err) {
+    log(`[telegram] bot failed to start: ${errorText(err)}`);
   }
 }
 
