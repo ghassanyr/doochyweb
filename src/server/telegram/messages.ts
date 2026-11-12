@@ -67,7 +67,9 @@ export function buildPublishedMessage(signal: SignalView): string {
         : fmtPrice(signal.entry);
     prices.push(`Entry <code>${entry}</code>`);
   }
-  prices.push(`Target <code>${fmtPrice(signal.target)}</code>`);
+  prices.push(`TP1 <code>${fmtPrice(signal.target)}</code>`);
+  if (signal.target2 != null) prices.push(`TP2 <code>${fmtPrice(signal.target2)}</code>`);
+  if (signal.target3 != null) prices.push(`TP3 <code>${fmtPrice(signal.target3)}</code>`);
   prices.push(`Stop <code>${fmtPrice(signal.stop)}</code>`);
   lines.push(prices.join(" · "));
 

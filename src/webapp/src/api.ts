@@ -245,6 +245,8 @@ export interface SignalInputPayload {
   /** Upper bound when entry is a range; null or omitted for a single entry. */
   entryMax?: number | null;
   target: number;
+  target2?: number | null;
+  target3?: number | null;
   stop: number;
   timeframe?: string | null;
   note?: string;

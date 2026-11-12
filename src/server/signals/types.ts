@@ -24,7 +24,11 @@ export interface SignalView {
   entry: number | null;
   /** Upper bound when `entry` describes a range; null for a single entry. */
   entryMax: number | null;
+  /** TP1 (also drives automatic outcome resolution). */
   target: number;
+  /** Optional TP2 / TP3 beyond TP1. */
+  target2: number | null;
+  target3: number | null;
   stop: number;
   timeframe: string | null;
   note: string;
@@ -68,7 +72,11 @@ export interface SignalInput {
   entry: number | null;
   /** Upper bound when `entry` describes a range; null for a single entry. */
   entryMax: number | null;
+  /** TP1 (also drives automatic outcome resolution). */
   target: number;
+  /** Optional TP2 / TP3 beyond TP1. */
+  target2: number | null;
+  target3: number | null;
   stop: number;
   timeframe: string | null;
   note: string;

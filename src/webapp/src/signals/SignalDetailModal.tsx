@@ -75,7 +75,13 @@ export function SignalDetailModal({
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Detail label="Entry" value={fmtEntry(signal.entry, signal.entryMax)} />
-            <Detail label="Target" value={fmtPrice(signal.target)} tone="text-success" />
+            <Detail label="TP1" value={fmtPrice(signal.target)} tone="text-success" />
+            {signal.target2 != null && (
+              <Detail label="TP2" value={fmtPrice(signal.target2)} tone="text-success" />
+            )}
+            {signal.target3 != null && (
+              <Detail label="TP3" value={fmtPrice(signal.target3)} tone="text-success" />
+            )}
             <Detail label="Stop" value={fmtPrice(signal.stop)} tone="text-danger" />
             <Detail label="Reward:risk" value={fmtRR(rr)} />
           </div>

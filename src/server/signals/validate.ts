@@ -44,6 +44,13 @@ export function validateSignalInput(
 
   const target = asNumber(body.target);
   if (target === null || target <= 0) return { ok: false, error: "target must be a positive number" };
+  const target2 = asNumber(body.target2);
+  if (target2 !== null && target2 <= 0) return { ok: false, error: "tp2 must be a positive number" };
+  const target3 = asNumber(body.target3);
+  if (target3 !== null) {
+    if (target2 === null) return { ok: false, error: "tp2 is required when tp3 is set" };
+    if (target3 <= 0) return { ok: false, error: "tp3 must be a positive number" };
+  }
   const stop = asNumber(body.stop);
   if (stop === null || stop <= 0) return { ok: false, error: "stop must be a positive number" };
   if (target === stop) return { ok: false, error: "target and stop must be different" };
@@ -81,6 +88,22 @@ export function validateSignalInput(
       return { ok: false, error: "for a sell, target must be below entry and entry below stop" };
     }
   }
+  if (target2 !== null) {
+    if (direction === "buy" && !(target2 > target)) {
+      return { ok: false, error: "for a buy, tp2 must be above tp1" };
+    }
+    if (direction === "sell" && !(target2 < target)) {
+      return { ok: false, error: "for a sell, tp2 must be below tp1" };
+    }
+  }
+  if (target3 !== null && target2 !== null) {
+    if (direction === "buy" && !(target3 > target2)) {
+      return { ok: false, error: "for a buy, tp3 must be above tp2" };
+    }
+    if (direction === "sell" && !(target3 < target2)) {
+      return { ok: false, error: "for a sell, tp3 must be below tp2" };
+    }
+  }
 
   const timeframeRaw = asText(body.timeframe);
   const timeframe = timeframeRaw ? timeframeRaw : null;
@@ -103,7 +126,19 @@ export function validateSignalInput(
 
   return {
     ok: true,
-    value: { symbol, direction: direction as SignalDirection, entry, entryMax, target, stop, timeframe, note, expiresAt },
+    value: {
+      symbol,
+      direction: direction as SignalDirection,
+      entry,
+      entryMax,
+      target,
+      target2,
+      target3,
+      stop,
+      timeframe,
+      note,
+      expiresAt,
+    },
   };
 }
 

@@ -49,6 +49,8 @@ const signalSchema = new mongoose.Schema(
     entry: { type: Number, default: null },
     entryMax: { type: Number, default: null },
     target: { type: Number, required: true },
+    target2: { type: Number, default: null },
+    target3: { type: Number, default: null },
     stop: { type: Number, required: true },
     timeframe: { type: String, default: null },
     note: { type: String, default: "" },
@@ -86,6 +88,8 @@ export function toView(doc: any): SignalView {
     entry: doc.entry ?? null,
     entryMax: doc.entryMax ?? null,
     target: doc.target,
+    target2: doc.target2 ?? null,
+    target3: doc.target3 ?? null,
     stop: doc.stop,
     timeframe: doc.timeframe ?? null,
     note: doc.note ?? "",
@@ -225,6 +229,8 @@ export async function updateSignal(
         ? null
         : doc.entryMax,
     target: has(patch, "target") ? patch.target : doc.target,
+    target2: has(patch, "target2") ? patch.target2 : doc.target2,
+    target3: has(patch, "target3") ? patch.target3 : doc.target3,
     stop: has(patch, "stop") ? patch.stop : doc.stop,
     timeframe: has(patch, "timeframe") ? patch.timeframe : doc.timeframe,
     note: has(patch, "note") ? patch.note : doc.note,
@@ -258,6 +264,8 @@ export async function updateSignal(
   doc.entry = value.entry;
   doc.entryMax = value.entryMax;
   doc.target = value.target;
+  doc.target2 = value.target2;
+  doc.target3 = value.target3;
   doc.stop = value.stop;
   doc.timeframe = value.timeframe;
   doc.note = value.note;

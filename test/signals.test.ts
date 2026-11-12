@@ -37,6 +37,8 @@ const base: Signal = {
   entry: 2400,
   entryMax: null,
   target: 2450,
+  target2: null,
+  target3: null,
   stop: 2380,
   timeframe: "4h",
   note: "Breakout retest",
@@ -172,6 +174,71 @@ describe("signal validation", () => {
       stop: 1.1,
     });
     assert.equal(sellBeyondStop.ok, false);
+  });
+
+  test("accepts optional TP2 and TP3 beyond TP1", () => {
+    const buy = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      target: 2450,
+      target2: 2460,
+      target3: 2470,
+      stop: 2380,
+    });
+    assert.equal(buy.ok, true);
+    if (buy.ok) {
+      assert.equal(buy.value.target2, 2460);
+      assert.equal(buy.value.target3, 2470);
+    }
+
+    const sell = validateSignalInput({
+      symbol: "EURUSD",
+      direction: "sell",
+      target: 1.07,
+      target2: 1.06,
+      target3: 1.05,
+      stop: 1.1,
+    });
+    assert.equal(sell.ok, true);
+  });
+
+  test("rejects TP2/TP3 out of order", () => {
+    const tp2Below = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      target: 2450,
+      target2: 2440,
+      stop: 2380,
+    });
+    assert.equal(tp2Below.ok, false);
+
+    const tp3BelowTp2 = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      target: 2450,
+      target2: 2460,
+      target3: 2455,
+      stop: 2380,
+    });
+    assert.equal(tp3BelowTp2.ok, false);
+
+    const orphanTp3 = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      target: 2450,
+      target3: 2470,
+      stop: 2380,
+    });
+    assert.equal(orphanTp3.ok, false);
+
+    const sellTp2Above = validateSignalInput({
+      symbol: "EURUSD",
+      direction: "sell",
+      target: 1.07,
+      target2: 1.08,
+      stop: 1.1,
+    });
+    assert.equal(sellTp2Above.ok, false);
   });
 
   test("rejects unknown directions, timeframes and empty symbols", () => {
@@ -394,6 +461,13 @@ describe("signal presentation", () => {
     assert.match(text, /Entry:/);
     assert.match(text, /R:R 2\.50/);
     assert.match(text, /Note: Breakout retest/);
+  });
+
+  test("share text includes optional take profits", () => {
+    const text = signalShareText({ ...base, target2: 2460, target3: 2470 });
+    assert.match(text, /TP1: .*/);
+    assert.match(text, /TP2: .*/);
+    assert.match(text, /TP3: .*/);
   });
 
   test("share text shows an entry range", () => {

@@ -27,6 +27,8 @@ const signal: SignalView = {
   entry: 2400,
   entryMax: null,
   target: 2450,
+  target2: null,
+  target3: null,
   stop: 2380,
   timeframe: "4h",
   note: "Breakout retest",
@@ -185,7 +187,7 @@ describe("telegram messages", () => {
     assert.match(text, /New signal/);
     assert.match(text, /XAUUSD <b>BUY<\/b>/);
     assert.match(text, /Entry <code>2400\.00<\/code>/);
-    assert.match(text, /Target <code>2450\.00<\/code>/);
+    assert.match(text, /TP1 <code>2450\.00<\/code>/);
     assert.match(text, /Stop <code>2380\.00<\/code>/);
     assert.match(text, /R:R 2\.50/);
     assert.match(text, /4h/);
@@ -197,6 +199,12 @@ describe("telegram messages", () => {
     const text = buildPublishedMessage({ ...signal, entry: 2400, entryMax: 2410 });
     assert.match(text, /Entry <code>2400\.00–2410\.00<\/code>/);
     assert.match(text, /R:R 1\.80/);
+  });
+
+  test("includes TP2 and TP3 when present", () => {
+    const text = buildPublishedMessage({ ...signal, target2: 2460, target3: 2470 });
+    assert.match(text, /TP2 <code>2460\.00<\/code>/);
+    assert.match(text, /TP3 <code>2470\.00<\/code>/);
   });
 
   test("escapes dynamic text in the publish message", () => {

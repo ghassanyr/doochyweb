@@ -37,6 +37,10 @@ export function SignalFormModal({
   const [entry, setEntry] = useState("");
   const [entryMax, setEntryMax] = useState("");
   const [target, setTarget] = useState("");
+  const [target2On, setTarget2On] = useState(false);
+  const [target3On, setTarget3On] = useState(false);
+  const [target2, setTarget2] = useState("");
+  const [target3, setTarget3] = useState("");
   const [stop, setStop] = useState("");
   const [timeframe, setTimeframe] = useState("");
   const [note, setNote] = useState("");
@@ -56,6 +60,10 @@ export function SignalFormModal({
     setEntry(draft?.entry != null ? String(draft.entry) : "");
     setEntryMax(draft?.entryMax != null ? String(draft.entryMax) : "");
     setTarget(draft?.target != null ? String(draft.target) : "");
+    setTarget2On(signal?.target2 != null);
+    setTarget3On(signal?.target2 != null && signal?.target3 != null);
+    setTarget2(signal?.target2 != null ? String(signal.target2) : "");
+    setTarget3(signal?.target3 != null ? String(signal.target3) : "");
     setStop(draft?.stop != null ? String(draft.stop) : "");
     setTimeframe(signal?.timeframe ?? "");
     setNote(signal?.note ?? "");
@@ -68,6 +76,8 @@ export function SignalFormModal({
   const entryNum = entry.trim() === "" ? null : Number(entry);
   const entryMaxNum = entryMode === "range" && entryMax.trim() !== "" ? Number(entryMax) : null;
   const targetNum = Number(target);
+  const target2Num = target2On && target2.trim() !== "" ? Number(target2) : null;
+  const target3Num = target3On && target3.trim() !== "" ? Number(target3) : null;
   const stopNum = Number(stop);
   const rr = computeRR(entryNum, targetNum, stopNum, entryMaxNum);
   const selectedExpiryLabel =
@@ -95,6 +105,21 @@ export function SignalFormModal({
     if (targetNum === stopNum) return "Target and stop must be different.";
     if (direction === "buy" && !(targetNum > stopNum)) return "For a buy, target must be above stop.";
     if (direction === "sell" && !(targetNum < stopNum)) return "For a sell, target must be below stop.";
+    if (target2On) {
+      if (target2Num === null || !Number.isFinite(target2Num) || target2Num <= 0) {
+        return "TP2 must be a positive number.";
+      }
+      if (direction === "buy" && !(target2Num > targetNum)) return "For a buy, TP2 must be above TP1.";
+      if (direction === "sell" && !(target2Num < targetNum)) return "For a sell, TP2 must be below TP1.";
+    }
+    if (target3On) {
+      if (target2Num === null) return "Enable TP2 before TP3.";
+      if (target3Num === null || !Number.isFinite(target3Num) || target3Num <= 0) {
+        return "TP3 must be a positive number.";
+      }
+      if (direction === "buy" && !(target3Num > target2Num)) return "For a buy, TP3 must be above TP2.";
+      if (direction === "sell" && !(target3Num < target2Num)) return "For a sell, TP3 must be below TP2.";
+    }
     if (entryMode === "range") {
       if (entryNum === null) return "Entry low is required for a range.";
       if (entryMaxNum === null) return "Entry high is required for a range.";
@@ -138,6 +163,8 @@ export function SignalFormModal({
       entry: entryNum,
       entryMax: entryMode === "range" ? entryMaxNum : null,
       target: targetNum,
+      target2: target2On ? target2Num : null,
+      target3: target3On ? target3Num : null,
       stop: stopNum,
       timeframe: timeframe || null,
       note,
@@ -233,7 +260,7 @@ export function SignalFormModal({
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-fg-muted">Entry levels</span>
+            <span className="text-xs font-medium text-fg-muted">Entry &amp; stop</span>
             <div className="flex rounded-lg border border-hairline-strong bg-soft p-[3px]">
               {(["entry", "range"] as const).map((mode) => (
                 <button
@@ -253,7 +280,7 @@ export function SignalFormModal({
               ))}
             </div>
           </div>
-          <div className={"grid gap-3 " + (entryMode === "range" ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
+          <div className={"grid gap-3 " + (entryMode === "range" ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
             {entryMode === "range" ? (
               <>
                 <NumberField label="Entry low" value={entry} onChange={setEntry} placeholder="2400.00" />
@@ -262,8 +289,46 @@ export function SignalFormModal({
             ) : (
               <NumberField label="Entry (optional)" value={entry} onChange={setEntry} placeholder="2400.00" />
             )}
-            <NumberField label="Target" value={target} onChange={setTarget} placeholder="2450.00" />
             <NumberField label="Stop" value={stop} onChange={setStop} placeholder="2380.00" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-fg-muted">Take profits</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !target2On;
+                  setTarget2On(next);
+                  if (!next) setTarget3On(false);
+                }}
+                aria-pressed={target2On}
+                className={tpToggleCls(target2On)}
+              >
+                TP2
+              </button>
+              {target2On && (
+                <button
+                  type="button"
+                  onClick={() => setTarget3On((on) => !on)}
+                  aria-pressed={target3On}
+                  className={tpToggleCls(target3On)}
+                >
+                  TP3
+                </button>
+              )}
+            </div>
+          </div>
+          <div className={"grid gap-3 " + (target2On && !target3On ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+            <NumberField label="TP1" value={target} onChange={setTarget} placeholder="2450.00" />
+            {target2On && (
+              <NumberField label="TP2" value={target2} onChange={setTarget2} placeholder="2460.00" />
+            )}
+            {target3On && (
+              <NumberField label="TP3" value={target3} onChange={setTarget3} placeholder="2470.00" />
+            )}
           </div>
         </div>
 
@@ -365,6 +430,15 @@ export function SignalFormModal({
         </div>
       </div>
     </AnimatedModal>
+  );
+}
+
+function tpToggleCls(active: boolean): string {
+  return (
+    "h-6 rounded-md border px-2 text-[10px] font-semibold uppercase tracking-wide transition " +
+    (active
+      ? "border-accent/40 bg-accent-soft text-accent"
+      : "border-hairline-strong bg-soft text-fg-muted hover:bg-surface-hover hover:text-fg")
   );
 }
 

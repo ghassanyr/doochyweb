@@ -151,7 +151,9 @@ export function signalShareText(signal: Signal): string {
     `${signal.symbol} ${signal.direction.toUpperCase()}${signal.timeframe ? ` (${signal.timeframe})` : ""}`,
   ];
   if (signal.entry != null) lines.push(`Entry: ${fmtEntry(signal.entry, signal.entryMax)}`);
-  lines.push(`Target: ${fmtPrice(signal.target)}`);
+  lines.push(`TP1: ${fmtPrice(signal.target)}`);
+  if (signal.target2 != null) lines.push(`TP2: ${fmtPrice(signal.target2)}`);
+  if (signal.target3 != null) lines.push(`TP3: ${fmtPrice(signal.target3)}`);
   lines.push(`Stop: ${fmtPrice(signal.stop)}`);
   const rr = computeRR(signal.entry, signal.target, signal.stop, signal.entryMax);
   if (rr != null) lines.push(`R:R ${rr.toFixed(2)}`);
