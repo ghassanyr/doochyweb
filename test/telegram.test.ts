@@ -25,6 +25,7 @@ const signal: SignalView = {
   symbol: "XAUUSD",
   direction: "buy",
   entry: 2400,
+  entryMax: null,
   target: 2450,
   stop: 2380,
   timeframe: "4h",
@@ -190,6 +191,12 @@ describe("telegram messages", () => {
     assert.match(text, /4h/);
     assert.match(text, /Breakout retest/);
     assert.match(text, /Expires .* UTC/);
+  });
+
+  test("includes an entry range and uses its midpoint for R:R", () => {
+    const text = buildPublishedMessage({ ...signal, entry: 2400, entryMax: 2410 });
+    assert.match(text, /Entry <code>2400\.00–2410\.00<\/code>/);
+    assert.match(text, /R:R 1\.80/);
   });
 
   test("escapes dynamic text in the publish message", () => {

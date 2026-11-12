@@ -15,6 +15,7 @@ import {
   SIGNAL_STATUS,
   computeRR,
   distances,
+  fmtEntry,
   fmtPct,
   fmtPrice,
   fmtRR,
@@ -51,7 +52,7 @@ export function SignalCard({
 }) {
   const status = SIGNAL_STATUS[signal.status];
   const direction = SIGNAL_DIRECTION[signal.direction];
-  const rr = computeRR(signal.entry, signal.target, signal.stop);
+  const rr = computeRR(signal.entry, signal.target, signal.stop, signal.entryMax);
   const live = price?.price ?? null;
   const progress = signal.status === "active" ? progressFor(signal, live) : null;
   const dist = distances(signal, live);
@@ -81,7 +82,7 @@ export function SignalCard({
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-soft/60 px-2.5 py-2">
-        <Price label="Entry" value={fmtPrice(signal.entry)} />
+        <Price label="Entry" value={fmtEntry(signal.entry, signal.entryMax)} />
         <Price label="Target" value={fmtPrice(signal.target)} tone="text-success" />
         <Price label="Stop" value={fmtPrice(signal.stop)} tone="text-danger" />
         <Price label="R:R" value={fmtRR(rr)} />
@@ -94,13 +95,22 @@ export function SignalCard({
               className={`h-full rounded-full ${progress.profitable ? "bg-success" : "bg-danger"}`}
               style={{ width: `${progress.pricePct}%` }}
             />
-            {progress.entryPct != null && (
+            {progress.entryPct != null && progress.entryMaxPct != null ? (
+              <span
+                className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-fg-muted/70"
+                style={{
+                  left: `${Math.min(progress.entryPct, progress.entryMaxPct)}%`,
+                  width: `${Math.abs(progress.entryMaxPct - progress.entryPct)}%`,
+                }}
+                title="Entry range"
+              />
+            ) : progress.entryPct != null ? (
               <span
                 className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-fg-muted"
                 style={{ left: `${progress.entryPct}%` }}
                 title="Entry"
               />
-            )}
+            ) : null}
           </div>
           <div className="mt-1 flex items-center justify-between text-[10.5px] tabular-nums text-fg-faint">
             <span>

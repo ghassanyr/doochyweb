@@ -9,6 +9,8 @@ export interface SignalDraft {
   symbol: string;
   direction: SignalDirection;
   entry: number | null;
+  /** Upper bound when the draft carries an entry range. */
+  entryMax?: number | null;
   target: number | null;
   stop: number | null;
 }
@@ -25,6 +27,8 @@ export interface Signal {
   symbol: string;
   direction: SignalDirection;
   entry: number | null;
+  /** Upper bound when `entry` describes a range; null for a single entry. */
+  entryMax: number | null;
   target: number;
   stop: number;
   timeframe: string | null;

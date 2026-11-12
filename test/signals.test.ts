@@ -35,6 +35,7 @@ const base: Signal = {
   symbol: "XAUUSD",
   direction: "buy",
   entry: 2400,
+  entryMax: null,
   target: 2450,
   stop: 2380,
   timeframe: "4h",
@@ -109,6 +110,70 @@ describe("signal validation", () => {
     assert.equal(same.ok, false);
   });
 
+  test("accepts entry ranges and validates their ordering", () => {
+    const ok = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      entry: 2400,
+      entryMax: 2410,
+      target: 2450,
+      stop: 2380,
+    });
+    assert.equal(ok.ok, true);
+    if (ok.ok) assert.equal(ok.value.entryMax, 2410);
+
+    const sell = validateSignalInput({
+      symbol: "EURUSD",
+      direction: "sell",
+      entry: 1.09,
+      entryMax: 1.095,
+      target: 1.07,
+      stop: 1.1,
+    });
+    assert.equal(sell.ok, true);
+  });
+
+  test("rejects invalid entry ranges", () => {
+    const reversed = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      entry: 2410,
+      entryMax: 2400,
+      target: 2450,
+      stop: 2380,
+    });
+    assert.equal(reversed.ok, false);
+
+    const beyondTarget = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      entry: 2400,
+      entryMax: 2460,
+      target: 2450,
+      stop: 2380,
+    });
+    assert.equal(beyondTarget.ok, false);
+
+    const orphan = validateSignalInput({
+      symbol: "XAUUSD",
+      direction: "buy",
+      entryMax: 2410,
+      target: 2450,
+      stop: 2380,
+    });
+    assert.equal(orphan.ok, false);
+
+    const sellBeyondStop = validateSignalInput({
+      symbol: "EURUSD",
+      direction: "sell",
+      entry: 1.09,
+      entryMax: 1.105,
+      target: 1.07,
+      stop: 1.1,
+    });
+    assert.equal(sellBeyondStop.ok, false);
+  });
+
   test("rejects unknown directions, timeframes and empty symbols", () => {
     assert.equal(validateSignalInput({ symbol: "", direction: "buy", target: 2, stop: 1 }).ok, false);
     assert.equal(validateSignalInput({ symbol: "XAUUSD", direction: "hold", target: 2, stop: 1 }).ok, false);
@@ -140,6 +205,7 @@ describe("signal validation", () => {
   test("computes reward-to-risk and guards zero risk", () => {
     assert.equal(computeRR(2400, 2450, 2380), 2.5);
     assert.equal(computeRR(2400, 2300, 2450), 2);
+    assert.equal(computeRR(2400, 2450, 2380, 2410), 1.8);
     assert.equal(computeRR(null, 2450, 2380), null);
     assert.equal(computeRR(2400, 2450, 2400), null);
   });
@@ -306,6 +372,15 @@ describe("signal presentation", () => {
     assert.equal(p!.profitable, true);
   });
 
+  test("progress shows the entry range and uses its midpoint for profitability", () => {
+    const ranged: Signal = { ...base, entry: 2400, entryMax: 2410 };
+    const p = progressFor(ranged, 2405);
+    assert.ok(p);
+    assert.ok(Math.abs(p!.entryPct! - (20 / 70) * 100) < 1e-9);
+    assert.ok(Math.abs(p!.entryMaxPct! - (30 / 70) * 100) < 1e-9);
+    assert.equal(p!.profitable, true);
+  });
+
   test("distances are signed percentages of the live price", () => {
     const d = distances(base, 2400);
     assert.ok(Math.abs(d.toTarget! - (50 / 2400) * 100) < 1e-9);
@@ -319,6 +394,12 @@ describe("signal presentation", () => {
     assert.match(text, /Entry:/);
     assert.match(text, /R:R 2\.50/);
     assert.match(text, /Note: Breakout retest/);
+  });
+
+  test("share text shows an entry range", () => {
+    const text = signalShareText({ ...base, entry: 2400, entryMax: 2410 });
+    assert.match(text, /Entry: .*–.*/);
+    assert.match(text, /R:R 1\.80/);
   });
 
   test("status timestamps reflect the lifecycle", () => {
@@ -345,6 +426,10 @@ describe("signal presentation", () => {
 
   test("client and server R:R agree", () => {
     assert.equal(clientRR(base.entry, base.target, base.stop), computeRR(base.entry, base.target, base.stop));
+    assert.equal(
+      clientRR(base.entry, base.target, base.stop, 2410),
+      computeRR(base.entry, base.target, base.stop, 2410)
+    );
   });
 
   test("expiry presets count from publish time", () => {

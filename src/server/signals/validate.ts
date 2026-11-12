@@ -50,6 +50,13 @@ export function validateSignalInput(
 
   const entry = asNumber(body.entry);
   if (entry !== null && entry <= 0) return { ok: false, error: "entry must be a positive number" };
+  const entryMax = asNumber(body.entryMax);
+  if (entry === null && entryMax !== null) {
+    return { ok: false, error: "entry is required when entryMax is set" };
+  }
+  if (entryMax !== null && entryMax <= 0) {
+    return { ok: false, error: "entryMax must be a positive number" };
+  }
   // Direction fixes which side is the target even when no entry is given. This
   // keeps automatic target/stop resolution unambiguous.
   if (direction === "buy" && !(target > stop)) {
@@ -58,7 +65,15 @@ export function validateSignalInput(
   if (direction === "sell" && !(target < stop)) {
     return { ok: false, error: "for a sell, target must be below stop" };
   }
-  if (entry !== null) {
+  if (entry !== null && entryMax !== null) {
+    if (!(entry < entryMax)) return { ok: false, error: "entry must be below entryMax" };
+    if (direction === "buy" && !(stop < entry && entryMax < target)) {
+      return { ok: false, error: "for a buy, entry range must be above stop and below target" };
+    }
+    if (direction === "sell" && !(target < entry && entryMax < stop)) {
+      return { ok: false, error: "for a sell, entry range must be below target and above stop" };
+    }
+  } else if (entry !== null) {
     if (direction === "buy" && !(stop < entry && entry < target)) {
       return { ok: false, error: "for a buy, stop must be below entry and entry below target" };
     }
@@ -88,19 +103,24 @@ export function validateSignalInput(
 
   return {
     ok: true,
-    value: { symbol, direction: direction as SignalDirection, entry, target, stop, timeframe, note, expiresAt },
+    value: { symbol, direction: direction as SignalDirection, entry, entryMax, target, stop, timeframe, note, expiresAt },
   };
 }
 
-/** Reward-to-risk from entry. Null when entry is missing or risk is zero. */
+/**
+ * Reward-to-risk from entry. A range ("entry" to "entryMax") is represented by
+ * its midpoint. Null when entry is missing or risk is zero.
+ */
 export function computeRR(
   entry: number | null | undefined,
   target: number | null | undefined,
-  stop: number | null | undefined
+  stop: number | null | undefined,
+  entryMax?: number | null
 ): number | null {
   if (entry == null || target == null || stop == null) return null;
-  const risk = Math.abs(entry - stop);
-  const reward = Math.abs(target - entry);
+  const ref = entryMax != null && Number.isFinite(entryMax) ? (entry + entryMax) / 2 : entry;
+  const risk = Math.abs(ref - stop);
+  const reward = Math.abs(target - ref);
   if (!(risk > 0) || !Number.isFinite(reward)) return null;
   return reward / risk;
 }

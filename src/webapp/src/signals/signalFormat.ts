@@ -45,16 +45,26 @@ export function fmtPrice(v: number | null | undefined): string {
   return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+/** A range ("entry" to "entryMax") is represented by its midpoint. */
 export function computeRR(
   entry: number | null | undefined,
   target: number | null | undefined,
-  stop: number | null | undefined
+  stop: number | null | undefined,
+  entryMax?: number | null
 ): number | null {
   if (entry == null || target == null || stop == null) return null;
-  const risk = Math.abs(entry - stop);
-  const reward = Math.abs(target - entry);
+  const ref = entryMax != null && Number.isFinite(entryMax) ? (entry + entryMax) / 2 : entry;
+  const risk = Math.abs(ref - stop);
+  const reward = Math.abs(target - ref);
   if (!(risk > 0) || !Number.isFinite(reward)) return null;
   return reward / risk;
+}
+
+/** Entry price, or "low–high" when a range is set. */
+export function fmtEntry(entry: number | null | undefined, entryMax?: number | null): string {
+  if (entry == null) return "-";
+  if (entryMax == null || !Number.isFinite(entryMax)) return fmtPrice(entry);
+  return `${fmtPrice(entry)}–${fmtPrice(entryMax)}`;
 }
 
 export function fmtRR(rr: number | null | undefined): string {
@@ -77,8 +87,10 @@ export function distances(signal: Signal, price: number | null | undefined): { t
 export interface Progress {
   /** Where price sits between stop (0) and target (100). */
   pricePct: number;
-  /** Where entry sits on the same scale, when entry exists. */
+  /** Where the entry (range low) sits on the same scale, when entry exists. */
   entryPct: number | null;
+  /** Where the entry range high sits, when a range exists. */
+  entryMaxPct: number | null;
   /** True when price is on the profitable side of entry. */
   profitable: boolean;
 }
@@ -93,13 +105,17 @@ export function progressFor(signal: Signal, price: number | null | undefined): P
   const pricePct = clamp(((price - low) / (high - low)) * 100);
   const entryPct =
     signal.entry == null ? null : clamp(((signal.entry - low) / (high - low)) * 100);
-  const profitable =
+  const entryMaxPct =
+    signal.entryMax == null ? null : clamp(((signal.entryMax - low) / (high - low)) * 100);
+  const ref =
     signal.entry == null
-      ? false
-      : signal.direction === "buy"
-        ? price >= signal.entry
-        : price <= signal.entry;
-  return { pricePct, entryPct, profitable };
+      ? null
+      : signal.entryMax == null
+        ? signal.entry
+        : (signal.entry + signal.entryMax) / 2;
+  const profitable =
+    ref == null ? false : signal.direction === "buy" ? price >= ref : price <= ref;
+  return { pricePct, entryPct, entryMaxPct, profitable };
 }
 
 /** Coarse relative age, independent of zone. */
@@ -134,10 +150,10 @@ export function signalShareText(signal: Signal): string {
   const lines = [
     `${signal.symbol} ${signal.direction.toUpperCase()}${signal.timeframe ? ` (${signal.timeframe})` : ""}`,
   ];
-  if (signal.entry != null) lines.push(`Entry: ${fmtPrice(signal.entry)}`);
+  if (signal.entry != null) lines.push(`Entry: ${fmtEntry(signal.entry, signal.entryMax)}`);
   lines.push(`Target: ${fmtPrice(signal.target)}`);
   lines.push(`Stop: ${fmtPrice(signal.stop)}`);
-  const rr = computeRR(signal.entry, signal.target, signal.stop);
+  const rr = computeRR(signal.entry, signal.target, signal.stop, signal.entryMax);
   if (rr != null) lines.push(`R:R ${rr.toFixed(2)}`);
   if (signal.note) lines.push(`Note: ${signal.note}`);
   return lines.join("\n");

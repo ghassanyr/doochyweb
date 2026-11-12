@@ -33,7 +33,9 @@ export function SignalFormModal({
   const editing = !!signal;
   const [symbol, setSymbol] = useState("");
   const [direction, setDirection] = useState<SignalDirection>("buy");
+  const [entryMode, setEntryMode] = useState<"entry" | "range">("entry");
   const [entry, setEntry] = useState("");
+  const [entryMax, setEntryMax] = useState("");
   const [target, setTarget] = useState("");
   const [stop, setStop] = useState("");
   const [timeframe, setTimeframe] = useState("");
@@ -50,7 +52,9 @@ export function SignalFormModal({
     const draft = signal ?? initial ?? null;
     setSymbol(draft?.symbol ?? "");
     setDirection(draft?.direction ?? "buy");
+    setEntryMode(draft?.entryMax != null ? "range" : "entry");
     setEntry(draft?.entry != null ? String(draft.entry) : "");
+    setEntryMax(draft?.entryMax != null ? String(draft.entryMax) : "");
     setTarget(draft?.target != null ? String(draft.target) : "");
     setStop(draft?.stop != null ? String(draft.stop) : "");
     setTimeframe(signal?.timeframe ?? "");
@@ -62,9 +66,10 @@ export function SignalFormModal({
   }, [open, signal, initial]);
 
   const entryNum = entry.trim() === "" ? null : Number(entry);
+  const entryMaxNum = entryMode === "range" && entryMax.trim() !== "" ? Number(entryMax) : null;
   const targetNum = Number(target);
   const stopNum = Number(stop);
-  const rr = computeRR(entryNum, targetNum, stopNum);
+  const rr = computeRR(entryNum, targetNum, stopNum, entryMaxNum);
   const selectedExpiryLabel =
     expiryChoice !== "none" && expiryChoice !== "keep"
       ? (EXPIRY_PRESETS.find((p) => p.id === expiryChoice)?.label ?? null)
@@ -90,7 +95,19 @@ export function SignalFormModal({
     if (targetNum === stopNum) return "Target and stop must be different.";
     if (direction === "buy" && !(targetNum > stopNum)) return "For a buy, target must be above stop.";
     if (direction === "sell" && !(targetNum < stopNum)) return "For a sell, target must be below stop.";
-    if (entryNum !== null) {
+    if (entryMode === "range") {
+      if (entryNum === null) return "Entry low is required for a range.";
+      if (entryMaxNum === null) return "Entry high is required for a range.";
+      if (!Number.isFinite(entryNum) || entryNum <= 0) return "Entry low must be a positive number.";
+      if (!Number.isFinite(entryMaxNum) || entryMaxNum <= 0) return "Entry high must be a positive number.";
+      if (!(entryNum < entryMaxNum)) return "Entry low must be below entry high.";
+      if (direction === "buy" && !(stopNum < entryNum && entryMaxNum < targetNum)) {
+        return "For a buy, the entry range must be above stop and below target.";
+      }
+      if (direction === "sell" && !(targetNum < entryNum && entryMaxNum < stopNum)) {
+        return "For a sell, the entry range must be below target and above stop.";
+      }
+    } else if (entryNum !== null) {
       if (!Number.isFinite(entryNum) || entryNum <= 0) return "Entry must be a positive number.";
       if (direction === "buy" && !(stopNum < entryNum && entryNum < targetNum)) {
         return "For a buy, stop must be below entry and entry below target.";
@@ -119,6 +136,7 @@ export function SignalFormModal({
       symbol: symbol.trim().toUpperCase(),
       direction,
       entry: entryNum,
+      entryMax: entryMode === "range" ? entryMaxNum : null,
       target: targetNum,
       stop: stopNum,
       timeframe: timeframe || null,
@@ -213,10 +231,40 @@ export function SignalFormModal({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <NumberField label="Entry (optional)" value={entry} onChange={setEntry} placeholder="2400.00" />
-          <NumberField label="Target" value={target} onChange={setTarget} placeholder="2450.00" />
-          <NumberField label="Stop" value={stop} onChange={setStop} placeholder="2380.00" />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-fg-muted">Entry levels</span>
+            <div className="flex rounded-lg border border-hairline-strong bg-soft p-[3px]">
+              {(["entry", "range"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setEntryMode(mode)}
+                  aria-pressed={entryMode === mode}
+                  className={
+                    "h-6 rounded-md px-2.5 text-[10px] font-semibold uppercase tracking-wide transition " +
+                    (entryMode === mode
+                      ? "bg-accent-soft text-accent"
+                      : "text-fg-muted hover:text-fg")
+                  }
+                >
+                  {mode === "entry" ? "Entry" : "Range"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className={"grid gap-3 " + (entryMode === "range" ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
+            {entryMode === "range" ? (
+              <>
+                <NumberField label="Entry low" value={entry} onChange={setEntry} placeholder="2400.00" />
+                <NumberField label="Entry high" value={entryMax} onChange={setEntryMax} placeholder="2410.00" />
+              </>
+            ) : (
+              <NumberField label="Entry (optional)" value={entry} onChange={setEntry} placeholder="2400.00" />
+            )}
+            <NumberField label="Target" value={target} onChange={setTarget} placeholder="2450.00" />
+            <NumberField label="Stop" value={stop} onChange={setStop} placeholder="2380.00" />
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

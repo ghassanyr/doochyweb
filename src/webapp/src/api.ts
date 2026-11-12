@@ -242,6 +242,8 @@ export interface SignalInputPayload {
   symbol: string;
   direction: "buy" | "sell";
   entry?: number | null;
+  /** Upper bound when entry is a range; null or omitted for a single entry. */
+  entryMax?: number | null;
   target: number;
   stop: number;
   timeframe?: string | null;

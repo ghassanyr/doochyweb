@@ -7,6 +7,7 @@ import {
   SIGNAL_DIRECTION,
   SIGNAL_STATUS,
   computeRR,
+  fmtEntry,
   fmtPrice,
   fmtRR,
   relativeAgo,
@@ -27,7 +28,7 @@ export function SignalDetailModal({
 }) {
   const status = signal ? SIGNAL_STATUS[signal.status] : null;
   const direction = signal ? SIGNAL_DIRECTION[signal.direction] : null;
-  const rr = signal ? computeRR(signal.entry, signal.target, signal.stop) : null;
+  const rr = signal ? computeRR(signal.entry, signal.target, signal.stop, signal.entryMax) : null;
   const stateTime = signal ? statusTimestamp(signal) : null;
 
   return (
@@ -73,7 +74,7 @@ export function SignalDetailModal({
       {signal && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Detail label="Entry" value={fmtPrice(signal.entry)} />
+            <Detail label="Entry" value={fmtEntry(signal.entry, signal.entryMax)} />
             <Detail label="Target" value={fmtPrice(signal.target)} tone="text-success" />
             <Detail label="Stop" value={fmtPrice(signal.stop)} tone="text-danger" />
             <Detail label="Reward:risk" value={fmtRR(rr)} />

@@ -22,6 +22,8 @@ export interface SignalView {
   symbol: string;
   direction: SignalDirection;
   entry: number | null;
+  /** Upper bound when `entry` describes a range; null for a single entry. */
+  entryMax: number | null;
   target: number;
   stop: number;
   timeframe: string | null;
@@ -64,6 +66,8 @@ export interface SignalInput {
   symbol: string;
   direction: SignalDirection;
   entry: number | null;
+  /** Upper bound when `entry` describes a range; null for a single entry. */
+  entryMax: number | null;
   target: number;
   stop: number;
   timeframe: string | null;

@@ -47,6 +47,7 @@ const signalSchema = new mongoose.Schema(
     symbol: { type: String, required: true, index: true },
     direction: { type: String, enum: ["buy", "sell"], required: true },
     entry: { type: Number, default: null },
+    entryMax: { type: Number, default: null },
     target: { type: Number, required: true },
     stop: { type: Number, required: true },
     timeframe: { type: String, default: null },
@@ -83,6 +84,7 @@ export function toView(doc: any): SignalView {
     symbol: doc.symbol,
     direction: doc.direction,
     entry: doc.entry ?? null,
+    entryMax: doc.entryMax ?? null,
     target: doc.target,
     stop: doc.stop,
     timeframe: doc.timeframe ?? null,
@@ -217,6 +219,11 @@ export async function updateSignal(
     symbol: has(patch, "symbol") ? patch.symbol : doc.symbol,
     direction: has(patch, "direction") ? patch.direction : doc.direction,
     entry: has(patch, "entry") ? patch.entry : doc.entry,
+    entryMax: has(patch, "entryMax")
+      ? patch.entryMax
+      : has(patch, "entry") && (patch.entry == null || patch.entry === "")
+        ? null
+        : doc.entryMax,
     target: has(patch, "target") ? patch.target : doc.target,
     stop: has(patch, "stop") ? patch.stop : doc.stop,
     timeframe: has(patch, "timeframe") ? patch.timeframe : doc.timeframe,
@@ -249,6 +256,7 @@ export async function updateSignal(
   doc.symbol = value.symbol;
   doc.direction = value.direction;
   doc.entry = value.entry;
+  doc.entryMax = value.entryMax;
   doc.target = value.target;
   doc.stop = value.stop;
   doc.timeframe = value.timeframe;
@@ -328,7 +336,7 @@ export async function signalStats(now: Date = new Date()): Promise<SignalStats> 
   await expireDue(now);
   const counts = await readCounts();
   const resolvedDocs = await Signal.find({ status: { $in: ["target_hit", "stopped_out"] } })
-    .select({ status: 1, entry: 1, target: 1, stop: 1 })
+    .select({ status: 1, entry: 1, entryMax: 1, target: 1, stop: 1 })
     .lean()
     .exec();
 
@@ -336,7 +344,7 @@ export async function signalStats(now: Date = new Date()): Promise<SignalStats> 
   const wins = resolvedDocs.filter((d) => d.status === "target_hit").length;
   const rValues = resolvedDocs
     .map((d) => {
-      const rr = computeRR(d.entry, d.target, d.stop);
+      const rr = computeRR(d.entry, d.target, d.stop, d.entryMax);
       if (d.status === "target_hit") return rr ?? 1;
       return -1;
     })

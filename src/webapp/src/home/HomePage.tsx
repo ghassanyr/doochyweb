@@ -17,6 +17,7 @@ import { useSiteConfig, FALLBACK_BRANDING } from "../siteConfig";
 import {
   SIGNAL_DIRECTION,
   computeRR,
+  fmtEntry,
   fmtPrice,
   fmtRR,
   relativeAgo,
@@ -222,7 +223,7 @@ function LatestSignalCard({
 
 function SignalPreview({ signal }: { signal: Signal }) {
   const direction = SIGNAL_DIRECTION[signal.direction];
-  const rr = computeRR(signal.entry, signal.target, signal.stop);
+  const rr = computeRR(signal.entry, signal.target, signal.stop, signal.entryMax);
 
   return (
     <div className="mt-3">
@@ -238,7 +239,7 @@ function SignalPreview({ signal }: { signal: Signal }) {
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-soft/60 px-2.5 py-2">
-        <Price label="Entry" value={fmtPrice(signal.entry)} />
+        <Price label="Entry" value={fmtEntry(signal.entry, signal.entryMax)} />
         <Price label="Target" value={fmtPrice(signal.target)} tone="text-success" />
         <Price label="Stop" value={fmtPrice(signal.stop)} tone="text-danger" />
         <Price label="R:R" value={fmtRR(rr)} />

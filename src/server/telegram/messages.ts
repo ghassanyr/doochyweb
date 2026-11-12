@@ -17,14 +17,17 @@ export function fmtPrice(value: number | null | undefined): string {
   return value.toFixed(digits);
 }
 
+/** A range ("entry" to "entryMax") is represented by its midpoint. */
 export function computeRR(
   entry: number | null | undefined,
   target: number | null | undefined,
-  stop: number | null | undefined
+  stop: number | null | undefined,
+  entryMax?: number | null
 ): number | null {
   if (entry == null || target == null || stop == null) return null;
-  const risk = Math.abs(entry - stop);
-  const reward = Math.abs(target - entry);
+  const ref = entryMax != null && Number.isFinite(entryMax) ? (entry + entryMax) / 2 : entry;
+  const risk = Math.abs(ref - stop);
+  const reward = Math.abs(target - ref);
   if (!(risk > 0) || !Number.isFinite(reward)) return null;
   return reward / risk;
 }
@@ -57,13 +60,19 @@ export function buildPublishedMessage(signal: SignalView): string {
   ];
 
   const prices: string[] = [];
-  if (signal.entry != null) prices.push(`Entry <code>${fmtPrice(signal.entry)}</code>`);
+  if (signal.entry != null) {
+    const entry =
+      signal.entryMax != null
+        ? `${fmtPrice(signal.entry)}–${fmtPrice(signal.entryMax)}`
+        : fmtPrice(signal.entry);
+    prices.push(`Entry <code>${entry}</code>`);
+  }
   prices.push(`Target <code>${fmtPrice(signal.target)}</code>`);
   prices.push(`Stop <code>${fmtPrice(signal.stop)}</code>`);
   lines.push(prices.join(" · "));
 
   const meta: string[] = [];
-  const rr = computeRR(signal.entry, signal.target, signal.stop);
+  const rr = computeRR(signal.entry, signal.target, signal.stop, signal.entryMax);
   if (rr != null) meta.push(`R:R ${rr.toFixed(2)}`);
   if (signal.timeframe) meta.push(escapeHtml(signal.timeframe));
   if (meta.length) lines.push(meta.join(" · "));
