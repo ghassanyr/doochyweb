@@ -28,6 +28,10 @@ export default function Dashboard({
     const preferred = accounts.find((a) => a.isLive) ?? accounts[0];
     return preferred ? [preferred.ctid] : [];
   });
+  // "All accounts" is its own mode, not a shortcut that ticks every pill. While
+  // it is on, the individual pills render unselected; clicking one switches to
+  // that account (and turns All off).
+  const [allSelected, setAllSelected] = useState(false);
   const initialized = useRef(selectedCtids.length > 0);
 
   // Default to the first live account once, when accounts first arrive.
@@ -38,14 +42,25 @@ export default function Dashboard({
     setSelectedCtids([preferred.ctid]);
   }, [accounts]);
 
-  const activeAccounts = accounts.filter((a) => selectedCtids.includes(a.ctid));
-  const allSelected = accounts.length > 0 && activeAccounts.length === accounts.length;
+  const activeAccounts = allSelected
+    ? accounts
+    : accounts.filter((a) => selectedCtids.includes(a.ctid));
   const single = activeAccounts.length === 1 ? activeAccounts[0] : null;
 
   function toggleAccount(ctid: number) {
-    setSelectedCtids((prev) =>
-      prev.includes(ctid) ? prev.filter((id) => id !== ctid) : [...prev, ctid]
-    );
+    if (allSelected) {
+      setAllSelected(false);
+      setSelectedCtids([ctid]);
+      return;
+    }
+    setSelectedCtids((prev) => {
+      if (prev.includes(ctid)) {
+        // Never leave the trading view with no account selected.
+        if (prev.length === 1) return prev;
+        return prev.filter((id) => id !== ctid);
+      }
+      return [...prev, ctid];
+    });
   }
 
   return (
@@ -56,14 +71,14 @@ export default function Dashboard({
             <span className="text-sm font-medium text-fg-muted">Account</span>
             <button
               type="button"
-              onClick={() => setSelectedCtids(accounts.map((a) => a.ctid))}
+              onClick={() => setAllSelected(true)}
               aria-pressed={allSelected}
               className={accountPillCls(allSelected)}
             >
               All accounts
             </button>
             {accounts.map((a) => {
-              const active = selectedCtids.includes(a.ctid);
+              const active = !allSelected && selectedCtids.includes(a.ctid);
               const hex = accountColorHex(a.color);
               return (
                 <button
