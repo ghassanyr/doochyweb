@@ -17,7 +17,13 @@ import {
   detectDocker,
   validateCompose,
 } from "./compose";
-import { checkMongo, isMongoUri, MONGO_DB_NAME, redactMongoUri } from "./mongo";
+import {
+  checkMongo,
+  isLocalMongoUri,
+  isMongoUri,
+  MONGO_DB_NAME,
+  redactMongoUri,
+} from "./mongo";
 import { isUsableJwtSecret, isValidEncryptionKey } from "./secrets";
 
 type Status = "pass" | "warn" | "fail";
@@ -189,33 +195,64 @@ export async function runDoctor(repoRoot: string): Promise<number> {
   );
 
   const composePath = path.join(repoRoot, COMPOSE_FILE);
-  if (fs.existsSync(composePath)) {
+  const localMongo = mongoUri ? isLocalMongoUri(mongoUri) : false;
+
+  if (!mongoUri) {
+    push(results, "Docker Compose", "warn", "skipped because MONGO_URI is not set");
+  } else if (!localMongo) {
+    push(
+      results,
+      "Docker Compose",
+      "pass",
+      "external MongoDB; the bundled container is not used"
+    );
+  } else if (!fs.existsSync(composePath)) {
+    push(
+      results,
+      "Docker Compose",
+      "pass",
+      "no docker-compose.yml; using an existing local MongoDB"
+    );
+  } else {
     const docker = detectDocker();
-    if (!docker.docker) {
-      push(results, "Docker", "fail", "docker is not installed");
-    } else if (!docker.compose) {
-      push(results, "Docker Compose", "fail", "docker compose v2 is not available");
-    } else if (!docker.daemon) {
-      push(results, "Docker daemon", "fail", "docker is installed but not running");
+    const dockerReady = docker.docker && docker.compose && docker.daemon;
+
+    if (!dockerReady) {
+      const reason = !docker.docker
+        ? "docker is not installed"
+        : !docker.compose
+          ? "docker compose v2 is not available"
+          : "docker is installed but not running";
+      push(
+        results,
+        "Docker",
+        mongoOk ? "warn" : "fail",
+        mongoOk ? `${reason}; MongoDB is reachable without it` : reason
+      );
     } else {
       push(results, "Docker daemon", "pass", "running");
-      const valid = validateCompose(composePath);
-      push(
-        results,
-        "Compose file",
-        valid.ok ? "pass" : "fail",
-        valid.ok ? composePath : valid.output || "docker compose config failed"
-      );
       const health = containerHealth(MONGO_CONTAINER);
-      push(
-        results,
-        "MongoDB container",
-        health === "healthy" || health === "running" ? "pass" : "warn",
-        health ?? `${MONGO_CONTAINER} not found; run docker compose up -d`
-      );
+      const containerUp = health === "healthy" || health === "running";
+      if (containerUp) {
+        push(results, "MongoDB container", "pass", health ?? "running");
+        const valid = validateCompose(composePath);
+        push(
+          results,
+          "Compose file",
+          valid.ok ? "pass" : "fail",
+          valid.ok ? composePath : valid.output || "docker compose config failed"
+        );
+      } else {
+        push(
+          results,
+          "MongoDB container",
+          "warn",
+          mongoOk
+            ? `${MONGO_CONTAINER} is not running; using the reachable MongoDB instead`
+            : `${MONGO_CONTAINER} not found; run docker compose up -d`
+        );
+      }
     }
-  } else {
-    push(results, "Docker Compose", "pass", "no docker-compose.yml; using an external MongoDB");
   }
 
   const width = Math.max(4, ...results.map((entry) => entry.name.length));

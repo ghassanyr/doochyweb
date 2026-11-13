@@ -19,6 +19,8 @@ export const MONGO_VOLUME = "doochy-mongo-data";
 
 export function renderCompose(port: number): string {
   return [
+    "name: doochy",
+    "",
     "services:",
     "  mongo:",
     "    image: mongo:7.0",
@@ -37,6 +39,7 @@ export function renderCompose(port: number): string {
     "",
     "volumes:",
     `  ${MONGO_VOLUME}:`,
+    `    name: ${MONGO_VOLUME}`,
     "",
   ].join("\n");
 }

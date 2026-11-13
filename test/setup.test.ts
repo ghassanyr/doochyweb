@@ -25,6 +25,7 @@ import {
   isUsableJwtSecret,
   isValidEncryptionKey,
 } from "../src/server/setup/secrets";
+import { inferDbMode } from "../src/server/setup/mode";
 import { normalizePublicUrl } from "../src/server/setup/url";
 
 describe("setup env file", () => {
@@ -96,9 +97,11 @@ describe("setup env file", () => {
 describe("setup compose file", () => {
   test("uses the doochy names and loopback binding", () => {
     const compose = renderCompose(27018);
+    assert.equal(compose.startsWith("name: doochy\n"), true);
     assert.equal(compose.includes("image: mongo:7.0"), true);
     assert.equal(compose.includes(`container_name: ${MONGO_CONTAINER}`), true);
     assert.equal(compose.includes(`${MONGO_VOLUME}:/data/db`), true);
+    assert.equal(compose.includes(`name: ${MONGO_VOLUME}`), true);
     assert.equal(compose.includes('"127.0.0.1:27018:27017"'), true);
     assert.equal(compose.includes("restart: unless-stopped"), true);
     assert.equal(compose.includes("healthcheck:"), true);
@@ -159,6 +162,26 @@ describe("setup mongo helpers", () => {
 
   test("keeps the new database name", () => {
     assert.equal(MONGO_DB_NAME, "doochy");
+  });
+});
+
+describe("setup database mode", () => {
+  test("explicit --db wins", () => {
+    assert.equal(inferDbMode({ db: "docker", mongoUri: "mongodb://x:27017" }), "docker");
+    assert.equal(inferDbMode({ db: "existing" }), "existing");
+  });
+
+  test("--mongo-uri implies external, even for a local host", () => {
+    assert.equal(inferDbMode({ mongoUri: "mongodb://127.0.0.1:27017" }), "external");
+    assert.equal(inferDbMode({ mongoUri: "mongodb+srv://cluster.example.com" }), "external");
+  });
+
+  test("--mongo-port implies the bundled Docker container", () => {
+    assert.equal(inferDbMode({ mongoPort: 27018 }), "docker");
+  });
+
+  test("returns null when nothing was chosen", () => {
+    assert.equal(inferDbMode({}), null);
   });
 });
 

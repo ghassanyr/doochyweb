@@ -29,6 +29,7 @@ import {
   waitForMongoHealthy,
 } from "./compose";
 import { mergeEnvFile, parseEnv, renderNewEnvFile, writeEnvFile } from "./envFile";
+import { inferDbMode, type DbMode } from "./mode";
 import {
   DEFAULT_MONGO_URI,
   MONGO_DB_NAME,
@@ -52,8 +53,6 @@ const ENV_PATH = path.join(REPO_ROOT, ".env");
 const COMPOSE_PATH = path.join(REPO_ROOT, COMPOSE_FILE);
 const USERNAME_RE = /^[A-Za-z0-9_-]{3,32}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-type DbMode = "existing" | "docker" | "external";
 
 interface Options {
   check: boolean;
@@ -161,6 +160,10 @@ function parseArgs(argv: string[]): Options {
     }
   }
 
+  if (options.mongoUri && options.mongoPort) {
+    throw new Error("Use either --mongo-uri or --mongo-port, not both.");
+  }
+
   return options;
 }
 
@@ -176,8 +179,8 @@ Usage:
 
 Options:
   --db existing|docker|external Database mode
-  --mongo-uri <uri>             External MongoDB connection string
-  --mongo-port <port>           Local Docker MongoDB port (default 27017)
+  --mongo-uri <uri>             External MongoDB connection string (implies external)
+  --mongo-port <port>           Local Docker MongoDB port (implies docker)
   --port <port>                 HTTP port (default 9111)
   --public-url <url>            Public URL used in links and callbacks
   --admin <username>            Create or promote this admin
@@ -305,9 +308,10 @@ async function runSetup(options: Options, prompter: Prompter): Promise<void> {
     existingUri && isLocalMongoUri(existingUri) ? existingUri : DEFAULT_MONGO_URI;
   const probe = await checkMongo(probeUri, mongoDb, 1500);
 
+  const inferredMode = inferDbMode(options);
   let mode: DbMode;
-  if (options.db) {
-    mode = options.db;
+  if (inferredMode) {
+    mode = inferredMode;
   } else if (options.yes) {
     if (probe.ok) mode = "existing";
     else if (docker.docker && docker.compose && docker.daemon) mode = "docker";
