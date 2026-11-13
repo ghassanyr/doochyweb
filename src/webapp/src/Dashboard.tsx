@@ -71,7 +71,10 @@ export default function Dashboard({
             <span className="text-sm font-medium text-fg-muted">Account</span>
             <button
               type="button"
-              onClick={() => setAllSelected(true)}
+              onClick={() => {
+                setAllSelected(true);
+                setSelectedCtids(accounts.map((a) => a.ctid));
+              }}
               aria-pressed={allSelected}
               className={accountPillCls(allSelected)}
             >

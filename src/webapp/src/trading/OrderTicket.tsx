@@ -42,6 +42,9 @@ export default function OrderTicket({
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
   const [selectedCtids, setSelectedCtids] = useState<number[]>([]);
+  // "All accounts" is its own mode: while it is on, the individual account
+  // options render unselected, but the order still targets every account.
+  const [allSelected, setAllSelected] = useState(false);
   const [previews, setPreviews] = useState<Record<number, OrderPreview>>({});
   const [previewErrs, setPreviewErrs] = useState<Record<number, string>>({});
   const [previewing, setPreviewing] = useState(false);
@@ -144,7 +147,9 @@ export default function OrderTicket({
 
   useEffect(() => {
     if (open) {
-      setSelectedCtids(defaultCtids);
+      const initial = defaultCtids.filter((id) => accounts.some((a) => a.ctid === id));
+      setSelectedCtids(initial);
+      setAllSelected(accounts.length > 0 && initial.length === accounts.length);
       setAccountSymbols({});
       setSymbolsLoading({});
       setSymbolsErr({});
@@ -397,17 +402,27 @@ export default function OrderTicket({
         : singleQuote.bid || singleQuote.ask
       : null;
   const quoteFresh = singleQuote != null && Date.now() - singleQuote.time < 15_000;
-  const allSelected = accounts.length > 0 && selectedCtids.length === accounts.length;
-  const subtitle =
-    selectedCtids.length === 1
+  const subtitle = allSelected
+    ? "All accounts"
+    : selectedCtids.length === 1
       ? accountFullLabel(accounts, selectedCtids[0])
       : `${selectedCtids.length} account${selectedCtids.length === 1 ? "" : "s"} selected`;
 
   function toggleAccount(id: number) {
+    if (allSelected) {
+      setAllSelected(false);
+      setSelectedCtids([id]);
+      return;
+    }
     setSelectedCtids((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        // Never leave the ticket with no account selected.
+        if (next.size === 1) return prev;
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       // Keep the list in account order so preview/status rows stay stable.
       return accounts.map((a) => a.ctid).filter((ctid) => next.has(ctid));
     });
@@ -420,28 +435,26 @@ export default function OrderTicket({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-fg-muted">Accounts</span>
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCtids(accounts.map((a) => a.ctid))}
-                  disabled={allSelected}
-                  className="font-medium text-accent transition hover:underline disabled:opacity-40 disabled:hover:no-underline"
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCtids([])}
-                  disabled={selectedCtids.length === 0}
-                  className="text-fg-faint transition hover:text-fg disabled:opacity-40"
-                >
-                  Clear
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAllSelected(true);
+                  setSelectedCtids(accounts.map((a) => a.ctid));
+                }}
+                aria-pressed={allSelected}
+                className={
+                  "rounded-md border px-2.5 py-1 text-xs font-medium transition " +
+                  (allSelected
+                    ? "border-accent/30 bg-accent-soft text-accent"
+                    : "border-hairline-strong bg-soft text-fg-muted hover:bg-surface-hover hover:text-fg")
+                }
+              >
+                All accounts
+              </button>
             </div>
             <div className="grid max-h-44 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
               {accounts.map((a) => {
-                const on = selectedCtids.includes(a.ctid);
+                const on = !allSelected && selectedCtids.includes(a.ctid);
                 const hex = accountColorHex(a.color);
                 return (
                   <button
@@ -478,7 +491,7 @@ export default function OrderTicket({
               })}
             </div>
             <p className="text-[11px] leading-relaxed text-fg-faint">
-              The order is placed on every ticked account.
+              All accounts trades every account. Otherwise the order goes to every ticked account.
             </p>
           </div>
         )}
