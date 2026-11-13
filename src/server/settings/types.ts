@@ -68,6 +68,41 @@ export interface NavigationSettings {
   };
 }
 
+export interface SiteAddressSettings {
+  /** Canonical public origin, for example https://example.com. Empty derives
+   *  from PUBLIC_BASE_URL or the request origin. */
+  publicBaseUrl: string;
+}
+
+export type RegistrationMode = "open" | "approval" | "invite" | "closed";
+
+export interface RegistrationSettings {
+  mode: RegistrationMode;
+  /** Shown on the register form and when self-registration is unavailable. */
+  message: string;
+  /** Shared code required in invite mode. Never exposed by /api/config. */
+  inviteCode: string;
+  /** New self-registered accounts must confirm their email before signing in. */
+  requireEmailVerification: boolean;
+}
+
+/** Safe registration subset returned to anonymous visitors. */
+export interface PublicRegistrationSettings {
+  mode: RegistrationMode;
+  message: string;
+  inviteRequired: boolean;
+  requireEmailVerification: boolean;
+}
+
+export interface LegalSettings {
+  /** Absolute http(s) URL or an in-app path. Empty hides the link. */
+  termsUrl: string;
+  /** Absolute http(s) URL or an in-app path. Empty hides the link. */
+  privacyUrl: string;
+  /** Risk warning shown in the footer and on the public home page. */
+  riskDisclaimer: string;
+}
+
 export interface MaintenanceSettings {
   enabled: boolean;
   /** Shown to visitors while maintenance is on. */
@@ -92,16 +127,20 @@ export interface AnnouncementSettings {
 }
 
 export interface SiteConfig {
+  site: SiteAddressSettings;
   branding: BrandingSettings;
   theme: ThemeSettings;
   navigation: NavigationSettings;
   maintenance: MaintenanceSettings;
   announcement: AnnouncementSettings;
+  registration: PublicRegistrationSettings;
+  legal: LegalSettings;
   /** Timestamp of the last save, used by clients to spot stale caches. */
   version: string | null;
 }
 
-export interface SiteSettings extends SiteConfig {
+export interface SiteSettings extends Omit<SiteConfig, "registration"> {
+  registration: RegistrationSettings;
   updatedAt: string | null;
   updatedBy: string | null;
 }

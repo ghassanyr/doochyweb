@@ -12,6 +12,7 @@ import HomePage from "./home/HomePage";
 import { isViewKey, pathForView, resolveRoute, type ViewKey } from "./routing";
 import AppShell from "./AppShell";
 import Dashboard from "./Dashboard";
+import AuthActionPage, { type AuthActionView } from "./AuthActionPage";
 import Login from "./Login";
 import MaintenanceScreen from "./MaintenanceScreen";
 import SettingsPage from "./Settings";
@@ -241,9 +242,44 @@ export default function App() {
           : "Create an account to get started"
       }
     >
-      <Login mode={authMode} onModeChange={setAuthMode} onAuthed={handleAuthed} />
+      <Login
+        mode={authMode}
+        onModeChange={setAuthMode}
+        onAuthed={handleAuthed}
+        onForgotPassword={() => {
+          setShowLogin(false);
+          handleViewChange("forgot-password");
+        }}
+      />
     </AnimatedModal>
   );
+
+  const authActionView: AuthActionView | null =
+    view === "forgot-password" ||
+    view === "reset-password" ||
+    view === "verify-email" ||
+    view === "accept-invite"
+      ? view
+      : null;
+
+  // Email links must work during maintenance too; otherwise a buyer in
+  // maintenance mode cannot recover an admin password.
+  if (authActionView) {
+    return (
+      <AuthActionPage
+        view={authActionView}
+        onSignIn={() => {
+          handleViewChange("home");
+          openLogin();
+        }}
+        onAuthed={(t) => {
+          setToken(t);
+          setTokenState(t);
+          handleViewChange("analysis");
+        }}
+      />
+    );
+  }
 
   // Maintenance covers the whole site for ordinary visitors. Auth, /api/me and
   // the public config stay reachable so an allowed admin can sign in and turn it

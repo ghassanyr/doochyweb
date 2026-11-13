@@ -63,12 +63,12 @@ function errorOf(fn: () => unknown): Error {
 
 describe("registry", () => {
   test("lists providers in the documented order and recognises them", () => {
-    assert.deepEqual([...INTEGRATION_PROVIDERS], ["ctrader", "telegram"]);
+    assert.deepEqual([...INTEGRATION_PROVIDERS], ["ctrader", "telegram", "smtp"]);
     for (const provider of INTEGRATION_PROVIDERS) {
       assert.equal(isIntegrationProvider(provider), true);
       assert.equal(INTEGRATION_DEFS[provider].provider, provider);
     }
-    assert.equal(isIntegrationProvider("smtp"), false);
+    assert.equal(isIntegrationProvider("emailjs"), false);
     assert.equal(isIntegrationProvider(""), false);
     assert.equal(isIntegrationProvider(null), false);
   });
@@ -391,7 +391,7 @@ describe("describeIntegration", () => {
     assert.equal(state.ready, true);
     assert.equal(field(state, "botUsername").value, "DoochyBot");
     assert.equal(field(state, "botUsername").source, "default");
-    assert.equal(field(state, "baseUrl").value, "https://doochy.net");
+    assert.equal(state.fields.some((entry) => entry.key === "baseUrl"), false);
     assert.equal(field(state, "enabled").value, true);
     assert.equal(field(state, "linkTtlMinutes").value, 15);
   });
@@ -643,7 +643,7 @@ describe("resolveIntegrationValues", () => {
     assert.equal(resolved.values.botToken, "123:env");
     assert.equal(resolved.values.botUsername, "EnvBot");
     assert.equal("mode" in resolved.values, false);
-    assert.equal(resolved.values.baseUrl, "https://env.example");
+    assert.equal("baseUrl" in resolved.values, false);
     assert.equal(resolved.values.enabled, false);
     assert.equal(resolved.values.linkTtlMinutes, 5);
     for (const source of Object.values(resolved.sources)) {
@@ -762,10 +762,10 @@ describe("resolveIntegrationValues", () => {
     assert.deepEqual(resolved.values, {
       botToken: "123:abc",
       botUsername: "MyBot",
-      baseUrl: "https://bot.example",
       enabled: true,
       linkTtlMinutes: 10,
     });
+    assert.equal("baseUrl" in resolved.values, false);
     assert.deepEqual(resolved.missing, []);
   });
 });

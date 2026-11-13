@@ -10,9 +10,12 @@ import mongoose from "mongoose";
 import {
   DEFAULT_ANNOUNCEMENT,
   DEFAULT_BRANDING,
+  DEFAULT_LEGAL,
   DEFAULT_MAINTENANCE,
   DEFAULT_MODULES,
   DEFAULT_NAVIGATION,
+  DEFAULT_REGISTRATION,
+  DEFAULT_SITE,
   DEFAULT_THEME,
   MODULE_KEYS,
 } from "./defaults";
@@ -20,18 +23,25 @@ import type {
   AnnouncementSettings,
   AnnouncementTone,
   LandingKey,
+  LegalSettings,
   MaintenanceSettings,
   ModuleKey,
   ModuleSettings,
   NavigationSettings,
+  RegistrationMode,
+  RegistrationSettings,
+  SiteAddressSettings,
   SiteConfig,
   SiteSettings,
 } from "./types";
 import {
   normalizeAnnouncement,
   normalizeBranding,
+  normalizeLegal,
   normalizeMaintenance,
   normalizeNavigation,
+  normalizeRegistration,
+  normalizeSite,
   normalizeTheme,
 } from "./validate";
 
@@ -67,6 +77,39 @@ const themeSchema = new mongoose.Schema(
     strongSell: { type: String, default: DEFAULT_THEME.strongSell },
     strongBuy: { type: String, default: DEFAULT_THEME.strongBuy },
     ratingNeutral: { type: String, default: DEFAULT_THEME.ratingNeutral },
+  },
+  { _id: false }
+);
+
+const siteSchema = new mongoose.Schema(
+  {
+    publicBaseUrl: { type: String, default: DEFAULT_SITE.publicBaseUrl },
+  },
+  { _id: false }
+);
+
+const registrationSchema = new mongoose.Schema(
+  {
+    mode: {
+      type: String,
+      enum: ["open", "approval", "invite", "closed"],
+      default: DEFAULT_REGISTRATION.mode,
+    },
+    message: { type: String, default: DEFAULT_REGISTRATION.message },
+    inviteCode: { type: String, default: DEFAULT_REGISTRATION.inviteCode },
+    requireEmailVerification: {
+      type: Boolean,
+      default: DEFAULT_REGISTRATION.requireEmailVerification,
+    },
+  },
+  { _id: false }
+);
+
+const legalSchema = new mongoose.Schema(
+  {
+    termsUrl: { type: String, default: DEFAULT_LEGAL.termsUrl },
+    privacyUrl: { type: String, default: DEFAULT_LEGAL.privacyUrl },
+    riskDisclaimer: { type: String, default: DEFAULT_LEGAL.riskDisclaimer },
   },
   { _id: false }
 );
@@ -138,6 +181,7 @@ const announcementSchema = new mongoose.Schema(
 const siteSettingsSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, default: "site" },
+    site: { type: siteSchema, default: () => ({ ...DEFAULT_SITE }) },
     branding: { type: brandingSchema, default: () => ({ ...DEFAULT_BRANDING }) },
     theme: { type: themeSchema, default: () => ({ ...DEFAULT_THEME }) },
     navigation: {
@@ -149,6 +193,8 @@ const siteSettingsSchema = new mongoose.Schema(
     },
     maintenance: { type: maintenanceSchema, default: () => ({ ...DEFAULT_MAINTENANCE }) },
     announcement: { type: announcementSchema, default: () => ({ ...DEFAULT_ANNOUNCEMENT }) },
+    registration: { type: registrationSchema, default: () => ({ ...DEFAULT_REGISTRATION }) },
+    legal: { type: legalSchema, default: () => ({ ...DEFAULT_LEGAL }) },
     updatedBy: { type: String, default: null },
   },
   { timestamps: true }
@@ -172,6 +218,48 @@ function isLanding(value: unknown): value is LandingKey {
 
 function isTone(value: unknown): value is AnnouncementTone {
   return value === "info" || value === "success" || value === "warning" || value === "danger";
+}
+
+function isRegistrationMode(value: unknown): value is RegistrationMode {
+  return value === "open" || value === "approval" || value === "invite" || value === "closed";
+}
+
+export function mergeSite(stored: any): SiteAddressSettings {
+  const site = stored && typeof stored === "object" ? stored : {};
+  return {
+    publicBaseUrl:
+      typeof site.publicBaseUrl === "string" ? site.publicBaseUrl : DEFAULT_SITE.publicBaseUrl,
+  };
+}
+
+export function mergeRegistration(stored: any): RegistrationSettings {
+  const registration = stored && typeof stored === "object" ? stored : {};
+  return {
+    mode: isRegistrationMode(registration.mode) ? registration.mode : DEFAULT_REGISTRATION.mode,
+    message:
+      typeof registration.message === "string"
+        ? registration.message
+        : DEFAULT_REGISTRATION.message,
+    inviteCode:
+      typeof registration.inviteCode === "string"
+        ? registration.inviteCode
+        : DEFAULT_REGISTRATION.inviteCode,
+    requireEmailVerification:
+      registration.requireEmailVerification === true,
+  };
+}
+
+export function mergeLegal(stored: any): LegalSettings {
+  const legal = stored && typeof stored === "object" ? stored : {};
+  return {
+    termsUrl: typeof legal.termsUrl === "string" ? legal.termsUrl : DEFAULT_LEGAL.termsUrl,
+    privacyUrl:
+      typeof legal.privacyUrl === "string" ? legal.privacyUrl : DEFAULT_LEGAL.privacyUrl,
+    riskDisclaimer:
+      typeof legal.riskDisclaimer === "string"
+        ? legal.riskDisclaimer
+        : DEFAULT_LEGAL.riskDisclaimer,
+  };
 }
 
 /**
@@ -267,11 +355,14 @@ export function mergeAnnouncement(stored: any): AnnouncementSettings {
 export function mergeSiteSettings(doc: any): SiteSettings {
   const updatedAt = iso(doc?.updatedAt);
   return {
+    site: mergeSite(doc?.site),
     branding: { ...DEFAULT_BRANDING, ...(doc?.branding ?? {}) },
     theme: { ...DEFAULT_THEME, ...(doc?.theme ?? {}) },
     navigation: mergeNavigation(doc?.navigation),
     maintenance: mergeMaintenance(doc?.maintenance),
     announcement: mergeAnnouncement(doc?.announcement),
+    registration: mergeRegistration(doc?.registration),
+    legal: mergeLegal(doc?.legal),
     version: updatedAt,
     updatedAt,
     updatedBy: typeof doc?.updatedBy === "string" ? doc.updatedBy : null,
@@ -297,26 +388,44 @@ export async function getSiteSettings(): Promise<SiteSettings> {
  */
 export async function saveSiteSettings(
   patch: {
+    site?: unknown;
     branding?: unknown;
     theme?: unknown;
     navigation?: unknown;
     maintenance?: unknown;
     announcement?: unknown;
+    registration?: unknown;
+    legal?: unknown;
   },
   updatedBy: string
 ): Promise<SiteSettings> {
   // Read the latest document rather than a value cached before the previous save.
   cache = null;
   const current = await getSiteSettings();
+  const site = normalizeSite(patch.site, current.site);
   const branding = normalizeBranding(patch.branding, current.branding);
   const theme = normalizeTheme(patch.theme, current.theme);
   const navigation = normalizeNavigation(patch.navigation, current.navigation);
   const maintenance = normalizeMaintenance(patch.maintenance, current.maintenance);
   const announcement = normalizeAnnouncement(patch.announcement, current.announcement);
+  const registration = normalizeRegistration(patch.registration, current.registration);
+  const legal = normalizeLegal(patch.legal, current.legal);
 
   const doc = await SiteSettingsModel.findOneAndUpdate(
     { key: "site" },
-    { $set: { branding, theme, navigation, maintenance, announcement, updatedBy } },
+    {
+      $set: {
+        site,
+        branding,
+        theme,
+        navigation,
+        maintenance,
+        announcement,
+        registration,
+        legal,
+        updatedBy,
+      },
+    },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   )
     .lean()
@@ -330,11 +439,19 @@ export async function saveSiteSettings(
 /** The subset safe to expose without a session. */
 export function publicSiteConfig(settings: SiteSettings): SiteConfig {
   return {
+    site: settings.site,
     branding: settings.branding,
     theme: settings.theme,
     navigation: settings.navigation,
     maintenance: settings.maintenance,
     announcement: settings.announcement,
+    registration: {
+      mode: settings.registration.mode,
+      message: settings.registration.message,
+      inviteRequired: settings.registration.mode === "invite",
+      requireEmailVerification: settings.registration.requireEmailVerification,
+    },
+    legal: settings.legal,
     version: settings.version,
   };
 }

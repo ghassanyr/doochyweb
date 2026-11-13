@@ -39,12 +39,12 @@ export default function ConnectPanel({
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAppFields, setShowAppFields] = useState(false);
-  const [showManual, setShowManual] = useState(!oauthAvailable);
+  const [showManual, setShowManual] = useState(!oauthAvailable && hasStored);
 
   // Availability arrives with /api/me, which may settle after this panel mounts.
   useEffect(() => {
-    setShowManual(!oauthAvailable);
-  }, [oauthAvailable]);
+    setShowManual(!oauthAvailable && hasStored);
+  }, [oauthAvailable, hasStored]);
 
   const appReady = hasStored || (clientId && clientSecret);
   const ready = appReady && accessToken && refreshToken;
@@ -73,6 +73,36 @@ export default function ConnectPanel({
     } catch (err: any) {
       setError(err instanceof ApiError ? err.message : "Connect failed");
     }
+  }
+
+  if (!oauthAvailable && !hasStored) {
+    return (
+      <div
+        className={
+          variant === "fullscreen"
+            ? "flex min-h-screen items-center justify-center p-6"
+            : "flex justify-center py-6"
+        }
+      >
+        <FadeRise className="w-full max-w-md">
+          <Card className="space-y-3 p-8 shadow-overlay">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
+              <Plug className="h-5 w-5" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">Trading is not configured</h1>
+            <p className="text-sm leading-relaxed text-fg-muted">
+              This deployment does not have a cTrader OpenAPI app yet. Ask the administrator to
+              configure cTrader in Admin → Integrations before connecting an account.
+            </p>
+            {onCancel && (
+              <Button variant="secondary" onClick={onCancel}>
+                Back
+              </Button>
+            )}
+          </Card>
+        </FadeRise>
+      </div>
+    );
   }
 
   return (

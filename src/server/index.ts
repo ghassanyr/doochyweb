@@ -5,6 +5,9 @@ import fs from "node:fs";
 import { maskClientId, resolveConnectInput } from "./credentials";
 import { connectDb, loadCredentials, saveCredentials, User } from "./db";
 import { signToken, authRequired, AuthedRequest, hashPassword, verifyPassword, findUserByUsername } from "./auth";
+import { accountAuthRouter } from "./accountRoutes";
+import { emailConfigured } from "./email/transport";
+import { sendVerification } from "./email/accountMail";
 import { userSockets } from "./ctrader/connection";
 import { ctraderAppCredentials } from "./ctrader/appConfig";
 import { discoverAccounts } from "./ctrader/auth";
@@ -18,6 +21,7 @@ import { promoteConfiguredAdmins } from "./admin/roles";
 import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
 import { getSiteSettings } from "./settings/store";
+import { registrationDecision } from "./registrationPolicy";
 import { maintenanceGate, marketGate, moduleGate } from "./settings/access";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
 import { startScraperScheduler } from "./market/scraperRunner";
@@ -26,6 +30,9 @@ import { telegramRouter } from "./telegram/routes";
 import { startTelegram, stopTelegram } from "./telegram/index";
 
 const app = express();
+// The app binds to loopback behind nginx, so trust exactly one proxy hop for
+// the real client IP (auth rate limits) and the forwarded protocol.
+app.set("trust proxy", 1);
 // Admin settings may carry an inline logo upload, so the JSON limit is larger
 // than the default; ordinary request bodies are still tiny.
 app.use(express.json({ limit: "1mb" }));
@@ -39,6 +46,14 @@ app.use(["/api/accounts", "/api/connect", "/api/credentials"], maintenanceGate);
 
 app.post("/api/auth/register", async (req: Request, res: Response) => {
   try {
+    const settings = await getSiteSettings();
+    const registration = settings.registration;
+    const decision = registrationDecision(registration, req.body?.inviteCode);
+    if (!decision.allowed) {
+      res.status(403).json({ error: decision.error });
+      return;
+    }
+
     const { username, email, password } = req.body ?? {};
     const clean = String(username ?? "").trim();
     const cleanEmail = String(email ?? "").trim().toLowerCase();
@@ -54,6 +69,12 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       res.status(400).json({ error: "password must be at least 8 characters" });
       return;
     }
+    if (registration.requireEmailVerification && !(await emailConfigured())) {
+      res.status(503).json({
+        error: "Email verification is required but email delivery is not configured.",
+      });
+      return;
+    }
     const existing = await User.findOne({
       $or: [{ username: clean }, { email: cleanEmail }],
     }).exec();
@@ -65,8 +86,39 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       username: clean,
       email: cleanEmail,
       passwordHash: await hashPassword(password),
+      status: decision.status,
+      emailVerified: !registration.requireEmailVerification,
     });
-    res.json({ token: signToken(String(user._id)) });
+    if (registration.requireEmailVerification) {
+      try {
+        await sendVerification(String(user._id), req);
+      } catch (err: any) {
+        await User.deleteOne({ _id: user._id }).exec();
+        res.status(502).json({
+          error: err?.message ?? "Account could not be created because the verification email failed.",
+        });
+        return;
+      }
+    }
+    if (decision.status === "pending") {
+      res.json({
+        pending: true,
+        verificationSent: registration.requireEmailVerification,
+        message:
+          registration.message ||
+          "Account created. An admin must approve it before you can sign in.",
+      });
+      return;
+    }
+    if (registration.requireEmailVerification) {
+      res.json({
+        verificationRequired: true,
+        email: cleanEmail,
+        message: "Check your inbox to verify your email before signing in.",
+      });
+      return;
+    }
+    res.json({ token: signToken(String(user._id), 0) });
   } catch (err: any) {
     // Two registrations can race past the lookup above; the unique indexes are
     // the real guard, so translate their duplicate-key error too.
@@ -91,7 +143,25 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
       res.status(401).json({ error: "invalid username or password" });
       return;
     }
-    res.json({ token: signToken(String(user._id)) });
+    if (user.status === "pending") {
+      res.status(403).json({ error: "account is pending admin approval" });
+      return;
+    }
+    const settings = await getSiteSettings();
+    if (settings.registration.requireEmailVerification && user.emailVerified === false) {
+      res.status(403).json({
+        error: "verify your email before signing in",
+        verificationRequired: true,
+        email: user.email ?? null,
+      });
+      return;
+    }
+    res.json({
+      token: signToken(
+        String(user._id),
+        typeof user.tokenVersion === "number" ? user.tokenVersion : 0
+      ),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? "login failed" });
   }
@@ -118,6 +188,8 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
     const accounts = creds && !blocked ? await listAccounts(req.userId!) : [];
     res.json({
       username: user.username,
+      email: user.email ?? null,
+      emailVerified: user.emailVerified !== false,
       role: (user.role as string | undefined) ?? "user",
       hasCredentials: !!creds,
       // Enough for Settings to say which OpenAPI app is connected without ever
@@ -499,6 +571,7 @@ app.use("/api/market", maintenanceGate, marketGate, marketRouter);
 app.use("/api/signals", maintenanceGate, moduleGate("signals"), signalsRouter);
 app.use("/api/trainer", maintenanceGate, moduleGate("learn"), createTrainerRouter());
 app.use("/api/telegram", telegramRouter);
+app.use("/api/auth", accountAuthRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/config", siteConfigRouter);
 app.use("/api/ctrader/oauth", ctraderOAuthRouter);

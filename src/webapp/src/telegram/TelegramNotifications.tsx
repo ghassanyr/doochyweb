@@ -314,7 +314,8 @@ export default function TelegramNotifications({
       <div className="space-y-1">
         <h2 className="text-sm font-semibold tracking-tight text-fg">Telegram notifications</h2>
         <p className="text-sm text-fg-muted">
-          Get a direct message from @{tg?.botUsername ?? "DoochyBot"} when a new signal is
+          Get a direct message from{" "}
+          {tg?.botUsername ? `@${tg.botUsername}` : "the Telegram bot"} when a new signal is
           published.
         </p>
       </div>

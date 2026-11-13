@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Loader2 } from "lucide-react";
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 // Shared primitives, ported from the standalone Gauge project's stylesheet:
@@ -285,14 +285,23 @@ export function Chip({
 }
 
 // A save-state flash: brief success/error tint, auto-shown alongside results.
-export function Flash({ tone, children }: { tone: "success" | "danger"; children: ReactNode }) {
+export function Flash({
+  tone,
+  children,
+}: {
+  tone: "success" | "warning" | "danger";
+  children: ReactNode;
+}) {
   const cls =
     tone === "success"
       ? "border-success/30 bg-success-soft text-success"
-      : "border-danger/30 bg-danger-soft text-danger";
+      : tone === "warning"
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        : "border-danger/30 bg-danger-soft text-danger";
   return (
     <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${cls}`}>
       {tone === "success" && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      {tone === "warning" && <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
       <span className="min-w-0">{children}</span>
     </div>
   );

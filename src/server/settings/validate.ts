@@ -11,11 +11,15 @@ import type {
   AnnouncementTone,
   BrandingSettings,
   LandingKey,
+  LegalSettings,
   MaintenanceSettings,
   ModuleAccess,
   ModuleKey,
   ModuleSettings,
   NavigationSettings,
+  RegistrationMode,
+  RegistrationSettings,
+  SiteAddressSettings,
   ThemeMode,
   ThemeSettings,
 } from "./types";
@@ -30,6 +34,7 @@ export class SettingsValidationError extends Error {
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HTTP_URL = /^https?:\/\/\S+$/i;
+const HTTP_OR_PATH = /^(?:\/|https?:\/\/)\S+$/i;
 // Uploaded logos are stored inline as data URLs; only image types the browser
 // can safely render through <img> are accepted.
 const IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|webp|gif|svg\+xml);base64,[a-z0-9+/]+={0,2}$/i;
@@ -157,6 +162,83 @@ export function normalizeTheme(patch: unknown, base: ThemeSettings): ThemeSettin
   }
 
   return next;
+}
+
+export function normalizeSite(patch: unknown, base: SiteAddressSettings): SiteAddressSettings {
+  const source = plainObject(patch);
+  const raw = readString(source, "publicBaseUrl", base.publicBaseUrl, 300);
+  if (!raw) return { publicBaseUrl: "" };
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new SettingsValidationError("publicBaseUrl must be an http(s) URL");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new SettingsValidationError("publicBaseUrl must be an http(s) URL");
+  }
+  if (url.pathname !== "/" || url.search || url.hash) {
+    throw new SettingsValidationError(
+      "publicBaseUrl must be an origin only, for example https://example.com"
+    );
+  }
+  return { publicBaseUrl: url.origin };
+}
+
+const REGISTRATION_MODES: readonly RegistrationMode[] = ["open", "approval", "invite", "closed"];
+
+export function normalizeRegistration(
+  patch: unknown,
+  base: RegistrationSettings
+): RegistrationSettings {
+  const source = plainObject(patch);
+
+  let mode = base.mode;
+  if (source.mode !== undefined) {
+    if (typeof source.mode !== "string" || !(REGISTRATION_MODES as readonly string[]).includes(source.mode)) {
+      throw new SettingsValidationError("registration mode must be open, approval, invite or closed");
+    }
+    mode = source.mode as RegistrationMode;
+  }
+
+  const inviteCode = readString(source, "inviteCode", base.inviteCode, 64);
+  if (mode === "invite" && inviteCode.length < 6) {
+    throw new SettingsValidationError("invite code must be at least 6 characters when invite mode is on");
+  }
+
+  let requireEmailVerification = base.requireEmailVerification;
+  if (source.requireEmailVerification !== undefined) {
+    if (typeof source.requireEmailVerification !== "boolean") {
+      throw new SettingsValidationError("requireEmailVerification must be true or false");
+    }
+    requireEmailVerification = source.requireEmailVerification;
+  }
+
+  return {
+    mode,
+    message: readString(source, "message", base.message, 500),
+    inviteCode,
+    requireEmailVerification,
+  };
+}
+
+export function normalizeLegal(patch: unknown, base: LegalSettings): LegalSettings {
+  const source = plainObject(patch);
+
+  function link(key: "termsUrl" | "privacyUrl"): string {
+    const value = readString(source, key, base[key], 500);
+    if (value && !HTTP_OR_PATH.test(value)) {
+      throw new SettingsValidationError(`${key} must start with / or be an http(s) URL`);
+    }
+    return value;
+  }
+
+  return {
+    termsUrl: link("termsUrl"),
+    privacyUrl: link("privacyUrl"),
+    riskDisclaimer: readString(source, "riskDisclaimer", base.riskDisclaimer, 3000),
+  };
 }
 
 // ---------------------------------------------------------------------------

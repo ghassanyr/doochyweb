@@ -11,7 +11,7 @@ import type {
   IntegrationProviderDef,
 } from "./types";
 
-export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = ["ctrader", "telegram"];
+export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = ["ctrader", "telegram", "smtp"];
 
 export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDef> = {
   ctrader: {
@@ -37,16 +37,6 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         required: true,
         maxLength: 500,
         hint: "Encrypted at rest. cTrader can show it again from the app's Credentials page.",
-      },
-      {
-        key: "publicBaseUrl",
-        label: "Public base URL",
-        kind: "text",
-        env: "PUBLIC_BASE_URL",
-        format: "url",
-        maxLength: 300,
-        placeholder: "https://your-domain",
-        hint: "Public origin of this deployment. The wizard uses it to build the callback URL.",
       },
       {
         key: "redirectUri",
@@ -100,18 +90,6 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         hint: "Without the @. Used for the t.me link.",
       },
       {
-        key: "baseUrl",
-        label: "Public base URL",
-        kind: "text",
-        env: "PUBLIC_BASE_URL",
-        required: true,
-        defaultValue: "https://doochy.net",
-        format: "url",
-        maxLength: 300,
-        placeholder: "https://your-domain",
-        hint: "Used for bot links and the cTrader callback.",
-      },
-      {
         key: "enabled",
         label: "Notifications enabled",
         kind: "boolean",
@@ -128,6 +106,83 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         integer: true,
         min: 1,
         max: 60,
+      },
+    ],
+  },
+  smtp: {
+    provider: "smtp",
+    label: "Email (SMTP)",
+    description:
+      "Password reset, email verification and admin invites. Works with Mailgun, Postmark, SES, Google Workspace or your own mail server.",
+    fields: [
+      {
+        key: "host",
+        label: "SMTP host",
+        kind: "text",
+        env: "SMTP_HOST",
+        required: true,
+        maxLength: 255,
+        placeholder: "smtp.mailgun.org",
+        hint: "Mailgun: smtp.mailgun.org (US) or smtp.eu.mailgun.org (EU).",
+      },
+      {
+        key: "port",
+        label: "Port",
+        kind: "number",
+        env: "SMTP_PORT",
+        defaultValue: 587,
+        integer: true,
+        min: 1,
+        max: 65535,
+        hint: "587 is STARTTLS; 465 is implicit TLS; 25 is usually blocked by hosts.",
+      },
+      {
+        key: "encryption",
+        label: "Encryption",
+        kind: "select",
+        env: "SMTP_ENCRYPTION",
+        defaultValue: "starttls",
+        options: [
+          { value: "starttls", label: "STARTTLS (recommended)" },
+          { value: "tls", label: "Implicit TLS" },
+          { value: "none", label: "None (local relay only)" },
+        ],
+      },
+      {
+        key: "username",
+        label: "Username",
+        kind: "text",
+        env: "SMTP_USER",
+        maxLength: 255,
+        hint: "Leave empty only for an unauthenticated local relay.",
+      },
+      {
+        key: "password",
+        label: "Password",
+        kind: "secret",
+        env: "SMTP_PASSWORD",
+        maxLength: 500,
+        hint: "Encrypted at rest. Mailgun uses its SMTP password, not the API key.",
+      },
+      {
+        key: "fromEmail",
+        label: "From address",
+        kind: "text",
+        env: "SMTP_FROM_EMAIL",
+        required: true,
+        format: "email",
+        maxLength: 320,
+        placeholder: "noreply@your-domain.com",
+        hint: "The provider must authorize this sender/domain (SPF, DKIM, DMARC).",
+      },
+      {
+        key: "fromName",
+        label: "From name",
+        kind: "text",
+        env: "SMTP_FROM_NAME",
+        maxLength: 120,
+        placeholder: "Your product",
+        hint: "Defaults to the configured branding name when left empty.",
       },
     ],
   },

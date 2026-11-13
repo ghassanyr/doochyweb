@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { deleteUser, listUsers } from "../src/server/admin/users";
+import {
+  deleteUser,
+  inviteUser,
+  listUsers,
+  resetUserPassword,
+  updateUser,
+} from "../src/server/admin/users";
+import { AuthToken } from "../src/server/authTokens";
 import { Credentials, User } from "../src/server/db";
 import { TelegramLink, TelegramLinkCode } from "../src/server/telegram/store";
 
@@ -22,23 +29,29 @@ function execQuery<T>(value: T) {
 }
 
 const originals = {
+  create: User.create,
   findById: User.findById,
   find: User.find,
   countDocuments: User.countDocuments,
+  updateOne: User.updateOne,
   deleteOne: User.deleteOne,
   credentialsDeleteMany: Credentials.deleteMany,
   linkDeleteMany: TelegramLink.deleteMany,
   codeDeleteMany: TelegramLinkCode.deleteMany,
+  tokenDeleteMany: AuthToken.deleteMany,
 };
 
 afterEach(() => {
+  (User as any).create = originals.create;
   (User as any).findById = originals.findById;
   (User as any).find = originals.find;
   (User as any).countDocuments = originals.countDocuments;
+  (User as any).updateOne = originals.updateOne;
   (User as any).deleteOne = originals.deleteOne;
   (Credentials as any).deleteMany = originals.credentialsDeleteMany;
   (TelegramLink as any).deleteMany = originals.linkDeleteMany;
   (TelegramLinkCode as any).deleteMany = originals.codeDeleteMany;
+  (AuthToken as any).deleteMany = originals.tokenDeleteMany;
 });
 
 function stubFindById(user: any) {
@@ -71,6 +84,10 @@ function stubDeletes() {
     calls.push(`user:${String(filter._id)}`);
     return execQuery({});
   };
+  (AuthToken as any).deleteMany = (filter: any) => {
+    calls.push(`authtoken:${String(filter.userId)}`);
+    return execQuery({});
+  };
   return calls;
 }
 
@@ -95,6 +112,8 @@ describe("listUsers", () => {
         username: "alice",
         email: "alice@example.com",
         role: "admin",
+        status: "active",
+        emailVerified: true,
         createdAt: "2026-01-02T03:04:05.000Z",
       },
       {
@@ -102,6 +121,8 @@ describe("listUsers", () => {
         username: "bob",
         email: null,
         role: "user",
+        status: "active",
+        emailVerified: true,
         createdAt: null,
       },
     ]);
@@ -136,6 +157,7 @@ describe("deleteUser", () => {
     const calls = stubDeletes();
     assert.equal(await deleteUser(USER_ID, OTHER_ID), "deleted");
     assert.deepEqual(calls.sort(), [
+      `authtoken:${USER_ID}`,
       `code:${USER_ID}`,
       `credentials:${USER_ID}`,
       `link:${USER_ID}`,
@@ -149,5 +171,87 @@ describe("deleteUser", () => {
     const calls = stubDeletes();
     assert.equal(await deleteUser(USER_ID, OTHER_ID), "deleted");
     assert.ok(calls.includes(`user:${USER_ID}`));
+  });
+});
+
+describe("inviteUser", () => {
+  test("creates a pending, unverified account with an unusable password", async () => {
+    let created: any = null;
+    (User as any).create = async (doc: any) => {
+      created = doc;
+      return { ...doc, _id: USER_ID, toObject: () => ({ ...doc, _id: USER_ID }) };
+    };
+    const row = await inviteUser({
+      username: "alice",
+      email: "alice@example.com",
+      role: "user",
+    });
+    assert.equal(created.status, "pending");
+    assert.equal(created.emailVerified, false);
+    assert.equal(created.tokenVersion, 0);
+    assert.equal(typeof created.passwordHash, "string");
+    assert.notEqual(created.passwordHash, "");
+    assert.equal(row.id, USER_ID);
+    assert.equal(row.status, "pending");
+    assert.equal(row.emailVerified, false);
+  });
+});
+
+describe("resetUserPassword", () => {
+  test("bumps the token version and drops outstanding tokens", async () => {
+    let update: any = null;
+    (User as any).updateOne = (_filter: unknown, next: any) => {
+      update = next;
+      return execQuery({ matchedCount: 1 });
+    };
+    const revoked: any[] = [];
+    (AuthToken as any).deleteMany = (filter: any) => {
+      revoked.push(filter);
+      return execQuery({});
+    };
+
+    assert.equal(await resetUserPassword(USER_ID, "new-password"), true);
+    assert.equal(update.$inc.tokenVersion, 1);
+    assert.match(update.$set.passwordHash, /^\$2[aby]\$/);
+    assert.deepEqual(revoked, [{ userId: USER_ID }]);
+  });
+
+  test("rejects invalid and missing users", async () => {
+    assert.equal(await resetUserPassword("not-an-id", "new-password"), false);
+    (User as any).updateOne = () => execQuery({ matchedCount: 0 });
+    assert.equal(await resetUserPassword(USER_ID, "new-password"), false);
+  });
+});
+
+describe("updateUser", () => {
+  test("reports invalid and missing ids", async () => {
+    assert.equal(await updateUser("not-an-id", { status: "pending" }), "missing");
+    stubFindById(null);
+    assert.equal(await updateUser(USER_ID, { status: "pending" }), "missing");
+  });
+
+  test("refuses to suspend or demote the last active admin", async () => {
+    stubFindById({ _id: USER_ID, role: "admin", status: "active" });
+    stubCount(1);
+    const calls: unknown[] = [];
+    (User as any).updateOne = (filter: unknown, update: unknown) => {
+      calls.push([filter, update]);
+      return execQuery({ matchedCount: 1 });
+    };
+    assert.equal(await updateUser(USER_ID, { status: "pending" }), "last_admin");
+    assert.equal(await updateUser(USER_ID, { role: "user" }), "last_admin");
+    assert.equal(calls.length, 0);
+  });
+
+  test("updates an admin's role and status when another active admin remains", async () => {
+    stubFindById({ _id: USER_ID, role: "admin", status: "active" });
+    stubCount(2);
+    const calls: unknown[] = [];
+    (User as any).updateOne = (filter: unknown, update: unknown) => {
+      calls.push([filter, update]);
+      return execQuery({ matchedCount: 1 });
+    };
+    assert.equal(await updateUser(USER_ID, { role: "user", status: "pending" }), "updated");
+    assert.deepEqual(calls, [[{ _id: USER_ID }, { $set: { role: "user", status: "pending" } }]]);
   });
 });

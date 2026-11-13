@@ -13,3 +13,6 @@ openclaw-breakouts.jsonl
 
 # Research bar history (analogue search)
 data/
+
+# Local database snapshots
+backups/

@@ -5,7 +5,12 @@ import { AnnouncementBanner } from "./AnnouncementBanner";
 import { RouteLink } from "./components/RouteLink";
 import { Button } from "./components/ui";
 import { pathForView, type ViewKey } from "./routing";
-import { FALLBACK_ANNOUNCEMENT, FALLBACK_MODULES, useSiteConfig } from "./siteConfig";
+import {
+  FALLBACK_ANNOUNCEMENT,
+  FALLBACK_LEGAL,
+  FALLBACK_MODULES,
+  useSiteConfig,
+} from "./siteConfig";
 
 // Top-level shell: brand, primary navigation, and the account-level actions
 // (settings / sign out). The Analysis, Breakouts, Learn and Trading views render
@@ -44,6 +49,8 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { config, branding, mode, toggleMode } = useSiteConfig();
+  const legal = config?.legal ?? FALLBACK_LEGAL;
+  const hasLegal = Boolean(legal.termsUrl || legal.privacyUrl || legal.riskDisclaimer);
   const modules = (config?.navigation.modules ?? FALLBACK_MODULES).filter(
     (module) => !module.hidden
   );
@@ -169,19 +176,36 @@ export function AppShell({
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
 
-      {(branding.footerText || branding.supportEmail) && (
-        <footer className="mx-auto max-w-page px-4 pb-6 pt-2 text-center text-[11px] leading-relaxed text-fg-faint sm:px-6">
-          {branding.footerText}
-          {branding.footerText && branding.supportEmail && (
-            <span aria-hidden="true"> • </span>
-          )}
-          {branding.supportEmail && (
-            <a
-              href={`mailto:${branding.supportEmail}`}
-              className="transition hover:text-accent"
-            >
-              {branding.supportEmail}
-            </a>
+      {(branding.footerText || branding.supportEmail || hasLegal) && (
+        <footer className="mx-auto max-w-page space-y-1 px-4 pb-6 pt-2 text-center text-[11px] leading-relaxed text-fg-faint sm:px-6">
+          {legal.riskDisclaimer && <p className="mx-auto max-w-3xl">{legal.riskDisclaimer}</p>}
+          <p>
+            {branding.footerText}
+            {branding.footerText && branding.supportEmail && (
+              <span aria-hidden="true"> • </span>
+            )}
+            {branding.supportEmail && (
+              <a
+                href={`mailto:${branding.supportEmail}`}
+                className="transition hover:text-accent"
+              >
+                {branding.supportEmail}
+              </a>
+            )}
+          </p>
+          {(legal.termsUrl || legal.privacyUrl) && (
+            <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              {legal.termsUrl && (
+                <a href={legal.termsUrl} className="transition hover:text-accent">
+                  Terms
+                </a>
+              )}
+              {legal.privacyUrl && (
+                <a href={legal.privacyUrl} className="transition hover:text-accent">
+                  Privacy
+                </a>
+              )}
+            </p>
           )}
         </footer>
       )}

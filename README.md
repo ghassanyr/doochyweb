@@ -36,11 +36,26 @@ pnpm doochy:check
 
 This is read-only. It checks Node, `.env`, secrets, MongoDB, the admin account, Docker, and the build output.
 
+## Backup and restore
+
+```bash
+pnpm doochy:backup
+pnpm doochy:backup --out /secure/doochy-before-upgrade.json
+pnpm doochy:restore /secure/doochy-before-upgrade.json --merge
+pnpm doochy:restore /secure/doochy-before-upgrade.json --replace --yes
+```
+
+Backups are Extended JSON snapshots of every non-system MongoDB collection. They contain password hashes and encrypted integration secrets, so keep them private and store `.env` with them. Restoring needs the same `INTEGRATIONS_ENCRYPTION_KEY` to read stored integration secrets.
+
+`--merge` overwrites documents with matching `_id` values and keeps everything else. `--replace` deletes each collection present in the backup first; it also requires `--yes`.
+
 ## Common commands
 
 ```bash
 pnpm doochy:setup               # guided setup
 pnpm doochy:check               # diagnostics
+pnpm doochy:backup              # full database snapshot
+pnpm doochy:restore <file> --merge
 pnpm dev:server                 # API on 127.0.0.1:9111
 pnpm dev:web                    # Vite on 127.0.0.1:5173
 pnpm build                      # server + web production build
@@ -51,9 +66,23 @@ pnpm admin:grant <username>     # promote an existing user
 pnpm admin:revoke <username>    # demote an admin
 ```
 
+## Buyer handover checklist
+
+1. Set **Admin → Site settings → Site address** to the public HTTPS origin.
+2. Set branding, registration policy, legal links, and the risk disclaimer.
+3. Configure SMTP, cTrader and Telegram under **Admin → Integrations**. SMTP is required for password reset, email verification and admin invites.
+4. Run `pnpm doochy:check` and confirm the setup checklist has no required todos.
+5. Take a `pnpm doochy:backup` snapshot before handing over the server.
+
 ## Optional integrations
 
-cTrader, Telegram, and SMTP are configured in the admin panel after the first login. Secrets saved there are encrypted with `INTEGRATIONS_ENCRYPTION_KEY`.
+SMTP, cTrader and Telegram are configured in the admin panel after the first login. Secrets saved there are encrypted with `INTEGRATIONS_ENCRYPTION_KEY`. Site URL, branding, registration policy, and legal links are managed under **Admin → Site settings**.
+
+### Email
+
+Doochy uses generic SMTP through Nodemailer, with no vendor SDK or hardcoded provider. Mailgun, Postmark, Amazon SES, Google Workspace and self-hosted relays all work. For Mailgun, use `smtp.mailgun.org` (US), `smtp.eu.mailgun.org` (EU), port 587, STARTTLS, your SMTP username and SMTP password. The provider must authorize the From address/domain (SPF, DKIM, DMARC).
+
+SMTP enables password reset, optional email verification and admin invites. Verification is off by default and can be enabled under **Admin → Site settings → Registration**; existing accounts are treated as verified. The admin **Test** button sends a real email to the signed-in admin.
 
 Telegram uses long polling only, so it needs no inbound route or webhook.
 

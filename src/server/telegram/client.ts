@@ -120,7 +120,7 @@ export async function sendMessage(
   };
   if (buttonUrl) {
     payload.reply_markup = {
-      inline_keyboard: [[{ text: "Open on Doochy", url: buttonUrl }]],
+      inline_keyboard: [[{ text: "Open dashboard", url: buttonUrl }]],
     };
   }
   await apiCall("sendMessage", payload);

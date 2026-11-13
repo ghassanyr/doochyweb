@@ -14,7 +14,11 @@ export type ViewKey =
   | "admin"
   | "admin-settings"
   | "admin-integrations"
-  | "settings";
+  | "settings"
+  | "forgot-password"
+  | "reset-password"
+  | "verify-email"
+  | "accept-invite";
 
 export const VIEW_KEYS: readonly ViewKey[] = [
   "home",
@@ -27,6 +31,10 @@ export const VIEW_KEYS: readonly ViewKey[] = [
   "admin-settings",
   "admin-integrations",
   "settings",
+  "forgot-password",
+  "reset-password",
+  "verify-email",
+  "accept-invite",
 ];
 
 const VIEW_SET = new Set<string>(VIEW_KEYS);
@@ -57,8 +65,7 @@ export function viewFromPath(pathname: string): ViewKey | null {
 }
 
 function isLearnHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  return host === "learn.doochy.net" || host.startsWith("learn.");
+  return hostname.toLowerCase().startsWith("learn.");
 }
 
 function withSearch(path: string, params: URLSearchParams): string {

@@ -7,10 +7,14 @@
 import { Router, type Request, type Response } from "express";
 
 import { adminRequired, type AuthedRequest } from "../auth";
+import { User } from "../db";
 import { buildAuthorizeUrl, ctraderOAuthConfigFrom } from "../ctrader/oauth";
 import { callbackCandidates, providerIssuesFromValues } from "../integrations/ctraderSetup";
+import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { IntegrationCryptoError, encryptionKeyFromEnv } from "../integrations/crypto";
 import { INTEGRATION_DEFS, isIntegrationProvider } from "../integrations/registry";
+import { validateSmtpSetup } from "../integrations/smtpSetup";
+import { asSmtpValues, sendTestEmail } from "../email/transport";
 import {
   getIntegrationStates,
   recordIntegrationTest,
@@ -65,8 +69,11 @@ function hasDraft(patch: unknown): boolean {
   return hasValues || hasClear;
 }
 
-async function testCtrader(values: ResolvedIntegration): Promise<IntegrationTestResult> {
-  const issues = providerIssuesFromValues("ctrader", values.values);
+async function testCtrader(
+  values: ResolvedIntegration,
+  publicBaseUrl: string | null
+): Promise<IntegrationTestResult> {
+  const issues = providerIssuesFromValues("ctrader", values.values, publicBaseUrl);
   if (issues.errors.length > 0) {
     return { ok: false, message: issues.errors[0] };
   }
@@ -126,11 +133,46 @@ async function testTelegram(values: ResolvedIntegration): Promise<IntegrationTes
   }
 }
 
+async function testSmtp(
+  values: ResolvedIntegration,
+  adminId: string
+): Promise<IntegrationTestResult> {
+  if (values.missing.length > 0) {
+    return { ok: false, message: `Missing required fields: ${values.missing.join(", ")}` };
+  }
+  const issues = validateSmtpSetup(values.values);
+  if (issues.errors.length > 0) {
+    return { ok: false, message: issues.errors[0] };
+  }
+  const admin: any = await User.findById(adminId).lean().exec();
+  const to = typeof admin?.email === "string" ? admin.email.trim() : "";
+  if (!to) {
+    return {
+      ok: false,
+      message: "Add an email address to your admin account before sending a test.",
+    };
+  }
+  try {
+    await sendTestEmail(asSmtpValues(values.values), to);
+    return {
+      ok: true,
+      message: `Test email sent to ${to}. Check the inbox and spam folder.`,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "SMTP send failed";
+    return { ok: false, message: `Could not send email: ${message}` };
+  }
+}
+
 function testProvider(
   provider: IntegrationProvider,
-  values: ResolvedIntegration
+  values: ResolvedIntegration,
+  publicBaseUrl: string | null
 ): Promise<IntegrationTestResult> {
-  return provider === "ctrader" ? testCtrader(values) : testTelegram(values);
+  if (provider === "smtp") throw new Error("SMTP tests need the acting admin account");
+  return provider === "ctrader"
+    ? testCtrader(values, publicBaseUrl)
+    : testTelegram(values);
 }
 
 /** A network error can quote the request URL; never echo a secret back. */
@@ -150,7 +192,8 @@ function redactSecrets(
 
 integrationAdminRouter.get("/integrations", adminRequired, async (req, res) => {
   try {
-    const integrations = await getIntegrationStates();
+    const origin = requestOrigin(req);
+    const integrations = await getIntegrationStates(process.env, origin);
     let encryptionAvailable = false;
     try {
       encryptionAvailable = encryptionKeyFromEnv() !== null;
@@ -158,15 +201,12 @@ integrationAdminRouter.get("/integrations", adminRequired, async (req, res) => {
       encryptionAvailable = false;
     }
 
-    const ctrader = integrations.find((entry) => entry.provider === "ctrader");
-    const baseField = ctrader?.fields.find((field) => field.key === "publicBaseUrl");
-    const configuredBase = typeof baseField?.value === "string" ? baseField.value : null;
-    const origin = requestOrigin(req);
+    const publicBaseUrl = await canonicalPublicBaseUrl(process.env, origin);
     res.json({
       integrations,
       encryptionAvailable,
       requestOrigin: origin,
-      callbacks: callbackCandidates(configuredBase ?? origin),
+      callbacks: callbackCandidates(publicBaseUrl),
     });
   } catch (err) {
     fail(res, err, "failed to load integrations");
@@ -219,10 +259,16 @@ integrationAdminRouter.post(
 
     try {
       const values = await resolveDraftIntegration(provider, req.body ?? {});
+      const publicBaseUrl = await canonicalPublicBaseUrl(
+        process.env,
+        requestOrigin(req)
+      );
       const result = redactSecrets(
         provider,
         values,
-        await testProvider(provider, values)
+        provider === "smtp"
+          ? await testSmtp(values, req.userId!)
+          : await testProvider(provider, values, publicBaseUrl)
       );
       const integration = await recordIntegrationTest(provider, result, hasDraft(req.body));
       res.json({ result, integration });

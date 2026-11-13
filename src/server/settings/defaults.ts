@@ -5,13 +5,33 @@
 import type {
   AnnouncementSettings,
   BrandingSettings,
+  LegalSettings,
   MaintenanceSettings,
   ModuleKey,
   ModuleSettings,
   NavigationSettings,
+  RegistrationSettings,
+  SiteAddressSettings,
   SiteSettings,
   ThemeSettings,
 } from "./types";
+
+export const DEFAULT_SITE: SiteAddressSettings = {
+  publicBaseUrl: "",
+};
+
+export const DEFAULT_REGISTRATION: RegistrationSettings = {
+  mode: "open",
+  message: "",
+  inviteCode: "",
+  requireEmailVerification: false,
+};
+
+export const DEFAULT_LEGAL: LegalSettings = {
+  termsUrl: "",
+  privacyUrl: "",
+  riskDisclaimer: "",
+};
 
 export const DEFAULT_BRANDING: BrandingSettings = {
   name: "Doochy",
@@ -87,6 +107,7 @@ export const DEFAULT_ANNOUNCEMENT: AnnouncementSettings = {
 /** The complete settings shape when no document exists yet. */
 export function defaultSiteSettings(): SiteSettings {
   return {
+    site: { ...DEFAULT_SITE },
     branding: { ...DEFAULT_BRANDING },
     theme: { ...DEFAULT_THEME },
     navigation: {
@@ -95,6 +116,8 @@ export function defaultSiteSettings(): SiteSettings {
     },
     maintenance: { ...DEFAULT_MAINTENANCE },
     announcement: { ...DEFAULT_ANNOUNCEMENT },
+    registration: { ...DEFAULT_REGISTRATION },
+    legal: { ...DEFAULT_LEGAL },
     version: null,
     updatedAt: null,
     updatedBy: null,

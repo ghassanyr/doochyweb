@@ -4,6 +4,8 @@ import { afterEach, describe, test } from "node:test";
 import { configuredAdminUsernames, setRole } from "../src/server/admin/roles";
 import { adminRequired, signToken } from "../src/server/auth";
 import { User } from "../src/server/db";
+import { registrationDecision } from "../src/server/registrationPolicy";
+import { DEFAULT_REGISTRATION } from "../src/server/settings/defaults";
 
 const USER_ID = "507f1f77bcf86cd799439011";
 
@@ -202,5 +204,51 @@ describe("configuredAdminUsernames", () => {
     } finally {
       if (previous !== undefined) process.env.ADMIN_USERNAME = previous;
     }
+  });
+});
+
+describe("registration policy", () => {
+  test("open registration activates the account", () => {
+    assert.deepEqual(registrationDecision(DEFAULT_REGISTRATION, ""), {
+      allowed: true,
+      status: "active",
+    });
+  });
+
+  test("approval registration creates a pending account", () => {
+    assert.deepEqual(
+      registrationDecision({ ...DEFAULT_REGISTRATION, mode: "approval" }, ""),
+      { allowed: true, status: "pending" }
+    );
+  });
+
+  test("invite registration requires the exact trimmed code", () => {
+    const registration = {
+      ...DEFAULT_REGISTRATION,
+      mode: "invite" as const,
+      inviteCode: "secret-code",
+    };
+    assert.deepEqual(registrationDecision(registration, " secret-code "), {
+      allowed: true,
+      status: "active",
+    });
+    assert.deepEqual(registrationDecision(registration, "wrong-code"), {
+      allowed: false,
+      error: "That invite code is not valid.",
+    });
+    assert.deepEqual(registrationDecision(registration, undefined), {
+      allowed: false,
+      error: "That invite code is not valid.",
+    });
+  });
+
+  test("closed registration uses the configured message", () => {
+    assert.deepEqual(
+      registrationDecision(
+        { ...DEFAULT_REGISTRATION, mode: "closed", message: "Invite only." },
+        "anything"
+      ),
+      { allowed: false, error: "Invite only." }
+    );
   });
 });

@@ -14,6 +14,7 @@
 // only a warning because the connection still works, but trading actions fail.
 
 import type { IntegrationFieldState, IntegrationProvider } from "./types";
+import { providerSmtpIssues, validateSmtpSetup } from "./smtpSetup";
 
 export const CTRADER_CALLBACK_PATHS = ["/callback", "/api/ctrader/oauth/callback"] as const;
 
@@ -128,21 +129,29 @@ export function validateCtraderSetup(values: Record<string, unknown>): SetupIssu
 /** Validate already-resolved values (used by the draft test endpoint). */
 export function providerIssuesFromValues(
   provider: IntegrationProvider,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  publicBaseUrl?: string | null
 ): SetupIssues {
+  if (provider === "smtp") return validateSmtpSetup(values);
   if (provider !== "ctrader") return { errors: [], warnings: [] };
-  return validateCtraderSetup(values);
+  return validateCtraderSetup(
+    publicBaseUrl ? { ...values, publicBaseUrl } : values
+  );
 }
 
 /** Validate the admin-facing field states without decrypting any secret. */
 export function providerIssues(
   provider: IntegrationProvider,
-  fields: IntegrationFieldState[]
+  fields: IntegrationFieldState[],
+  publicBaseUrl?: string | null
 ): SetupIssues {
+  if (provider === "smtp") return providerSmtpIssues(fields);
   if (provider !== "ctrader") return { errors: [], warnings: [] };
   const values: Record<string, unknown> = {};
   for (const field of fields) {
     if (field.kind !== "secret" && field.value !== null) values[field.key] = field.value;
   }
-  return validateCtraderSetup(values);
+  return validateCtraderSetup(
+    publicBaseUrl ? { ...values, publicBaseUrl } : values
+  );
 }

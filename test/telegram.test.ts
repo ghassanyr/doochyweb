@@ -11,8 +11,11 @@ import {
   normalizeLinkCode,
 } from "../src/server/telegram/link";
 import {
+  buildInvalidCodeMessage,
+  buildNotLinkedMessage,
   buildPublishedMessage,
   buildTestMessage,
+  buildWelcomeMessage,
   escapeHtml,
   fmtPrice,
   formatUtc,
@@ -48,7 +51,7 @@ describe("telegram config", () => {
     const config = telegramConfig({});
     assert.equal(config.enabled, false);
     assert.equal("mode" in config, false);
-    assert.equal(config.baseUrl, "https://doochy.net");
+    assert.equal(config.baseUrl, "");
     assert.equal(config.botUsername, "DoochyBot");
     assert.equal(config.linkTtlMinutes, 15);
   });
@@ -92,6 +95,7 @@ describe("telegram config", () => {
       token: "123:abc",
       botUsername: "MyBot",
       baseUrl: "https://example.com",
+      brandName: "Doochy",
       linkTtlMinutes: 5,
     });
   });
@@ -236,6 +240,18 @@ describe("telegram messages", () => {
       signalButtonUrl("https://doochy.net/", "507f1f77bcf86cd799439011"),
       "https://doochy.net/signals?signal=507f1f77bcf86cd799439011"
     );
+    assert.equal(signalButtonUrl("", "507f1f77bcf86cd799439011"), null);
+  });
+
+  test("omits settings links when no public URL is configured", () => {
+    const welcome = buildWelcomeMessage("", "Acme");
+    assert.match(welcome, /Connect Telegram/);
+    assert.doesNotMatch(welcome, /<a href=/);
+    assert.match(buildInvalidCodeMessage(""), /Generate a new one in Settings\./);
+    assert.equal(
+      buildNotLinkedMessage(""),
+      "This chat is not linked. Open Settings to connect it."
+    );
   });
 
   test("formats UTC timestamps and test messages", () => {
@@ -243,6 +259,8 @@ describe("telegram messages", () => {
     assert.ok(formatted?.includes("Nov 2026"));
     assert.ok(formatted?.includes("14:00"));
     assert.match(buildTestMessage(), /notifications are working/);
+    assert.match(buildTestMessage("Acme"), /<b>Acme test<\/b>/);
+    assert.match(buildTestMessage("<Acme>"), /&lt;Acme&gt;/);
   });
 });
 

@@ -24,6 +24,7 @@ import type { Candle } from "../market/types";
 import { SYMBOLS, TAG_FAMILY, TAGS, TIMEFRAMES } from "./config";
 import { readTrainerBars } from "./bars";
 import { PREVIEW_CONTEXT_DEFAULT, renderPreviewHtml } from "./preview";
+import { getSiteSettings } from "../settings/store";
 import { readAll, readById, updateReview, upsertMany } from "./reviewStore";
 import { CANDIDATES_DIR, CANDIDATE_COLUMNS } from "./scan";
 import type {
@@ -902,7 +903,11 @@ async function cmdPreview(flags: ReadonlyMap<string, string>): Promise<void> {
     barsBySeries[key] = stored?.bars ?? null;
   }
 
-  const html = renderPreviewHtml(result.rows, barsBySeries, { context });
+  const settings = await getSiteSettings();
+  const html = renderPreviewHtml(result.rows, barsBySeries, {
+    context,
+    brandName: settings.branding.name,
+  });
   const base = path.basename(file);
   const runId = base.endsWith(".shortlist.csv")
     ? base.slice(0, -".shortlist.csv".length)
