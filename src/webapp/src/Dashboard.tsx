@@ -24,22 +24,21 @@ export default function Dashboard({
   accounts: AccountView[];
   isAdmin: boolean;
 }) {
-  const [selectedCtids, setSelectedCtids] = useState<number[]>(() => {
-    const preferred = accounts.find((a) => a.isLive) ?? accounts[0];
-    return preferred ? [preferred.ctid] : [];
-  });
-  // "All accounts" is its own mode, not a shortcut that ticks every pill. While
-  // it is on, the individual pills render unselected; clicking one switches to
-  // that account (and turns All off).
-  const [allSelected, setAllSelected] = useState(false);
-  const initialized = useRef(selectedCtids.length > 0);
+  // The trading view opens on "All accounts", with every individual pill
+  // unselected. "All accounts" is its own mode, not a shortcut that ticks every
+  // pill; clicking one switches to that account (and turns All off).
+  const [selectedCtids, setSelectedCtids] = useState<number[]>(() =>
+    accounts.map((a) => a.ctid)
+  );
+  const [allSelected, setAllSelected] = useState(accounts.length > 0);
+  const initialized = useRef(accounts.length > 0);
 
-  // Default to the first live account once, when accounts first arrive.
+  // Accounts usually arrive after the first render; default to All once they do.
   useEffect(() => {
     if (initialized.current || accounts.length === 0) return;
     initialized.current = true;
-    const preferred = accounts.find((a) => a.isLive) ?? accounts[0];
-    setSelectedCtids([preferred.ctid]);
+    setSelectedCtids(accounts.map((a) => a.ctid));
+    setAllSelected(true);
   }, [accounts]);
 
   const activeAccounts = allSelected
