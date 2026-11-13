@@ -4,13 +4,16 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Globe,
   Megaphone,
   Navigation,
   Palette,
   RotateCcw,
   Save,
+  ShieldCheck,
   Type,
   Upload,
+  UserPlus,
   Wrench,
 } from "lucide-react";
 
@@ -20,10 +23,14 @@ import {
   type AnnouncementTone,
   type BrandingSettings,
   type LandingKey,
+  type LegalSettings,
   type MaintenanceSettings,
   type ModuleAccess,
   type ModuleSettings,
   type NavigationSettings,
+  type RegistrationMode,
+  type RegistrationSettings,
+  type SiteAddressSettings,
   type SiteSettings,
   type ThemeSettings,
 } from "../api";
@@ -90,6 +97,13 @@ const LANDING_OPTIONS: { value: LandingKey; label: string }[] = [
   { value: "home", label: "Home" },
   { value: "analysis", label: "Analysis" },
   { value: "signals", label: "Signals" },
+];
+
+const REGISTRATION_OPTIONS: { value: RegistrationMode; label: string }[] = [
+  { value: "open", label: "Open registration" },
+  { value: "approval", label: "Admin approval" },
+  { value: "invite", label: "Invite code" },
+  { value: "closed", label: "Closed" },
 ];
 
 const TONE_OPTIONS: { value: AnnouncementTone; label: string }[] = [
@@ -262,11 +276,14 @@ export default function AdminSettingsPage({
 }) {
   const { setConfig, restoreTheme } = useSiteConfig();
   const [loaded, setLoaded] = useState<SiteSettings | null>(null);
+  const [site, setSite] = useState<SiteAddressSettings | null>(null);
   const [branding, setBranding] = useState<BrandingSettings | null>(null);
   const [theme, setTheme] = useState<ThemeSettings | null>(null);
   const [navigation, setNavigation] = useState<NavigationSettings | null>(null);
   const [maintenance, setMaintenance] = useState<MaintenanceSettings | null>(null);
   const [announcement, setAnnouncement] = useState<AnnouncementSettings | null>(null);
+  const [registration, setRegistration] = useState<RegistrationSettings | null>(null);
+  const [legal, setLegal] = useState<LegalSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -283,11 +300,14 @@ export default function AdminSettingsPage({
       .then(({ settings }) => {
         if (!alive) return;
         setLoaded(settings);
+        setSite(settings.site);
         setBranding(settings.branding);
         setTheme(settings.theme);
         setNavigation(settings.navigation);
         setMaintenance(settings.maintenance);
         setAnnouncement(settings.announcement);
+        setRegistration(settings.registration);
+        setLegal(settings.legal);
       })
       .catch((err) => {
         if (alive) setError(err instanceof Error ? err.message : "Failed to load site settings");
@@ -319,51 +339,92 @@ export default function AdminSettingsPage({
   }, [theme]);
 
   const dirty = useMemo(() => {
-    if (!loaded || !branding || !theme || !navigation || !maintenance || !announcement) {
+    if (
+      !loaded ||
+      !site ||
+      !branding ||
+      !theme ||
+      !navigation ||
+      !maintenance ||
+      !announcement ||
+      !registration ||
+      !legal
+    ) {
       return false;
     }
     return (
+      JSON.stringify(site) !== JSON.stringify(loaded.site) ||
       JSON.stringify(branding) !== JSON.stringify(loaded.branding) ||
       JSON.stringify(theme) !== JSON.stringify(loaded.theme) ||
       JSON.stringify(navigation) !== JSON.stringify(loaded.navigation) ||
       JSON.stringify(maintenance) !== JSON.stringify(loaded.maintenance) ||
-      JSON.stringify(announcement) !== JSON.stringify(loaded.announcement)
+      JSON.stringify(announcement) !== JSON.stringify(loaded.announcement) ||
+      JSON.stringify(registration) !== JSON.stringify(loaded.registration) ||
+      JSON.stringify(legal) !== JSON.stringify(loaded.legal)
     );
-  }, [loaded, branding, theme, navigation, maintenance, announcement]);
+  }, [loaded, site, branding, theme, navigation, maintenance, announcement, registration, legal]);
 
   function reset() {
     if (!loaded) return;
+    setSite(loaded.site);
     setBranding(loaded.branding);
     setTheme(loaded.theme);
     setNavigation(loaded.navigation);
     setMaintenance(loaded.maintenance);
     setAnnouncement(loaded.announcement);
+    setRegistration(loaded.registration);
+    setLegal(loaded.legal);
     applyTheme(loaded.theme);
     setSaved(false);
     setError(null);
   }
 
   async function save() {
-    if (!branding || !theme || !navigation || !maintenance || !announcement) return;
+    if (
+      !site ||
+      !branding ||
+      !theme ||
+      !navigation ||
+      !maintenance ||
+      !announcement ||
+      !registration ||
+      !legal
+    ) {
+      return;
+    }
     setError(null);
     setSaved(false);
     try {
       const { settings } = await adminApi.saveSettings({
+        site,
         branding,
         theme,
         navigation,
         maintenance,
         announcement,
+        registration,
+        legal,
       });
       setLoaded(settings);
+      setSite(settings.site);
       setBranding(settings.branding);
       setTheme(settings.theme);
       setNavigation(settings.navigation);
       setMaintenance(settings.maintenance);
       setAnnouncement(settings.announcement);
+      setRegistration(settings.registration);
+      setLegal(settings.legal);
       // Push the saved values into the provider so the header, title and
       // palette update without a reload.
-      setConfig(settings);
+      setConfig({
+        ...settings,
+        registration: {
+          mode: settings.registration.mode,
+          message: settings.registration.message,
+          inviteRequired: settings.registration.mode === "invite",
+          requireEmailVerification: settings.registration.requireEmailVerification,
+        },
+      });
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save site settings");
@@ -402,7 +463,16 @@ export default function AdminSettingsPage({
     );
   }
 
-  if (!branding || !theme || !navigation || !maintenance || !announcement) {
+  if (
+    !site ||
+    !branding ||
+    !theme ||
+    !navigation ||
+    !maintenance ||
+    !announcement ||
+    !registration ||
+    !legal
+  ) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-3">
         <Flash tone="danger">{error ?? "Site settings are unavailable."}</Flash>
@@ -496,6 +566,128 @@ export default function AdminSettingsPage({
             </span>
           </Flash>
         )}
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Site address</h2>
+              <p className="text-xs text-fg-muted">
+                The public origin used in cTrader callbacks, Telegram links and shared URLs.
+              </p>
+            </div>
+          </div>
+          <TextField
+            label="Public base URL"
+            value={site.publicBaseUrl}
+            onChange={(publicBaseUrl) => setSite({ ...site, publicBaseUrl })}
+            placeholder="https://your-domain.com"
+            hint="Origin only, with no path. Leave empty to use PUBLIC_BASE_URL or the current request origin."
+            maxLength={300}
+          />
+          <p className="text-[11px] text-fg-faint">
+            cTrader callback: <code>{site.publicBaseUrl || "https://your-domain.com"}/callback</code>
+            {" "}or <code>{site.publicBaseUrl || "https://your-domain.com"}/api/ctrader/oauth/callback</code>
+          </p>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Registration</h2>
+              <p className="text-xs text-fg-muted">
+                Decide who can create an account on this site.
+              </p>
+            </div>
+          </div>
+          <SelectField
+            label="Registration policy"
+            value={registration.mode}
+            onChange={(mode) => setRegistration({ ...registration, mode })}
+            options={REGISTRATION_OPTIONS}
+            hint={
+              registration.mode === "approval"
+                ? "New accounts stay pending until an admin approves them under Users."
+                : registration.mode === "invite"
+                  ? "Visitors must enter the invite code below to register."
+                  : registration.mode === "closed"
+                    ? "The register form is disabled; admins can still create accounts."
+                    : "Anyone with the site URL can create an account."
+            }
+          />
+          {registration.mode === "invite" && (
+            <TextField
+              label="Invite code"
+              value={registration.inviteCode}
+              onChange={(inviteCode) => setRegistration({ ...registration, inviteCode })}
+              placeholder="At least 6 characters"
+              hint="Never shown publicly. Share it with the people you invite."
+              maxLength={64}
+            />
+          )}
+          <TextField
+            label="Message"
+            value={registration.message}
+            onChange={(message) => setRegistration({ ...registration, message })}
+            placeholder={
+              registration.mode === "approval"
+                ? "Account created. An admin must approve it before you can sign in."
+                : "Registration is closed."
+            }
+            hint="Optional wording shown on the login/register screen or after submitting."
+            textarea
+            maxLength={500}
+          />
+          <Toggle
+            checked={registration.requireEmailVerification}
+            onChange={(requireEmailVerification) =>
+              setRegistration({ ...registration, requireEmailVerification })
+            }
+            label="Require new users to verify their email"
+          />
+          <p className="text-[11px] text-fg-faint">
+            Requires SMTP under Integrations. Existing accounts are treated as verified, so
+            turning this on never locks them out.
+          </p>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Legal and risk</h2>
+              <p className="text-xs text-fg-muted">
+                Links and copy shown in the public footer. Especially important for trading products.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Terms URL"
+              value={legal.termsUrl}
+              onChange={(termsUrl) => setLegal({ ...legal, termsUrl })}
+              placeholder="/terms or https://example.com/terms"
+              maxLength={500}
+            />
+            <TextField
+              label="Privacy URL"
+              value={legal.privacyUrl}
+              onChange={(privacyUrl) => setLegal({ ...legal, privacyUrl })}
+              placeholder="/privacy or https://example.com/privacy"
+              maxLength={500}
+            />
+          </div>
+          <TextField
+            label="Risk disclaimer"
+            value={legal.riskDisclaimer}
+            onChange={(riskDisclaimer) => setLegal({ ...legal, riskDisclaimer })}
+            placeholder="Trading involves risk. Past performance does not guarantee future results."
+            hint="Shown in the footer and on the landing page."
+            textarea
+            maxLength={1000}
+          />
+        </Card>
 
         <Card className="space-y-4 p-4">
           <div className="flex items-center gap-2">
@@ -643,7 +835,7 @@ export default function AdminSettingsPage({
               variant="secondary"
               onClick={() => setTheme({ ...FALLBACK_THEME })}
             >
-              Doochy dark
+              {branding.name || "Default"} dark
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setTheme({ ...LIGHT_THEME })}>
               Light

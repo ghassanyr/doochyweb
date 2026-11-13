@@ -26,12 +26,32 @@ import {
   type AnnouncementSettings,
   type BrandingSettings,
   type MaintenanceSettings,
+  type LegalSettings,
   type ModuleSettings,
   type NavigationSettings,
+  type PublicRegistrationSettings,
+  type SiteAddressSettings,
   type SiteConfig,
   type ThemeMode,
   type ThemeSettings,
 } from "./api";
+
+export const FALLBACK_SITE: SiteAddressSettings = {
+  publicBaseUrl: "",
+};
+
+export const FALLBACK_REGISTRATION: PublicRegistrationSettings = {
+  mode: "open",
+  message: "",
+  inviteRequired: false,
+  requireEmailVerification: false,
+};
+
+export const FALLBACK_LEGAL: LegalSettings = {
+  termsUrl: "",
+  privacyUrl: "",
+  riskDisclaimer: "",
+};
 
 export const FALLBACK_BRANDING: BrandingSettings = {
   name: "Doochy",

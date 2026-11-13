@@ -20,6 +20,7 @@ import {
   maskSecret,
   requireEncryptionKey,
 } from "./crypto";
+import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { providerIssues } from "./ctraderSetup";
 import {
   INTEGRATION_DEFS,
@@ -188,12 +189,14 @@ export function describeIntegration(
   provider: IntegrationProvider,
   stored: StoredIntegrationProvider | null | undefined,
   env: NodeJS.ProcessEnv = process.env,
-  key: Buffer | null = encryptionKeyFromEnv(env)
+  key: Buffer | null = encryptionKeyFromEnv(env),
+  publicBaseUrl: string | null = null
 ): IntegrationState {
   const def = INTEGRATION_DEFS[provider];
   const values = storedValues(stored);
   const fields = def.fields.map((field) => describeField(provider, field, values, env, key));
-  const issues = providerIssues(provider, fields);
+  const legacyBase = typeof values.publicBaseUrl === "string" ? values.publicBaseUrl : null;
+  const issues = providerIssues(provider, fields, publicBaseUrl ?? legacyBase);
   const ready =
     fields.every((field) => field.error === null) &&
     fields.every((field) => !field.required || field.configured) &&
@@ -343,21 +346,31 @@ export function resolveDraftValues(
 }
 
 export async function getIntegrationStates(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  requestOrigin: string | null = null
 ): Promise<IntegrationState[]> {
   const providers = await loadProviders();
   const key = encryptionKeyFromEnv(env);
+  const publicBaseUrl = await canonicalPublicBaseUrl(env, requestOrigin);
   return INTEGRATION_PROVIDERS.map((provider) =>
-    describeIntegration(provider, providers[provider], env, key)
+    describeIntegration(provider, providers[provider], env, key, publicBaseUrl)
   );
 }
 
 export async function getIntegrationState(
   provider: IntegrationProvider,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  requestOrigin: string | null = null
 ): Promise<IntegrationState> {
   const providers = await loadProviders();
-  return describeIntegration(provider, providers[provider], env, encryptionKeyFromEnv(env));
+  const publicBaseUrl = await canonicalPublicBaseUrl(env, requestOrigin);
+  return describeIntegration(
+    provider,
+    providers[provider],
+    env,
+    encryptionKeyFromEnv(env),
+    publicBaseUrl
+  );
 }
 
 /** Runtime read with decrypted secrets. Never send the result to a client. */

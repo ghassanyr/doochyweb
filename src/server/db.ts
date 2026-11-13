@@ -9,6 +9,7 @@ export async function connectDb(): Promise<void> {
 }
 
 export type UserRole = "user" | "admin";
+export type UserStatus = "active" | "pending";
 
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
@@ -19,6 +20,13 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   // Existing accounts predate this field; a missing value is read as "user".
   role: { type: String, enum: ["user", "admin"], default: "user", index: true },
+  // Approval mode creates pending users. Existing accounts are active.
+  status: { type: String, enum: ["active", "pending"], default: "active", index: true },
+  // Missing means verified, so accounts created before verification existed
+  // are never locked out when an admin turns the policy on.
+  emailVerified: { type: Boolean, default: true },
+  // Incremented on password reset and invite acceptance to invalidate old JWTs.
+  tokenVersion: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
 });
 

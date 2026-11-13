@@ -84,14 +84,15 @@ export async function enqueueSignalPublished(
 
 /** Queue a one-off test message. Each call gets its own event key. */
 export async function enqueueTest(chatId: string, now: Date = new Date()): Promise<void> {
-  if (!(await loadTelegramConfig()).enabled) {
+  const config = await loadTelegramConfig();
+  if (!config.enabled) {
     throw new Error("Telegram notifications are not configured");
   }
   await TelegramDelivery.create({
     signalId: null,
     event: `test:${randomUUID()}`,
     chatId,
-    text: buildTestMessage(),
+    text: buildTestMessage(config.brandName),
     buttonUrl: null,
     status: "pending",
     attempts: 0,

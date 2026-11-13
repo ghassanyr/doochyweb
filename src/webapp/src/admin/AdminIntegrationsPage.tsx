@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
   Check,
   Copy,
   FlaskConical,
+  Mail,
   Plug,
   Save,
   Send,
@@ -49,23 +50,6 @@ function initialValues(state: IntegrationState): Record<string, string> {
 
 function draftFrom(state: IntegrationState): Draft {
   return { values: initialValues(state), cleared: [] };
-}
-
-function candidatesFrom(base: string | null | undefined): CallbackCandidates {
-  const raw = (base ?? "").trim();
-  if (!raw) return EMPTY_CALLBACKS;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return EMPTY_CALLBACKS;
-    const origin = url.origin;
-    return {
-      baseUrl: origin,
-      primary: `${origin}/callback`,
-      api: `${origin}/api/ctrader/oauth/callback`,
-    };
-  } catch {
-    return EMPTY_CALLBACKS;
-  }
 }
 
 function buildPatch(
@@ -265,7 +249,7 @@ function ProviderCard({
   const patch = buildPatch(state, draft, baseline);
   const dirty = isDirty(patch);
   const provider = state.provider;
-  const Icon = provider === "ctrader" ? Plug : Send;
+  const Icon = provider === "ctrader" ? Plug : provider === "smtp" ? Mail : Send;
 
   function updateValue(key: string, value: string) {
     onDraftChange({
@@ -340,7 +324,7 @@ function ProviderCard({
             </li>
             <li>Copy the app's Client ID and Client secret into the fields below.</li>
             <li>Add one of the callback URLs below to the app's redirect URIs. It must match exactly.</li>
-            <li>Save, then run Test. A pass means the URL is reachable, not that approval is complete.</li>
+            <li>Save, then run the check. A pass means the URL is reachable, not that cTrader approval is complete.</li>
           </ol>
           <div className="space-y-1.5 pt-1">
             <CallbackRow label="Recommended" value={callbacks.primary} />
@@ -399,12 +383,12 @@ function ProviderCard({
         <div className="rounded-lg border border-hairline bg-soft px-3 py-2 text-[11px] leading-relaxed">
           {testResult ? (
             <span className={testResult.ok ? "text-success" : "text-danger"}>
-              {testResult.ok ? "Test passed: " : "Test failed: "}
+              {testResult.ok ? "Check passed: " : "Check failed: "}
               {testResult.message}
             </span>
           ) : (
             <span className={state.lastTestOk ? "text-success" : "text-danger"}>
-              Last test {state.lastTestOk ? "passed" : "failed"}: {state.lastTestMessage}
+              Last check {state.lastTestOk ? "passed" : "failed"}: {state.lastTestMessage}
             </span>
           )}
           {state.lastTestAt && (
@@ -534,12 +518,7 @@ export default function AdminIntegrationsPage({
     }
   }
 
-  const callbackPreview = useMemo(() => {
-    const ctrader = data?.integrations.find((entry) => entry.provider === "ctrader");
-    if (!ctrader) return data?.callbacks ?? EMPTY_CALLBACKS;
-    const draftBase = drafts.ctrader?.values.publicBaseUrl;
-    return candidatesFrom(draftBase?.trim() ? draftBase : data?.requestOrigin);
-  }, [data, drafts]);
+  const callbackPreview = data?.callbacks ?? EMPTY_CALLBACKS;
 
   if (loading) {
     return (

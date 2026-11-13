@@ -14,6 +14,7 @@ export interface PreviewWindow {
 
 export interface PreviewOptions {
   context?: number;
+  brandName?: string;
 }
 
 export type PreviewBarsBySeries = Readonly<
@@ -455,6 +456,7 @@ export function renderPreviewHtml(
   if (!Number.isInteger(context) || context < 1) {
     throw new Error("context must be a positive integer");
   }
+  const brand = escapeHtml(options.brandName?.trim() || "Doochy");
 
   const tags = [...new Set(rows.map((row) => row.tag))].sort();
   const series = [...new Set(rows.map((row) => seriesKey(row)))].sort();
@@ -484,7 +486,7 @@ export function renderPreviewHtml(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Doochy Learn review preview</title>
+<title>${brand} Learn review preview</title>
 <style>
 :root { color-scheme: dark; --bg: #0b1016; --panel: #141b24; --line: #293442; --fg: #e7edf5; --muted: #93a1b3; --accent: #14b8a6; --up: #26a69a; --down: #ef5350; --upper: #60a5fa; --lower: #fb923c; --neck: #c084fc; }
 * { box-sizing: border-box; }
@@ -552,7 +554,7 @@ code { color: var(--fg); }
 </head>
 <body>
 <header class="top">
-  <h1>Doochy Learn review preview</h1>
+  <h1>${brand} Learn review preview</h1>
   <p>Read-only gallery. Edit the shortlist CSV, not this page. Context and zoom end at the cut bar; no future bars are shown.</p>
   <div class="controls">
     <label>Tag<select id="tag-filter"><option value="">All tags</option>${tagOptions}</select></label>

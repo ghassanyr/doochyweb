@@ -10,6 +10,19 @@ export interface AuthedRequest extends Request {
   userId?: string;
   username?: string;
   role?: UserRole;
+  tokenVersion?: number;
+}
+
+export interface SessionUser {
+  id: string;
+  username: string | null;
+  role: UserRole;
+  tokenVersion: number;
+}
+
+interface TokenPayload {
+  userId: string;
+  v?: number;
 }
 
 function jwtSecret(): string {
@@ -18,48 +31,46 @@ function jwtSecret(): string {
   return process.env.JWT_SECRET || "insecure-development-secret";
 }
 
-/** Verify the bearer token and write the standard 401s. Null means stop. */
-function readToken(req: Request, res: Response): { userId: string } | null {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
-    res.status(401).json({ error: "missing authorization header" });
-    return null;
-  }
-  let payload: any;
-  try {
-    payload = jwt.verify(header.slice(7), jwtSecret());
-  } catch {
-    res.status(401).json({ error: "invalid or expired token" });
-    return null;
-  }
-  if (!payload || typeof payload.userId !== "string") {
-    res.status(401).json({ error: "invalid token payload" });
-    return null;
-  }
-  return { userId: payload.userId };
-}
-
-export function signToken(userId: string): string {
-  return jwt.sign({ userId }, jwtSecret(), { expiresIn: JWT_TTL });
-}
-
-/** User id from a valid bearer token, or null. Never writes a response. */
-export function tokenUserId(req: Request): string | null {
+function readPayload(req: Request): TokenPayload | null {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer ")) return null;
   try {
     const payload: any = jwt.verify(header.slice(7), jwtSecret());
-    return payload && typeof payload.userId === "string" ? payload.userId : null;
+    if (!payload || typeof payload.userId !== "string") return null;
+    return { userId: payload.userId, v: typeof payload.v === "number" ? payload.v : 0 };
   } catch {
     return null;
   }
 }
 
-/** Read the role from the database; used by the maintenance gate. */
-export async function isAdminUser(userId: string | null): Promise<boolean> {
-  if (!userId) return false;
-  const user = await User.findById(userId).lean().exec();
-  return ((user?.role as UserRole | undefined) ?? "user") === "admin";
+export function signToken(userId: string, tokenVersion = 0): string {
+  return jwt.sign({ userId, v: tokenVersion }, jwtSecret(), { expiresIn: JWT_TTL });
+}
+
+/**
+ * Verify the token signature and the account's current token version. Password
+ * resets and invite acceptance bump the version, which invalidates every JWT
+ * issued before the change.
+ */
+export async function sessionFromRequest(req: Request): Promise<SessionUser | null> {
+  const payload = readPayload(req);
+  if (!payload) return null;
+  const user: any = await User.findById(payload.userId).lean().exec();
+  if (!user) return null;
+  const current = typeof user.tokenVersion === "number" ? user.tokenVersion : 0;
+  if ((payload.v ?? 0) !== current) return null;
+  return {
+    id: String(user._id ?? payload.userId),
+    username: typeof user.username === "string" ? user.username : null,
+    role: user.role === "admin" ? "admin" : "user",
+    tokenVersion: current,
+  };
+}
+
+/** User id from a valid bearer token, or null. Never writes a response. */
+export async function tokenUserId(req: Request): Promise<string | null> {
+  const session = await sessionFromRequest(req);
+  return session?.id ?? null;
 }
 
 // Short-lived state carried through the cTrader OAuth browser round-trip. The
@@ -85,11 +96,25 @@ export function verifyOAuthState(state: string): string | null {
   }
 }
 
-export function authRequired(req: AuthedRequest, res: Response, next: NextFunction): void {
-  const token = readToken(req, res);
-  if (!token) return;
-  req.userId = token.userId;
-  next();
+export async function authRequired(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const session = await sessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error: "invalid or expired token" });
+      return;
+    }
+    req.userId = session.id;
+    req.username = session.username ?? undefined;
+    req.role = session.role;
+    req.tokenVersion = session.tokenVersion;
+    next();
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to verify session" });
+  }
 }
 
 /**
@@ -98,22 +123,20 @@ export function authRequired(req: AuthedRequest, res: Response, next: NextFuncti
  * and existing tokens stay valid.
  */
 export async function adminRequired(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
-  const token = readToken(req, res);
-  if (!token) return;
   try {
-    const user = await User.findById(token.userId).lean().exec();
-    if (!user) {
-      res.status(401).json({ error: "user no longer exists" });
+    const session = await sessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error: "invalid or expired token" });
       return;
     }
-    const role = ((user.role as UserRole | undefined) ?? "user");
-    if (role !== "admin") {
+    if (session.role !== "admin") {
       res.status(403).json({ error: "admin access required" });
       return;
     }
-    req.userId = token.userId;
-    req.username = typeof user.username === "string" ? user.username : undefined;
-    req.role = role;
+    req.userId = session.id;
+    req.username = session.username ?? undefined;
+    req.role = session.role;
+    req.tokenVersion = session.tokenVersion;
     next();
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "failed to verify role" });

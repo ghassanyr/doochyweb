@@ -91,68 +91,77 @@ export function buildPublishedMessage(signal: SignalView): string {
   return lines.join("\n");
 }
 
-export function signalButtonUrl(baseUrl: string, signalId: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}/signals?signal=${encodeURIComponent(signalId)}`;
+export function signalButtonUrl(baseUrl: string, signalId: string): string | null {
+  const origin = baseUrl.trim().replace(/\/+$/, "");
+  return origin ? `${origin}/signals?signal=${encodeURIComponent(signalId)}` : null;
 }
 
-export function buildTestMessage(): string {
-  return "✅ <b>Doochy test</b>\nTelegram notifications are working.";
+export function buildTestMessage(brandName = "Doochy"): string {
+  return `✅ <b>${escapeHtml(brandName)} test</b>\nTelegram notifications are working.`;
 }
 
-export function buildWelcomeMessage(settingsUrl: string): string {
-  const safe = escapeHtml(settingsUrl);
-  return [
-    "👋 <b>Doochy signals bot</b>",
+export function buildWelcomeMessage(settingsUrl: string, brandName = "Doochy"): string {
+  const lines = [
+    `👋 <b>${escapeHtml(brandName)} signals bot</b>`,
     "",
     "Open Settings, choose <b>Connect Telegram</b>, then send the code here.",
-    `<a href="${safe}">${safe}</a>`,
-  ].join("\n");
+  ];
+  if (settingsUrl) {
+    const safe = escapeHtml(settingsUrl);
+    lines.push(`<a href="${safe}">${safe}</a>`);
+  }
+  return lines.join("\n");
 }
 
-export function buildLinkedMessage(): string {
+export function buildLinkedMessage(brandName = "Doochy"): string {
   return [
-    "✅ <b>Linked to Doochy</b>",
+    `✅ <b>Linked to ${escapeHtml(brandName)}</b>`,
     "",
     "You'll get a message here when a new signal is published.",
     "/status · /stop · /unlink",
   ].join("\n");
 }
 
-export function buildAlreadyLinkedMessage(): string {
+export function buildAlreadyLinkedMessage(brandName = "Doochy"): string {
   return [
-    "✅ This chat is already linked to Doochy.",
+    `✅ This chat is already linked to ${escapeHtml(brandName)}.`,
     "",
     "/status · /stop · /unlink",
   ].join("\n");
 }
 
-export function buildChatTakenMessage(): string {
+export function buildChatTakenMessage(brandName = "Doochy"): string {
   return [
-    "⚠️ This Telegram account is already linked to another Doochy user.",
+    `⚠️ This Telegram account is already linked to another ${escapeHtml(brandName)} user.`,
     "",
     "Send /unlink here first, then generate a new code in Settings.",
   ].join("\n");
 }
 
 export function buildInvalidCodeMessage(settingsUrl: string): string {
-  const safe = escapeHtml(settingsUrl);
-  return [
-    "⚠️ That code is invalid or has expired.",
-    "",
-    `Generate a new one in Settings: <a href="${safe}">${safe}</a>`,
-  ].join("\n");
+  const lines = ["⚠️ That code is invalid or has expired.", ""];
+  if (settingsUrl) {
+    const safe = escapeHtml(settingsUrl);
+    lines.push(`Generate a new one in Settings: <a href="${safe}">${safe}</a>`);
+  } else {
+    lines.push("Generate a new one in Settings.");
+  }
+  return lines.join("\n");
 }
 
-export function buildNotLinkedMessage(): string {
-  return "This chat is not linked. Open Settings on doochy.net to connect it.";
+export function buildNotLinkedMessage(settingsUrl: string): string {
+  return settingsUrl
+    ? `This chat is not linked. Open Settings at ${settingsUrl} to connect it.`
+    : "This chat is not linked. Open Settings to connect it.";
 }
 
 export function buildStatusMessage(params: {
   account: string | null;
   notificationsEnabled: boolean;
   linkedAt: string;
+  brandName?: string;
 }): string {
-  const lines = ["📊 <b>Doochy</b>"];
+  const lines = [`📊 <b>${escapeHtml(params.brandName || "Doochy")}</b>`];
   if (params.account) lines.push(`Account: ${escapeHtml(params.account)}`);
   lines.push(`Notifications: <b>${params.notificationsEnabled ? "on" : "off"}</b>`);
   const at = formatUtc(params.linkedAt);
@@ -172,9 +181,9 @@ export function buildUnlinkedMessage(): string {
   return "🔌 Disconnected. Generate a new code in Settings to reconnect.";
 }
 
-export function buildHelpMessage(): string {
+export function buildHelpMessage(brandName = "Doochy"): string {
   return [
-    "<b>Doochy bot</b>",
+    `<b>${escapeHtml(brandName)} bot</b>`,
     "",
     "/status: connection and notification state",
     "/stop: pause notifications",

@@ -392,7 +392,9 @@ export default function SignalsPage({
         open={telegramOpen}
         onClose={() => setTelegramOpen(false)}
         title="Telegram notifications"
-        subtitle={`Get a direct message from @${telegram?.botUsername ?? "DoochyBot"} when a new signal is published.`}
+        subtitle={`Get a direct message from ${
+          telegram?.botUsername ? `@${telegram.botUsername}` : "the Telegram bot"
+        } when a new signal is published.`}
       >
         <TelegramNotifications showHeading={false} onStatusChange={setTelegram} />
       </AnimatedModal>

@@ -7,12 +7,15 @@
 // api.telegram.org by accident. Updates are always fetched by long polling.
 
 import { resolveIntegration } from "../integrations/store";
+import { getSiteSettings } from "../settings/store";
+import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 
 export interface TelegramConfig {
   enabled: boolean;
   token: string;
   botUsername: string;
   baseUrl: string;
+  brandName: string;
   linkTtlMinutes: number;
 }
 
@@ -40,18 +43,19 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
  * notifications down with a type error.
  */
 export function telegramConfigFromValues(
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  canonicalBaseUrl: string | null = null,
+  brandName = "Doochy"
 ): TelegramConfig {
   const token = text(values.botToken);
   const enabled = token.length > 0 && asBoolean(values.enabled, true);
-  const baseUrl =
-    (text(values.baseUrl) || "https://doochy.net").replace(/\/+$/, "") || "https://doochy.net";
+  const baseUrl = (canonicalBaseUrl || text(values.baseUrl) || "").replace(/\/+$/, "");
   const botUsername =
     (text(values.botUsername) || "DoochyBot").replace(/^@+/, "") || "DoochyBot";
   const ttlRaw = Number(values.linkTtlMinutes);
   const linkTtlMinutes =
     Number.isFinite(ttlRaw) && ttlRaw > 0 ? Math.min(60, Math.floor(ttlRaw)) : 15;
-  return { enabled, token, botUsername, baseUrl, linkTtlMinutes };
+  return { enabled, token, botUsername, baseUrl, brandName: brandName.trim() || "Doochy", linkTtlMinutes };
 }
 
 /** Environment-only view, kept for tests and bootstrap callers. */
@@ -73,8 +77,12 @@ export function telegramConfig(env: NodeJS.ProcessEnv = process.env): TelegramCo
 export async function loadTelegramConfig(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<TelegramConfig> {
-  const resolved = await resolveIntegration("telegram", env);
-  return telegramConfigFromValues(resolved.values);
+  const [resolved, canonicalBaseUrl, settings] = await Promise.all([
+    resolveIntegration("telegram", env),
+    canonicalPublicBaseUrl(env),
+    getSiteSettings(),
+  ]);
+  return telegramConfigFromValues(resolved.values, canonicalBaseUrl, settings.branding.name);
 }
 
 /** `t.me` deep link that opens the bot with `/start <code>` pre-filled. */

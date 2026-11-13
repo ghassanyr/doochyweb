@@ -4,17 +4,24 @@ import { describe, test } from "node:test";
 import {
   DEFAULT_ANNOUNCEMENT,
   DEFAULT_BRANDING,
+  DEFAULT_LEGAL,
   DEFAULT_MAINTENANCE,
   DEFAULT_NAVIGATION,
+  DEFAULT_REGISTRATION,
+  DEFAULT_SITE,
   DEFAULT_THEME,
 } from "../src/server/settings/defaults";
 import { mergeSiteSettings, publicSiteConfig } from "../src/server/settings/store";
+import { normalizePublicBaseUrl, publicBaseUrlFor } from "../src/server/settings/siteUrl";
 import {
   SettingsValidationError,
   normalizeAnnouncement,
   normalizeBranding,
+  normalizeLegal,
   normalizeMaintenance,
   normalizeNavigation,
+  normalizeRegistration,
+  normalizeSite,
   normalizeTheme,
 } from "../src/server/settings/validate";
 
@@ -44,6 +51,9 @@ describe("site settings defaults", () => {
 
     assert.equal(settings.branding.name, "Acme");
     assert.equal(settings.branding.tagline, DEFAULT_BRANDING.tagline);
+    assert.deepEqual(settings.site, DEFAULT_SITE);
+    assert.deepEqual(settings.registration, DEFAULT_REGISTRATION);
+    assert.deepEqual(settings.legal, DEFAULT_LEGAL);
     assert.equal(settings.theme.accent, "#ff0000");
     assert.equal(settings.theme.canvas, DEFAULT_THEME.canvas);
     assert.equal(settings.version, "2026-01-02T03:04:05.000Z");
@@ -60,12 +70,145 @@ describe("site settings defaults", () => {
     assert.deepEqual(Object.keys(config).sort(), [
       "announcement",
       "branding",
+      "legal",
       "maintenance",
       "navigation",
+      "registration",
+      "site",
       "theme",
       "version",
     ]);
     assert.equal("updatedBy" in config, false);
+    assert.equal("inviteCode" in config.registration, false);
+    assert.equal(config.registration.inviteRequired, false);
+    assert.equal(config.registration.requireEmailVerification, false);
+  });
+
+  test("invite mode never exposes the invite code in public config", () => {
+    const settings = mergeSiteSettings({
+      registration: { mode: "invite", inviteCode: "secret-code" },
+    });
+    const config = publicSiteConfig(settings);
+    assert.equal(config.registration.mode, "invite");
+    assert.equal(config.registration.inviteRequired, true);
+    assert.equal("inviteCode" in config.registration, false);
+    assert.equal(JSON.stringify(config).includes("secret-code"), false);
+  });
+});
+
+describe("public base URL resolution", () => {
+  test("uses the saved site URL before env and request origin", () => {
+    const settings = mergeSiteSettings({ site: { publicBaseUrl: "https://saved.example" } });
+    assert.equal(
+      publicBaseUrlFor(settings, { PUBLIC_BASE_URL: "https://env.example" } as NodeJS.ProcessEnv, "https://request.example"),
+      "https://saved.example"
+    );
+  });
+
+  test("falls back to env, then the request origin", () => {
+    const settings = mergeSiteSettings(null);
+    assert.equal(
+      publicBaseUrlFor(settings, { PUBLIC_BASE_URL: "https://env.example/path" } as NodeJS.ProcessEnv, "https://request.example"),
+      "https://env.example"
+    );
+    assert.equal(
+      publicBaseUrlFor(settings, {} as NodeJS.ProcessEnv, "https://request.example/app"),
+      "https://request.example"
+    );
+  });
+
+  test("ignores invalid values", () => {
+    assert.equal(normalizePublicBaseUrl("javascript:alert(1)"), null);
+    assert.equal(normalizePublicBaseUrl("https://example.com/app?x=1"), "https://example.com");
+    assert.equal(normalizePublicBaseUrl("not a url"), null);
+  });
+});
+
+describe("normalizeSite", () => {
+  test("reduces a URL to its origin", () => {
+    assert.deepEqual(
+      normalizeSite({ publicBaseUrl: "https://Example.com:8443/" }, DEFAULT_SITE),
+      { publicBaseUrl: "https://example.com:8443" }
+    );
+  });
+
+  test("rejects paths, queries and non-http schemes", () => {
+    assert.throws(() => normalizeSite({ publicBaseUrl: "https://example.com/app" }, DEFAULT_SITE), SettingsValidationError);
+    assert.throws(() => normalizeSite({ publicBaseUrl: "https://example.com?x=1" }, DEFAULT_SITE), SettingsValidationError);
+    assert.throws(() => normalizeSite({ publicBaseUrl: "ftp://example.com" }, DEFAULT_SITE), SettingsValidationError);
+  });
+
+  test("an empty value clears the override", () => {
+    assert.deepEqual(
+      normalizeSite({ publicBaseUrl: "  " }, { publicBaseUrl: "https://example.com" }),
+      { publicBaseUrl: "" }
+    );
+  });
+});
+
+describe("normalizeRegistration", () => {
+  test("requires an invite code of at least six characters", () => {
+    assert.throws(
+      () => normalizeRegistration({ mode: "invite", inviteCode: "short" }, DEFAULT_REGISTRATION),
+      SettingsValidationError
+    );
+    const registration = normalizeRegistration(
+      { mode: "invite", inviteCode: "long-enough" },
+      DEFAULT_REGISTRATION
+    );
+    assert.equal(registration.mode, "invite");
+    assert.equal(registration.inviteCode, "long-enough");
+  });
+
+  test("rejects unknown modes and trims messages", () => {
+    assert.throws(
+      () => normalizeRegistration({ mode: "manual" }, DEFAULT_REGISTRATION),
+      SettingsValidationError
+    );
+    assert.equal(
+      normalizeRegistration({ mode: "closed", message: "  By invite only  " }, DEFAULT_REGISTRATION).message,
+      "By invite only"
+    );
+  });
+
+  test("email verification is optional and must be a boolean", () => {
+    assert.equal(DEFAULT_REGISTRATION.requireEmailVerification, false);
+    assert.equal(
+      normalizeRegistration(
+        { requireEmailVerification: true },
+        DEFAULT_REGISTRATION
+      ).requireEmailVerification,
+      true
+    );
+    assert.throws(
+      () =>
+        normalizeRegistration(
+          { requireEmailVerification: "yes" },
+          DEFAULT_REGISTRATION
+        ),
+      SettingsValidationError
+    );
+  });
+});
+
+describe("normalizeLegal", () => {
+  test("accepts relative and http(s) links", () => {
+    const legal = normalizeLegal(
+      { termsUrl: "/terms", privacyUrl: "https://example.com/privacy", riskDisclaimer: "  Risk  " },
+      DEFAULT_LEGAL
+    );
+    assert.deepEqual(legal, {
+      termsUrl: "/terms",
+      privacyUrl: "https://example.com/privacy",
+      riskDisclaimer: "Risk",
+    });
+  });
+
+  test("rejects unsafe link schemes", () => {
+    assert.throws(
+      () => normalizeLegal({ termsUrl: "javascript:alert(1)" }, DEFAULT_LEGAL),
+      SettingsValidationError
+    );
   });
 });
 

@@ -13,10 +13,12 @@ export function setToken(token: string | null): void {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  data: any;
+  constructor(message: string, status: number, data?: any) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -45,7 +47,7 @@ async function request<T>(path: string, opts: { method?: string; body?: unknown;
   }
 
   if (!res.ok) {
-    throw new ApiError(data?.error || `HTTP ${res.status}`, res.status);
+    throw new ApiError(data?.error || `HTTP ${res.status}`, res.status, data);
   }
   return data as T;
 }
@@ -349,6 +351,8 @@ export interface AdminUser {
   username: string;
   email: string | null;
   role: UserRole;
+  status: "active" | "pending";
+  emailVerified: boolean;
   createdAt: string | null;
 }
 
@@ -357,6 +361,32 @@ export interface AdminUser {
 // ---------------------------------------------------------------------------
 
 export type ThemeMode = "dark" | "light";
+
+export interface SiteAddressSettings {
+  publicBaseUrl: string;
+}
+
+export type RegistrationMode = "open" | "approval" | "invite" | "closed";
+
+export interface PublicRegistrationSettings {
+  mode: RegistrationMode;
+  message: string;
+  inviteRequired: boolean;
+  requireEmailVerification: boolean;
+}
+
+export interface RegistrationSettings {
+  mode: RegistrationMode;
+  message: string;
+  inviteCode: string;
+  requireEmailVerification: boolean;
+}
+
+export interface LegalSettings {
+  termsUrl: string;
+  privacyUrl: string;
+  riskDisclaimer: string;
+}
 
 export interface BrandingSettings {
   name: string;
@@ -429,24 +459,35 @@ export interface AnnouncementSettings {
 }
 
 export interface SiteConfig {
+  site: SiteAddressSettings;
   branding: BrandingSettings;
   theme: ThemeSettings;
   navigation: NavigationSettings;
   maintenance: MaintenanceSettings;
   announcement: AnnouncementSettings;
+  registration: PublicRegistrationSettings;
+  legal: LegalSettings;
   version: string | null;
 }
 
-export interface SiteSettings extends SiteConfig {
+export interface SiteSettings extends Omit<SiteConfig, "registration"> {
+  registration: RegistrationSettings;
   updatedAt: string | null;
   updatedBy: string | null;
+}
+
+export interface AdminSetupCheck {
+  key: string;
+  label: string;
+  status: "ok" | "todo" | "optional";
+  detail: string;
 }
 
 // ---------------------------------------------------------------------------
 // Integrations, see src/server/integrations
 // ---------------------------------------------------------------------------
 
-export type IntegrationProvider = "ctrader" | "telegram";
+export type IntegrationProvider = "ctrader" | "telegram" | "smtp";
 
 export type IntegrationFieldKind = "text" | "secret" | "number" | "boolean" | "select";
 
@@ -517,7 +558,37 @@ export const configApi = {
 };
 
 export const adminApi = {
+  status: () =>
+    request<{
+      checks: AdminSetupCheck[];
+      registrationMode: RegistrationMode;
+      requireEmailVerification: boolean;
+    }>("/api/admin/status"),
+
   users: () => request<{ users: AdminUser[] }>("/api/admin/users"),
+
+  createUser: (input: {
+    username: string;
+    email: string;
+    password: string;
+    role: UserRole;
+  }) =>
+    request<{ user: AdminUser }>("/api/admin/users", { method: "POST", body: input }),
+
+  inviteUser: (input: { username: string; email: string; role: UserRole }) =>
+    request<{ user: AdminUser }>("/api/admin/users/invite", { method: "POST", body: input }),
+
+  updateUser: (id: string, patch: { role?: UserRole; status?: "active" | "pending" }) =>
+    request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: patch,
+    }),
+
+  resetUserPassword: (id: string, password: string) =>
+    request<{ ok: boolean }>(
+      `/api/admin/users/${encodeURIComponent(id)}/password`,
+      { method: "POST", body: { password } }
+    ),
 
   deleteUser: (id: string) =>
     request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
@@ -525,11 +596,14 @@ export const adminApi = {
   settings: () => request<{ settings: SiteSettings }>("/api/admin/settings"),
 
   saveSettings: (patch: {
+    site?: Partial<SiteAddressSettings>;
     branding?: Partial<BrandingSettings>;
     theme?: Partial<ThemeSettings>;
     navigation?: Partial<NavigationSettings>;
     maintenance?: Partial<MaintenanceSettings>;
     announcement?: Partial<AnnouncementSettings>;
+    registration?: Partial<RegistrationSettings>;
+    legal?: Partial<LegalSettings>;
   }) =>
     request<{ settings: SiteSettings }>("/api/admin/settings", {
       method: "PUT",
@@ -552,18 +626,57 @@ export const adminApi = {
 };
 
 export const api = {
-  register: (username: string, email: string, password: string) =>
-    request<{ token: string }>("/api/auth/register", {
+  register: (username: string, email: string, password: string, inviteCode?: string) =>
+    request<{
+      token?: string;
+      pending?: boolean;
+      verificationRequired?: boolean;
+      verificationSent?: boolean;
+      message?: string;
+      email?: string;
+    }>("/api/auth/register", {
       method: "POST",
-      body: { username, email, password },
+      body: { username, email, password, inviteCode },
     }),
 
   login: (username: string, password: string) =>
     request<{ token: string }>("/api/auth/login", { method: "POST", body: { username, password } }),
 
+  forgotPassword: (email: string) =>
+    request<{ ok: boolean }>("/api/auth/forgot-password", {
+      method: "POST",
+      body: { email },
+    }),
+
+  resetPassword: (token: string, password: string) =>
+    request<{ ok: boolean }>("/api/auth/reset-password", {
+      method: "POST",
+      body: { token, password },
+    }),
+
+  verifyEmail: (token: string) =>
+    request<{ ok: boolean }>("/api/auth/verify-email", {
+      method: "POST",
+      body: { token },
+    }),
+
+  resendVerification: (email: string) =>
+    request<{ ok: boolean }>("/api/auth/resend-verification", {
+      method: "POST",
+      body: { email },
+    }),
+
+  acceptInvite: (token: string, password: string) =>
+    request<{ token: string; username: string }>("/api/auth/accept-invite", {
+      method: "POST",
+      body: { token, password },
+    }),
+
   me: (token?: string) =>
     request<{
       username: string;
+      email: string | null;
+      emailVerified: boolean;
       role: UserRole;
       hasCredentials: boolean;
       clientIdMasked: string | null;

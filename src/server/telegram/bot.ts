@@ -139,7 +139,7 @@ export async function handleUpdate(update: TelegramUpdate, log: (msg: string) =>
     firstName: from?.first_name ?? null,
   };
   const config = await loadTelegramConfig();
-  const settingsUrl = `${config.baseUrl}/settings`;
+  const settingsUrl = config.baseUrl ? `${config.baseUrl}/settings` : "";
 
   await touchLink(chatId).catch(() => undefined);
 
@@ -156,14 +156,14 @@ export async function handleUpdate(update: TelegramUpdate, log: (msg: string) =>
           return;
         }
         const result = await linkChat({ userId, ...identity });
-        await sendMessage(chatId, result.ok ? buildLinkedMessage() : buildChatTakenMessage());
+        await sendMessage(chatId, result.ok ? buildLinkedMessage(config.brandName) : buildChatTakenMessage(config.brandName));
         return;
       }
 
       const existing = await findLinkByChatId(chatId);
       await sendMessage(
         chatId,
-        existing ? buildAlreadyLinkedMessage() : buildWelcomeMessage(settingsUrl)
+        existing ? buildAlreadyLinkedMessage(config.brandName) : buildWelcomeMessage(settingsUrl, config.brandName)
       );
       return;
     }
@@ -171,7 +171,7 @@ export async function handleUpdate(update: TelegramUpdate, log: (msg: string) =>
     case "status": {
       const link = await findLinkByChatId(chatId);
       if (!link) {
-        await sendMessage(chatId, buildWelcomeMessage(settingsUrl));
+        await sendMessage(chatId, buildWelcomeMessage(settingsUrl, config.brandName));
         return;
       }
       const user = await User.findById(link.userId).lean().exec();
@@ -191,7 +191,7 @@ export async function handleUpdate(update: TelegramUpdate, log: (msg: string) =>
     case "resume": {
       const link = await findLinkByChatId(chatId);
       if (!link) {
-        await sendMessage(chatId, buildWelcomeMessage(settingsUrl));
+        await sendMessage(chatId, buildWelcomeMessage(settingsUrl, config.brandName));
         return;
       }
       const enabled = command.kind === "resume";
@@ -203,7 +203,7 @@ export async function handleUpdate(update: TelegramUpdate, log: (msg: string) =>
     case "unlink": {
       const link = await findLinkByChatId(chatId);
       if (!link) {
-        await sendMessage(chatId, buildNotLinkedMessage());
+        await sendMessage(chatId, buildNotLinkedMessage(settingsUrl));
         return;
       }
       await deleteLinkByUserId(link.userId);
@@ -212,7 +212,7 @@ export async function handleUpdate(update: TelegramUpdate, log: (msg: string) =>
     }
 
     case "help":
-      await sendMessage(chatId, buildHelpMessage());
+      await sendMessage(chatId, buildHelpMessage(config.brandName));
       return;
 
     default:

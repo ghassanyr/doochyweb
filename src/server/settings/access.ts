@@ -6,7 +6,7 @@
 
 import type { NextFunction, Response } from "express";
 
-import { isAdminUser, tokenUserId, type AuthedRequest } from "../auth";
+import { sessionFromRequest, tokenUserId, type AuthedRequest } from "../auth";
 import { getSiteSettings } from "./store";
 import type { ModuleKey } from "./types";
 
@@ -28,7 +28,7 @@ export function moduleGate(key: ModuleKey) {
         next();
         return;
       }
-      if (!tokenUserId(req)) {
+      if (!(await tokenUserId(req))) {
         signInRequired(res);
         return;
       }
@@ -55,7 +55,7 @@ export async function marketGate(
     if (
       access("analysis") === "signed-in" &&
       access("breakouts") === "signed-in" &&
-      !tokenUserId(req)
+      !(await tokenUserId(req))
     ) {
       signInRequired(res);
       return;
@@ -78,7 +78,8 @@ export async function maintenanceGate(
       next();
       return;
     }
-    if (settings.maintenance.allowAdmins && (await isAdminUser(tokenUserId(req)))) {
+    const session = settings.maintenance.allowAdmins ? await sessionFromRequest(req) : null;
+    if (session?.role === "admin") {
       next();
       return;
     }
