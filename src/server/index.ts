@@ -23,6 +23,9 @@ import { journalRouter } from "./journal/routes";
 import { startJournalSync, stopJournalSync } from "./journal/sync";
 import { alertsRouter } from "./alerts/routes";
 import { startAlertRunner, stopAlertRunner } from "./alerts/runner";
+import { simulationRouter } from "./simulation/routes";
+import { startPaperRunner, stopPaperRunner } from "./simulation/runner";
+import { briefingRouter } from "./briefing/routes";
 import { promoteConfiguredAdmins } from "./admin/roles";
 import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
@@ -631,6 +634,9 @@ app.use("/api/signals", maintenanceGate, moduleGate("signals"), signalsRouter);
 // module gate adds the maintenance window.
 app.use("/api/journal", maintenanceGate, moduleGate("trading"), journalRouter);
 app.use("/api/alerts", maintenanceGate, moduleGate("alerts"), alertsRouter);
+// Paper trading is part of the Trading page, so it follows that access rule.
+app.use("/api/simulation", maintenanceGate, moduleGate("trading"), simulationRouter);
+app.use("/api/briefing", maintenanceGate, moduleGate("briefing"), briefingRouter);
 app.use("/api/trainer", maintenanceGate, moduleGate("learn"), createTrainerRouter());
 app.use("/api/telegram", telegramRouter);
 app.use("/api/auth", accountAuthRouter);
@@ -683,6 +689,7 @@ async function main() {
   startSignalResolver();
   startAlertRunner();
   startJournalSync();
+  startPaperRunner();
 
   // Telegram is optional; a missing token or a bad one must never stop the
   // web app. The feature logs its own startup failures.
@@ -693,6 +700,7 @@ async function main() {
       stopTelegram();
       stopAlertRunner();
       stopJournalSync();
+      stopPaperRunner();
       process.exit(0);
     });
   }

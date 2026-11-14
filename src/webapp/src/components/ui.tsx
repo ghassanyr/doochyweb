@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, ChevronDown, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Loader2, X } from "lucide-react";
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 // Shared primitives, ported from the standalone Gauge project's stylesheet:
@@ -302,6 +302,7 @@ export function Flash({
     <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${cls}`}>
       {tone === "success" && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
       {tone === "warning" && <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      {tone === "danger" && <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
       <span className="min-w-0">{children}</span>
     </div>
   );

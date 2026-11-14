@@ -9,6 +9,7 @@ import {
   Plug,
   Save,
   Send,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -247,7 +248,8 @@ function ProviderCard({
   const patch = buildPatch(state, draft, baseline);
   const dirty = isDirty(patch);
   const provider = state.provider;
-  const Icon = provider === "ctrader" ? Plug : provider === "smtp" ? Mail : Send;
+  const Icon =
+    provider === "ctrader" ? Plug : provider === "smtp" ? Mail : provider === "ai" ? Sparkles : Send;
 
   function updateValue(key: string, value: string) {
     onDraftChange({

@@ -72,6 +72,7 @@ export const MODULE_KEYS: readonly ModuleKey[] = [
   "learn",
   "trading",
   "alerts",
+  "briefing",
 ];
 
 /** Default tabs in the order the shell has always shown them. */
@@ -82,6 +83,7 @@ export const DEFAULT_MODULES: ModuleSettings[] = [
   { key: "learn", label: "Learn", hidden: false, access: "public" },
   { key: "trading", label: "Trading", hidden: false, access: "signed-in" },
   { key: "alerts", label: "Alerts", hidden: false, access: "signed-in" },
+  { key: "briefing", label: "Briefing", hidden: false, access: "signed-in" },
 ];
 
 export const DEFAULT_NAVIGATION: NavigationSettings = {

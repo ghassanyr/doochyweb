@@ -10,6 +10,7 @@ import { adminRequired, type AuthedRequest } from "../auth";
 import { User } from "../db";
 import { buildAuthorizeUrl, ctraderOAuthConfigFrom } from "../ctrader/oauth";
 import { callbackCandidates, providerIssuesFromValues } from "../integrations/ctraderSetup";
+import { testAi } from "../ai/client";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { IntegrationCryptoError, encryptionKeyFromEnv } from "../integrations/crypto";
 import { INTEGRATION_DEFS, isIntegrationProvider } from "../integrations/registry";
@@ -170,6 +171,7 @@ function testProvider(
   publicBaseUrl: string | null
 ): Promise<IntegrationTestResult> {
   if (provider === "smtp") throw new Error("SMTP tests need the acting admin account");
+  if (provider === "ai") return testAi(values.values);
   return provider === "ctrader"
     ? testCtrader(values, publicBaseUrl)
     : testTelegram(values);

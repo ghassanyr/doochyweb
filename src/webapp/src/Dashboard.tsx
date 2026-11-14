@@ -4,6 +4,7 @@ import { AccountView } from "./api";
 import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
 import JournalTab from "./journal/JournalPage";
+import SimulationTab from "./simulation/SimulationTab";
 import { Card, accountColorHex } from "./components/ui";
 import { FadeRise } from "./components/motion";
 import { useSiteConfig } from "./siteConfig";
@@ -20,6 +21,7 @@ const PAGES = [
   { key: "positions", label: "Positions" },
   { key: "orders", label: "Pending orders" },
   { key: "journal", label: "Journal" },
+  { key: "paper", label: "Paper trading" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
@@ -198,11 +200,15 @@ function Tabs({
         <PositionsTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
       ) : tab === "orders" ? (
         <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
-      ) : (
+      ) : tab === "journal" ? (
         // The journal replaced the old order-history tab. It imports closed
         // cTrader deals automatically, so the account selector above has no
         // say in what it shows: the log is per member, not per account.
         <JournalTab />
+      ) : (
+        // Paper trading is also per member: the book is not tied to a broker
+        // account, so the selector above does not filter it either.
+        <SimulationTab />
       )}
     </div>
   );

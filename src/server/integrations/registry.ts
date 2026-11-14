@@ -11,7 +11,12 @@ import type {
   IntegrationProviderDef,
 } from "./types";
 
-export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = ["ctrader", "telegram", "smtp"];
+export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
+  "ctrader",
+  "telegram",
+  "smtp",
+  "ai",
+];
 
 export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDef> = {
   ctrader: {
@@ -171,6 +176,43 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         maxLength: 120,
         placeholder: "Your product",
         hint: "Defaults to the configured branding name when left empty.",
+      },
+    ],
+  },
+  ai: {
+    provider: "ai",
+    label: "AI provider",
+    description:
+      "Chat completions endpoint used by the daily briefing and, later, trade reviews. Any OpenAI compatible API works: OpenAI, OpenRouter, Groq, Azure gateways or a local server. The key is left empty until you add one; features that need it stay off until then.",
+    fields: [
+      {
+        key: "apiKey",
+        label: "API key",
+        kind: "secret",
+        env: "OPENAI_API_KEY",
+        required: true,
+        maxLength: 500,
+        hint: "Encrypted at rest and never returned to the browser. Leave empty until you have a key.",
+      },
+      {
+        key: "baseUrl",
+        label: "API base URL",
+        kind: "text",
+        env: "AI_BASE_URL",
+        defaultValue: "https://api.openai.com/v1",
+        format: "url",
+        maxLength: 300,
+        hint: "Include the version segment (/v1 for OpenAI). A trailing slash is ignored.",
+      },
+      {
+        key: "model",
+        label: "Model",
+        kind: "text",
+        env: "AI_MODEL",
+        defaultValue: "gpt-4o-mini",
+        maxLength: 120,
+        placeholder: "gpt-4o-mini",
+        hint: "Any chat model the endpoint accepts. Cheaper models are enough for a short brief.",
       },
     ],
   },

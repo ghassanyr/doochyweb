@@ -553,6 +553,123 @@ export const alertsApi = {
     request<{ ok: boolean }>(`/api/alerts/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
+// ---------------------------------------------------------------------------
+// Paper trading, see src/server/simulation
+// ---------------------------------------------------------------------------
+
+export type PaperSide = "buy" | "sell";
+export type PaperCloseReason = "manual" | "stop" | "target";
+
+export interface PaperPosition {
+  id: string;
+  symbol: string;
+  side: PaperSide;
+  notional: number;
+  entryPrice: number;
+  stop: number | null;
+  target: number | null;
+  exitPrice: number | null;
+  pnl: number | null;
+  status: "open" | "closed";
+  closeReason: PaperCloseReason | null;
+  lastPrice: number | null;
+  openedAt: string;
+  closedAt: string | null;
+  createdAt: string;
+}
+
+export interface PaperAccount {
+  startBalance: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  equity: number;
+  openCount: number;
+  closedCount: number;
+  exposure: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+}
+
+export interface PaperListResponse {
+  account: PaperAccount;
+  open: PaperPosition[];
+  closed: PaperPosition[];
+}
+
+export interface PaperInputPayload {
+  symbol: string;
+  side: PaperSide;
+  notional: number;
+  stop?: number | null;
+  target?: number | null;
+}
+
+export const simulationApi = {
+  list: () => request<PaperListResponse>("/api/simulation"),
+
+  open: (input: PaperInputPayload) =>
+    request<{ position: PaperPosition }>("/api/simulation", { method: "POST", body: input }),
+
+  close: (id: string) =>
+    request<{ position: PaperPosition }>(`/api/simulation/${encodeURIComponent(id)}/close`, {
+      method: "POST",
+    }),
+
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/simulation/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
+// ---------------------------------------------------------------------------
+// Daily briefing, see src/server/briefing
+// ---------------------------------------------------------------------------
+
+export interface BriefingMover {
+  symbol: string;
+  last: number;
+  changePct: number;
+}
+
+export interface BriefingSignal {
+  id: string;
+  symbol: string;
+  direction: "buy" | "sell";
+  entry: number | null;
+  entryMax: number | null;
+  target: number;
+  stop: number;
+  createdAt: string;
+  ageHours: number;
+}
+
+export interface BriefingSnapshot {
+  dateKey: string;
+  generatedAt: string;
+  movers: BriefingMover[];
+  signals: BriefingSignal[];
+}
+
+export interface BriefingRecord {
+  dateKey: string;
+  generatedAt: string;
+  model: string | null;
+  narrative: string | null;
+  error: string | null;
+  snapshot: BriefingSnapshot;
+}
+
+export interface BriefingResponse {
+  aiReady: boolean;
+  briefing: BriefingRecord | null;
+}
+
+export const briefingApi = {
+  get: () => request<BriefingResponse>("/api/briefing"),
+
+  refresh: () =>
+    request<BriefingResponse>("/api/briefing/refresh", { method: "POST" }),
+};
+
 export interface AdminUser {
   id: string;
   username: string;
@@ -631,7 +748,8 @@ export type ModuleKey =
   | "breakouts"
   | "learn"
   | "trading"
-  | "alerts";
+  | "alerts"
+  | "briefing";
 
 export type ModuleAccess = "public" | "signed-in";
 
@@ -700,7 +818,7 @@ export interface AdminSetupCheck {
 // Integrations, see src/server/integrations
 // ---------------------------------------------------------------------------
 
-export type IntegrationProvider = "ctrader" | "telegram" | "smtp";
+export type IntegrationProvider = "ctrader" | "telegram" | "smtp" | "ai";
 
 export type IntegrationFieldKind = "text" | "secret" | "number" | "boolean" | "select";
 
