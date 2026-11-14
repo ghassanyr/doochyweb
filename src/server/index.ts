@@ -14,6 +14,7 @@ import { ctraderAppCredentials } from "./ctrader/appConfig";
 import { discoverAccounts } from "./ctrader/auth";
 import { ctraderOAuthAvailable, ctraderOAuthCallback, ctraderOAuthRouter } from "./ctrader/oauth";
 import { reconcileAccount, listAccounts, listTradableNames, symbolQuote } from "./ctrader/reads";
+import { fetchOrderHistory } from "./ctrader/history";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
 import { signalsRouter } from "./signals/routes";
@@ -422,6 +423,29 @@ app.get("/api/accounts/:ctid/orders", authRequired, async (req: AuthedRequest, r
     }
     const result = await reconcileAccount(req.userId!, ctid, account.isLive);
     res.json({ orders: result.orders });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message ?? "failed" });
+  }
+});
+
+// Closed-trade history for one account. `days` is clamped server-side because
+// the broker only allows one week per deal-list request (the reader pages the
+// rest in seven-day windows).
+app.get("/api/accounts/:ctid/history", authRequired, async (req: AuthedRequest, res: Response) => {
+  try {
+    const ctid = Number(req.params.ctid);
+    if (!Number.isFinite(ctid) || ctid <= 0) {
+      res.status(400).json({ error: "invalid account id" });
+      return;
+    }
+    const creds = await loadCredentials(req.userId!);
+    const account = creds?.accounts.find((a) => a.ctid === ctid);
+    if (!account) {
+      res.status(404).json({ error: "account not found" });
+      return;
+    }
+    const result = await fetchOrderHistory(req.userId!, ctid, account.isLive, Number(req.query.days));
+    res.json(result);
   } catch (err: any) {
     res.status(502).json({ error: err.message ?? "failed" });
   }

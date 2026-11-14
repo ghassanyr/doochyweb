@@ -71,6 +71,7 @@ export interface RowAccount {
   isLive: boolean;
   nickname: string | null;
   color: string | null;
+  currency?: string | null;
 }
 
 export interface PositionRow {
@@ -100,6 +101,30 @@ export interface OrderRow {
   expirationTimestamp: number | null;
   expirationType: "GTC" | "GTD";
   account?: RowAccount;
+}
+
+export interface OrderHistoryRow {
+  dealId: number;
+  orderId: number | null;
+  positionId: number | null;
+  symbol: string;
+  side: "BUY" | "SELL";
+  lots: number;
+  entryPrice: number;
+  exitPrice: number;
+  grossProfit: number;
+  swap: number;
+  commission: number;
+  net: number;
+  digits: number;
+  closeTimestamp: number;
+  account?: RowAccount;
+}
+
+export interface OrderHistoryResult {
+  trades: OrderHistoryRow[];
+  days: number;
+  truncated: boolean;
 }
 
 export interface ConnectInput {
@@ -709,6 +734,9 @@ export const api = {
   positions: (ctid: number) => request<{ positions: PositionRow[] }>(`/api/accounts/${ctid}/positions`),
 
   orders: (ctid: number) => request<{ orders: OrderRow[] }>(`/api/accounts/${ctid}/orders`),
+
+  orderHistory: (ctid: number, days = 7) =>
+    request<OrderHistoryResult>(`/api/accounts/${ctid}/history?days=${encodeURIComponent(String(days))}`),
 
   accountSymbols: (ctid: number) => request<{ symbols: string[] }>(`/api/accounts/${ctid}/symbols`),
 

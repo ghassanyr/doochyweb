@@ -689,7 +689,7 @@ export default function AdminSettingsPage({
             value={legal.riskDisclaimer}
             onChange={(riskDisclaimer) => setLegal({ ...legal, riskDisclaimer })}
             placeholder="Trading involves risk. Past performance does not guarantee future results."
-            hint="Shown in the footer and on the landing page."
+            hint="Shown in the footer and under the Trading tabs. Leave blank to use the built-in not-financial-advice notice on Trading."
             textarea
             maxLength={1000}
           />

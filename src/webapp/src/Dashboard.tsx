@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from "react";
+import { ShieldAlert } from "lucide-react";
 import { AccountView } from "./api";
 import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
+import OrderHistoryTab from "./OrderHistoryTab";
 import { Card, accountColorHex } from "./components/ui";
 import { FadeRise } from "./components/motion";
+import { useSiteConfig } from "./siteConfig";
 
 export type ViewMode = "separate" | "combined";
+
+// Shown beneath the trading tabs whenever the admin has not configured a
+// disclaimer of their own. The footer still renders the configured text (if
+// any), so this trading-specific copy is always present where orders are placed.
+const TRADING_DISCLAIMER =
+  "Not financial advice. Trading involves significant risk, including the possible loss of all capital. Past performance does not guarantee future results.";
 
 const PAGES = [
   { key: "positions", label: "Positions" },
   { key: "orders", label: "Pending orders" },
+  { key: "history", label: "Order History" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
@@ -158,28 +168,38 @@ function Tabs({
   isAdmin: boolean;
 }) {
   const [tab, setTab] = useState<PageKey>("positions");
+  const { config } = useSiteConfig();
+  const disclaimer = config?.legal.riskDisclaimer?.trim() || TRADING_DISCLAIMER;
   return (
     <div className="space-y-5">
-      <div className="flex gap-1">
-        {PAGES.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setTab(p.key)}
-            className={
-              "rounded-md px-3 py-1.5 text-sm font-medium capitalize transition " +
-              (tab === p.key
-                ? "border border-accent/20 bg-accent-soft text-accent"
-                : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
-            }
-          >
-            {p.label}
-          </button>
-        ))}
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap gap-1">
+          {PAGES.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setTab(p.key)}
+              className={
+                "rounded-md px-3 py-1.5 text-sm font-medium capitalize transition " +
+                (tab === p.key
+                  ? "border border-accent/20 bg-accent-soft text-accent"
+                  : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
+              }
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <p className="flex items-start gap-1.5 px-1 text-[11px] leading-relaxed text-fg-faint">
+          <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{disclaimer}</span>
+        </p>
       </div>
       {tab === "positions" ? (
         <PositionsTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
-      ) : (
+      ) : tab === "orders" ? (
         <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
+      ) : (
+        <OrderHistoryTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} />
       )}
     </div>
   );

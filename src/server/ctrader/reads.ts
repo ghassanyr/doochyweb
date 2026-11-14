@@ -2,7 +2,7 @@ import { userSockets, CtraderEnv, SpotQuote } from "./connection";
 import { loadCredentials, StoredAccount } from "../db";
 import { resolveLevel } from "./levels";
 
-interface SymbolSpec {
+export interface SymbolSpec {
   name: string;
   lotSize: number;  // volume units per 1.0 lot
   digits: number;   // decimal places for display
@@ -111,6 +111,22 @@ export async function resolveTradableSymbol(
   if (symbolId == null) return null;
   await ensureSpecs(userId, env, ctid, meta, [symbolId]);
   return { symbolId, spec: specFor(meta, symbolId) };
+}
+
+// Contract specs for a set of broker symbol IDs, reusing the per-account
+// metadata cache. Order history needs this to turn deal volume (cents) into
+// lots and to format prices with the right number of decimals.
+export async function symbolSpecsById(
+  userId: string,
+  env: CtraderEnv,
+  ctid: number,
+  symbolIds: number[]
+): Promise<Map<number, SymbolSpec>> {
+  const meta = await symbolMeta(userId, env, ctid);
+  await ensureSpecs(userId, env, ctid, meta, symbolIds);
+  const result = new Map<number, SymbolSpec>();
+  for (const id of symbolIds) result.set(id, specFor(meta, id));
+  return result;
 }
 
 export interface SymbolQuote {
