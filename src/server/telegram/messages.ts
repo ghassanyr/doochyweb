@@ -5,6 +5,7 @@
 // so these are deliberately local and pure.
 
 import { DEFAULT_BRANDING } from "../settings/defaults";
+import type { AlertView } from "../alerts/types";
 import type { SignalView } from "../signals/types";
 
 export function escapeHtml(value: string): string {
@@ -95,6 +96,23 @@ export function buildPublishedMessage(signal: SignalView): string {
 export function signalButtonUrl(baseUrl: string, signalId: string): string | null {
   const origin = baseUrl.trim().replace(/\/+$/, "");
   return origin ? `${origin}/signals?signal=${encodeURIComponent(signalId)}` : null;
+}
+
+/** Personal price alert that just fired. */
+export function buildAlertTriggeredMessage(alert: AlertView): string {
+  const direction = alert.condition === "above" ? "rose above" : "fell below";
+  const lines = [
+    `\u23f0 <b>Alert triggered</b> \u00b7 ${escapeHtml(alert.symbol)}`,
+    `${escapeHtml(alert.symbol)} ${direction} <code>${fmtPrice(alert.level)}</code>`,
+  ];
+  if (alert.triggeredPrice != null) {
+    lines.push(`Last price <code>${fmtPrice(alert.triggeredPrice)}</code>`);
+  }
+  const note = truncate(alert.note ?? "", 200);
+  if (note) lines.push(escapeHtml(note));
+  const at = formatUtc(alert.triggeredAt);
+  if (at) lines.push(`${escapeHtml(at)} UTC`);
+  return lines.join("\n");
 }
 
 export function buildTestMessage(brandName = DEFAULT_BRANDING.name): string {

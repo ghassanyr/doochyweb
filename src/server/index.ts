@@ -19,6 +19,9 @@ import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder,
 import { marketRouter } from "./market/routes";
 import { signalsRouter } from "./signals/routes";
 import { startSignalResolver } from "./signals/resolver";
+import { journalRouter } from "./journal/routes";
+import { alertsRouter } from "./alerts/routes";
+import { startAlertRunner, stopAlertRunner } from "./alerts/runner";
 import { promoteConfiguredAdmins } from "./admin/roles";
 import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
@@ -622,6 +625,10 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 // -----------------------------------------------------------------------
 app.use("/api/market", maintenanceGate, marketGate, marketRouter);
 app.use("/api/signals", maintenanceGate, moduleGate("signals"), signalsRouter);
+// Journal and Alerts hold personal data, so both routers enforce a session on
+// every route themselves; the module gate adds the maintenance window.
+app.use("/api/journal", maintenanceGate, moduleGate("journal"), journalRouter);
+app.use("/api/alerts", maintenanceGate, moduleGate("alerts"), alertsRouter);
 app.use("/api/trainer", maintenanceGate, moduleGate("learn"), createTrainerRouter());
 app.use("/api/telegram", telegramRouter);
 app.use("/api/auth", accountAuthRouter);
@@ -672,6 +679,7 @@ async function main() {
   startBreakoutScheduler();
   startScraperScheduler();
   startSignalResolver();
+  startAlertRunner();
 
   // Telegram is optional; a missing token or a bad one must never stop the
   // web app. The feature logs its own startup failures.
@@ -680,6 +688,7 @@ async function main() {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       stopTelegram();
+      stopAlertRunner();
       process.exit(0);
     });
   }

@@ -25,6 +25,7 @@ import {
   updateSignal,
 } from "./store";
 import { signalPrices } from "./prices";
+import { signalPerformance } from "./performance";
 import { validateSignalInput } from "./validate";
 import { enqueueSignalPublished } from "../telegram/notify";
 
@@ -73,6 +74,14 @@ signalsRouter.get("/prices", async (req, res) => {
   const symbols = raw.split(",").map((s) => s.trim()).filter(Boolean);
   try {
     res.json({ prices: await signalPrices(symbols) });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+signalsRouter.get("/performance", async (_req, res) => {
+  try {
+    res.json(await signalPerformance());
   } catch (err) {
     sendError(res, err);
   }

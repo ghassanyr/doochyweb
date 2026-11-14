@@ -74,3 +74,35 @@ export interface PricePoint {
   price: number;
   at: string;
 }
+
+/** Verified hit rate over signals the resolver has closed. */
+export interface PerformanceBucket {
+  key: string;
+  label: string;
+  resolved: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  avgR: number | null;
+  totalR: number;
+  profitFactor: number | null;
+}
+
+export interface PerformancePoint {
+  id: string;
+  symbol: string;
+  direction: SignalDirection;
+  status: "target_hit" | "stopped_out";
+  at: string;
+  r: number;
+  cumulativeR: number;
+}
+
+export interface SignalPerformance {
+  overall: PerformanceBucket;
+  bySymbol: PerformanceBucket[];
+  byDirection: PerformanceBucket[];
+  byMonth: PerformanceBucket[];
+  curve: PerformancePoint[];
+  updatedAt: string;
+}

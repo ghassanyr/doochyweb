@@ -8,10 +8,16 @@
 import { randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 
+import type { AlertView } from "../alerts/types";
 import type { SignalView } from "../signals/types";
 import { TelegramApiError, sendMessage } from "./client";
 import { loadTelegramConfig, type TelegramConfig } from "./config";
-import { buildPublishedMessage, buildTestMessage, signalButtonUrl } from "./messages";
+import {
+  buildAlertTriggeredMessage,
+  buildPublishedMessage,
+  buildTestMessage,
+  signalButtonUrl,
+} from "./messages";
 import { TelegramDelivery, TelegramLink } from "./store";
 
 const MAX_ATTEMPTS = 5;
@@ -80,6 +86,52 @@ export async function enqueueSignalPublished(
     if (result.upsertedCount) queued++;
   }
   return queued;
+}
+
+/**
+ * Queue the fired-alert message for the alert's owner only. The event key
+ * carries the alert id, so a re-run of the checker cannot send it twice.
+ */
+export async function enqueueAlertTriggered(
+  alert: AlertView,
+  userId: string,
+  now: Date = new Date()
+): Promise<number> {
+  let config: TelegramConfig;
+  try {
+    config = await loadTelegramConfig();
+  } catch (err) {
+    console.error(`[telegram] configuration could not be read: ${errorText(err)}`);
+    return 0;
+  }
+  if (!config.enabled) return 0;
+
+  const link = await TelegramLink.findOne({ userId })
+    .select({ chatId: 1, notificationsEnabled: 1 })
+    .lean()
+    .exec();
+  if (!link || !(link as any).notificationsEnabled) return 0;
+
+  const result = await TelegramDelivery.updateOne(
+    { signalId: null, event: `alert:${alert.id}`, chatId: link.chatId },
+    {
+      $setOnInsert: {
+        signalId: null,
+        event: `alert:${alert.id}`,
+        chatId: link.chatId,
+        text: buildAlertTriggeredMessage(alert),
+        buttonUrl: null,
+        status: "pending",
+        attempts: 0,
+        nextAttemptAt: now,
+        error: null,
+        createdAt: now,
+        sentAt: null,
+      },
+    },
+    { upsert: true }
+  ).exec();
+  return result.upsertedCount ? 1 : 0;
 }
 
 /** Queue a one-off test message. Each call gets its own event key. */
@@ -152,8 +204,11 @@ export async function processOutboxOnce(now: Date = new Date()): Promise<OutboxR
       .select({ notificationsEnabled: 1 })
       .lean()
       .exec();
-    const isPublished = String(claimed.event) === "published";
-    if (!link || (isPublished && !(link as any).notificationsEnabled)) {
+    const event = String(claimed.event);
+    // Signal and alert deliveries honour the per-user notification pause; a
+    // test message is an explicit action and still goes through.
+    const respectsPause = event === "published" || event.startsWith("alert:");
+    if (!link || (respectsPause && !(link as any).notificationsEnabled)) {
       await TelegramDelivery.updateOne(
         { _id: claimed._id },
         { $set: { status: "skipped", error: "chat unlinked or notifications disabled" } }

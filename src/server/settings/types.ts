@@ -45,7 +45,14 @@ export interface ThemeSettings {
 }
 
 /** Tabs whose label, order, visibility and access can be configured. */
-export type ModuleKey = "analysis" | "signals" | "breakouts" | "learn" | "trading";
+export type ModuleKey =
+  | "analysis"
+  | "signals"
+  | "breakouts"
+  | "learn"
+  | "trading"
+  | "journal"
+  | "alerts";
 
 export type ModuleAccess = "public" | "signed-in";
 

@@ -294,6 +294,9 @@ export const signalsApi = {
 
   stats: () => request<import("./signals/types").SignalStats>("/api/signals/stats"),
 
+  performance: () =>
+    request<import("./signals/types").SignalPerformance>("/api/signals/performance"),
+
   prices: (symbols: string[]) =>
     request<{ prices: Record<string, import("./signals/types").PricePoint> }>(
       `/api/signals/prices?symbols=${encodeURIComponent(symbols.join(","))}`
@@ -371,6 +374,184 @@ export const telegramApi = {
   test: () => request<{ ok: boolean }>("/api/telegram/test", { method: "POST" }),
 };
 
+// ---------------------------------------------------------------------------
+// Trade Journal, see src/server/journal
+// ---------------------------------------------------------------------------
+
+export type JournalSource = "manual" | "ctrader";
+export type JournalSide = "buy" | "sell";
+export type JournalStatus = "open" | "closed";
+
+export interface JournalEntry {
+  id: string;
+  source: JournalSource;
+  dealId: number | null;
+  accountCtid: number | null;
+  accountLabel: string | null;
+  symbol: string;
+  side: JournalSide;
+  lots: number | null;
+  entryPrice: number | null;
+  exitPrice: number | null;
+  stop: number | null;
+  target: number | null;
+  pnl: number | null;
+  fees: number | null;
+  openedAt: string | null;
+  closedAt: string | null;
+  status: JournalStatus;
+  verified: boolean;
+  strategy: string;
+  tags: string[];
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JournalStats {
+  total: number;
+  open: number;
+  closed: number;
+  verified: number;
+  manual: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  avgPnl: number | null;
+  totalPnl: number;
+  profitFactor: number | null;
+  bestPnl: number | null;
+  worstPnl: number | null;
+}
+
+export interface JournalListResponse {
+  entries: JournalEntry[];
+  total: number;
+  stats: JournalStats;
+}
+
+export interface JournalInputPayload {
+  symbol: string;
+  side: JournalSide;
+  lots?: number | null;
+  entryPrice?: number | null;
+  exitPrice?: number | null;
+  stop?: number | null;
+  target?: number | null;
+  pnl?: number | null;
+  fees?: number | null;
+  openedAt?: string | null;
+  closedAt?: string | null;
+  status: JournalStatus;
+  strategy?: string;
+  tags?: string[];
+  note?: string;
+}
+
+export interface JournalImportResult {
+  imported: number;
+  skipped: number;
+  total: number;
+  accountLabel: string;
+}
+
+function filterQuery(params: Record<string, string | number | undefined>): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+  return qs.toString();
+}
+
+export const journalApi = {
+  list: (params: { status?: string; source?: string; symbol?: string; limit?: number; offset?: number } = {}) =>
+    request<JournalListResponse>(`/api/journal?${filterQuery(params)}`),
+
+  create: (input: JournalInputPayload) =>
+    request<{ entry: JournalEntry }>("/api/journal", { method: "POST", body: input }),
+
+  update: (id: string, input: JournalInputPayload) =>
+    request<{ entry: JournalEntry }>(`/api/journal/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: input,
+    }),
+
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/journal/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  importHistory: (ctid: number, days = 7) =>
+    request<JournalImportResult>("/api/journal/import", {
+      method: "POST",
+      body: { ctid, days },
+    }),
+
+  // The CSV endpoint needs the bearer token, so it cannot be a plain link.
+  exportCsv: async (params: { status?: string; source?: string; symbol?: string } = {}) => {
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`/api/journal/export?${filterQuery(params)}`, { headers });
+    if (!res.ok) throw new ApiError("Could not export the journal", res.status);
+    return res.blob();
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Price alerts, see src/server/alerts
+// ---------------------------------------------------------------------------
+
+export type AlertCondition = "above" | "below";
+export type AlertStatus = "active" | "triggered" | "paused";
+
+export interface AlertView {
+  id: string;
+  symbol: string;
+  condition: AlertCondition;
+  level: number;
+  note: string;
+  status: AlertStatus;
+  triggeredAt: string | null;
+  triggeredPrice: number | null;
+  lastPrice: number | null;
+  lastCheckedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertCounts {
+  active: number;
+  triggered: number;
+  paused: number;
+  total: number;
+}
+
+export interface AlertListResponse {
+  alerts: AlertView[];
+  counts: AlertCounts;
+}
+
+export interface AlertInputPayload {
+  symbol: string;
+  condition: AlertCondition;
+  level: number;
+  note?: string;
+  status?: AlertStatus;
+}
+
+export const alertsApi = {
+  list: () => request<AlertListResponse>("/api/alerts"),
+
+  create: (input: AlertInputPayload) =>
+    request<{ alert: AlertView }>("/api/alerts", { method: "POST", body: input }),
+
+  update: (id: string, input: AlertInputPayload) =>
+    request<{ alert: AlertView }>(`/api/alerts/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: input,
+    }),
+
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/alerts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
 export interface AdminUser {
   id: string;
   username: string;
@@ -443,7 +624,14 @@ export interface ThemeSettings {
   ratingNeutral: string;
 }
 
-export type ModuleKey = "analysis" | "signals" | "breakouts" | "learn" | "trading";
+export type ModuleKey =
+  | "analysis"
+  | "signals"
+  | "breakouts"
+  | "learn"
+  | "trading"
+  | "journal"
+  | "alerts";
 
 export type ModuleAccess = "public" | "signed-in";
 

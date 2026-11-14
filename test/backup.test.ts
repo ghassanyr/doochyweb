@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import { describe, test } from "node:test";
 import mongoose from "mongoose";
 
@@ -139,7 +140,7 @@ describe("backup snapshot", () => {
   test("builds a timestamped default path", () => {
     assert.equal(
       defaultBackupPath(new Date("2026-11-13T10:11:12.345Z")),
-      "backups/doochy-2026-11-13T10-11-12-345Z.json"
+      path.join("backups", "doochy-2026-11-13T10-11-12-345Z.json")
     );
   });
 });

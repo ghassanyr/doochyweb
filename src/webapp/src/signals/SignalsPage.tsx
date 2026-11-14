@@ -15,6 +15,7 @@ import { detectedTimeZone, timeZoneLabel } from "../time";
 import { DeleteSignalModal } from "./DeleteSignalModal";
 import { InvalidateModal } from "./InvalidateModal";
 import { PostUpdateModal } from "./PostUpdateModal";
+import PerformancePanel from "./PerformancePanel";
 import { SignalCard, SignalCardSkeleton } from "./SignalCard";
 import { SignalDetailModal } from "./SignalDetailModal";
 import { SignalFormModal } from "./SignalFormModal";
@@ -25,7 +26,15 @@ const PAGE = 25;
 const POLL_MS = 30_000;
 const DEBOUNCE_MS = 250;
 
-type Mode = "all" | "active";
+// "performance" is a read-only view over resolved signals rather than a list
+// filter, so it replaces the grid instead of narrowing it.
+type Mode = "all" | "active" | "performance";
+
+const MODE_LABELS: Record<Mode, string> = {
+  all: "All",
+  active: "Active",
+  performance: "Performance",
+};
 
 export default function SignalsPage({
   canRefresh,
@@ -105,6 +114,11 @@ export default function SignalsPage({
   useEffect(() => setPage(0), [mode, symbolQuery, direction]);
 
   const load = useCallback(async () => {
+    if (mode === "performance") {
+      // The panel fetches its own aggregate; the feed list stays untouched.
+      setLoaded(true);
+      return;
+    }
     try {
       const res = await signalsApi.list({
         status: mode,
@@ -231,7 +245,7 @@ export default function SignalsPage({
                 aria-label="Signals view"
                 className="flex items-center rounded-lg border border-hairline-strong bg-soft p-[3px]"
               >
-                {(["all", "active"] as const).map((v) => (
+                {(["all", "active", "performance"] as const).map((v) => (
                   <button
                     key={v}
                     type="button"
@@ -245,16 +259,12 @@ export default function SignalsPage({
                       (mode === v ? "bg-surface text-fg shadow-sm" : "text-fg-muted hover:text-fg")
                     }
                   >
-                    {v === "all" ? (
-                      <>
-                        All
-                        {counts && <span className="tabular-nums opacity-60">{counts.total}</span>}
-                      </>
-                    ) : (
-                      <>
-                        Active
-                        {counts && <span className="tabular-nums opacity-60">{counts.active}</span>}
-                      </>
+                    {MODE_LABELS[v]}
+                    {v === "all" && counts && (
+                      <span className="tabular-nums opacity-60">{counts.total}</span>
+                    )}
+                    {v === "active" && counts && (
+                      <span className="tabular-nums opacity-60">{counts.active}</span>
                     )}
                   </button>
                 ))}
@@ -275,7 +285,7 @@ export default function SignalsPage({
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className={mode === "performance" ? "hidden" : "mt-3 flex flex-wrap items-center gap-2"}>
             <div className="relative min-w-[180px] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" />
               <input
@@ -303,6 +313,9 @@ export default function SignalsPage({
           {error && <p className="mt-3 text-[12.5px] text-danger">{error}</p>}
         </Card>
 
+        {mode === "performance" ? (
+          <PerformancePanel />
+        ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
           {!loaded ? (
             Array.from({ length: 6 }, (_, i) => <SignalCardSkeleton key={i} />)
@@ -342,8 +355,9 @@ export default function SignalsPage({
             ))
           )}
         </div>
+        )}
 
-        {pages > 1 && (
+        {mode !== "performance" && pages > 1 && (
           <Card className="flex items-center justify-between p-3">
             <span className="text-[11.5px] text-fg-muted">
               Page {page + 1} of {pages} · {data?.total ?? 0} signals

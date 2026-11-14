@@ -327,7 +327,7 @@ describe("normalizeNavigation", () => {
     // Omitted modules are appended from the defaults so no tab vanishes.
     assert.deepEqual(
       navigation.modules.slice(2).map((module) => module.key),
-      ["breakouts", "learn", "trading"]
+      ["breakouts", "learn", "trading", "journal", "alerts"]
     );
   });
 

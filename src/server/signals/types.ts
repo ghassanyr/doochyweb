@@ -65,6 +65,52 @@ export interface SignalListResponse {
   counts: SignalCounts;
 }
 
+/** Aggregate record for one slice (overall, symbol, direction or month). */
+export interface PerformanceBucket {
+  key: string;
+  label: string;
+  resolved: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  avgR: number | null;
+  totalR: number;
+  profitFactor: number | null;
+}
+
+/** One resolved signal on the cumulative R curve. */
+export interface PerformancePoint {
+  id: string;
+  symbol: string;
+  direction: SignalDirection;
+  status: "target_hit" | "stopped_out";
+  at: string;
+  r: number;
+  cumulativeR: number;
+}
+
+export interface SignalPerformance {
+  overall: PerformanceBucket;
+  bySymbol: PerformanceBucket[];
+  byDirection: PerformanceBucket[];
+  byMonth: PerformanceBucket[];
+  curve: PerformancePoint[];
+  updatedAt: string;
+}
+
+/** Minimal resolved-signal row the pure aggregation needs. */
+export interface ResolvedSignalRow {
+  id: string;
+  symbol: string;
+  direction: SignalDirection;
+  status: "target_hit" | "stopped_out";
+  resolvedAt: string;
+  entry: number | null;
+  entryMax: number | null;
+  target: number;
+  stop: number;
+}
+
 /** Normalized input after validation. */
 export interface SignalInput {
   symbol: string;
