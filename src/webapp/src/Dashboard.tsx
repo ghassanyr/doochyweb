@@ -3,7 +3,7 @@ import { ShieldAlert } from "lucide-react";
 import { AccountView } from "./api";
 import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
-import OrderHistoryTab from "./OrderHistoryTab";
+import JournalTab from "./journal/JournalPage";
 import { Card, accountColorHex } from "./components/ui";
 import { FadeRise } from "./components/motion";
 import { useSiteConfig } from "./siteConfig";
@@ -19,7 +19,7 @@ const TRADING_DISCLAIMER =
 const PAGES = [
   { key: "positions", label: "Positions" },
   { key: "orders", label: "Pending orders" },
-  { key: "history", label: "Order History" },
+  { key: "journal", label: "Journal" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
@@ -199,7 +199,10 @@ function Tabs({
       ) : tab === "orders" ? (
         <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
       ) : (
-        <OrderHistoryTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} />
+        // The journal replaced the old order-history tab. It imports closed
+        // cTrader deals automatically, so the account selector above has no
+        // say in what it shows: the log is per member, not per account.
+        <JournalTab />
       )}
     </div>
   );

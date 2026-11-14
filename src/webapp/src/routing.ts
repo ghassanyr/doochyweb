@@ -11,7 +11,6 @@ export type ViewKey =
   | "signals"
   | "breakouts"
   | "learn"
-  | "journal"
   | "alerts"
   | "legal"
   | "terms"
@@ -34,7 +33,6 @@ export const VIEW_KEYS: readonly ViewKey[] = [
   "signals",
   "breakouts",
   "learn",
-  "journal",
   "alerts",
   "legal",
   "terms",

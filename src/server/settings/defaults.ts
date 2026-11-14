@@ -71,7 +71,6 @@ export const MODULE_KEYS: readonly ModuleKey[] = [
   "breakouts",
   "learn",
   "trading",
-  "journal",
   "alerts",
 ];
 
@@ -82,7 +81,6 @@ export const DEFAULT_MODULES: ModuleSettings[] = [
   { key: "breakouts", label: "Breakouts", hidden: false, access: "public" },
   { key: "learn", label: "Learn", hidden: false, access: "public" },
   { key: "trading", label: "Trading", hidden: false, access: "signed-in" },
-  { key: "journal", label: "Journal", hidden: false, access: "signed-in" },
   { key: "alerts", label: "Alerts", hidden: false, access: "signed-in" },
 ];
 

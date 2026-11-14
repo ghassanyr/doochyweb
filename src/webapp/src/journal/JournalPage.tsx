@@ -1,16 +1,16 @@
-// Personal Trade Journal.
+// Personal Trade Journal, shown as the Journal tab inside /trading.
 //
-// Two kinds of row: entries typed by hand (self-reported P&L) and trades
-// imported from cTrader closed-deal history (verified P&L). Import is
-// idempotent server side, so pressing it twice never duplicates a trade.
+// Two kinds of row: entries typed by hand (self-reported P&L) and trades the
+// server imported automatically from cTrader closed-deal history (verified P&L).
+// There is no import button: the server keeps the log current in the background
+// and this page polls, so broker trades simply appear. Notes are the member's
+// own layer on top, which is why every row has its own note action.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, NotebookPen, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Download, NotebookPen, Plus, RefreshCw, StickyNote, Trash2 } from "lucide-react";
 
 import {
-  api,
   journalApi,
-  type AccountView,
   type JournalEntry,
   type JournalInputPayload,
   type JournalListResponse,
@@ -23,6 +23,7 @@ import { formatLocalDateTime } from "../time";
 type Filter = { status: string; source: string; symbol: string };
 
 const EMPTY_FILTER: Filter = { status: "", source: "", symbol: "" };
+const POLL_MS = 60_000;
 
 export default function JournalPage() {
   const [data, setData] = useState<JournalListResponse | null>(null);
@@ -32,16 +33,15 @@ export default function JournalPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
 
-  const [accounts, setAccounts] = useState<AccountView[]>([]);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importCtid, setImportCtid] = useState<number | null>(null);
-  const [importDays, setImportDays] = useState(7);
-  const [importing, setImporting] = useState(false);
-
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<JournalEntry | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [noteTarget, setNoteTarget] = useState<JournalEntry | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -62,6 +62,9 @@ export default function JournalPage() {
 
   useEffect(() => {
     void load();
+    // Background imports land without a reload, so keep the tab fresh.
+    const id = window.setInterval(() => void load(), POLL_MS);
+    return () => window.clearInterval(id);
   }, [load]);
 
   useEffect(() => {
@@ -71,36 +74,6 @@ export default function JournalPage() {
     );
     return () => window.clearTimeout(t);
   }, [symbolInput]);
-
-  const openImport = useCallback(async () => {
-    setImportOpen(true);
-    if (accounts.length) return;
-    try {
-      const result = await api.accounts();
-      setAccounts(result.accounts);
-      setImportCtid(result.accounts[0]?.ctid ?? null);
-    } catch {
-      setNotice({ tone: "danger", text: "Could not read your cTrader accounts." });
-    }
-  }, [accounts.length]);
-
-  const runImport = useCallback(async () => {
-    if (importCtid == null) return;
-    setImporting(true);
-    try {
-      const result = await journalApi.importHistory(importCtid, importDays);
-      setImportOpen(false);
-      setNotice({
-        tone: "success",
-        text: `Imported ${result.imported} new trade${result.imported === 1 ? "" : "s"} from ${result.accountLabel} (${result.skipped} already in the journal).`,
-      });
-      await load();
-    } catch (err: any) {
-      setNotice({ tone: "danger", text: err?.message || "Import failed." });
-    } finally {
-      setImporting(false);
-    }
-  }, [importCtid, importDays, load]);
 
   const exportCsv = useCallback(async () => {
     try {
@@ -119,9 +92,9 @@ export default function JournalPage() {
   }, [filter]);
 
   const remove = useCallback(
-    async (id: string) => {
+    async (entry: JournalEntry) => {
       try {
-        await journalApi.remove(id);
+        await journalApi.remove(entry.id);
         await load();
       } catch {
         setNotice({ tone: "danger", text: "Could not delete that entry." });
@@ -129,6 +102,34 @@ export default function JournalPage() {
     },
     [load]
   );
+
+  const openNote = useCallback((entry: JournalEntry) => {
+    setNoteTarget(entry);
+    setNoteText(entry.note);
+    setNoteError(null);
+  }, []);
+
+  const saveNote = useCallback(async () => {
+    if (!noteTarget) return;
+    setNoteSaving(true);
+    setNoteError(null);
+    try {
+      const result = await journalApi.updateNote(noteTarget.id, noteText.trim());
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              entries: current.entries.map((row) => (row.id === result.entry.id ? result.entry : row)),
+            }
+          : current
+      );
+      setNoteTarget(null);
+    } catch (err: any) {
+      setNoteError(err?.message || "Could not save that note.");
+    } finally {
+      setNoteSaving(false);
+    }
+  }, [noteTarget, noteText]);
 
   const save = useCallback(
     async (payload: JournalInputPayload) => {
@@ -150,7 +151,8 @@ export default function JournalPage() {
   );
 
   const stats = data?.stats;
-  const entries = useMemo(() => data?.entries ?? [], [data]);
+  const entries = data?.entries ?? [];
+  const synced = data?.lastSyncedAt;
 
   return (
     <FadeRise>
@@ -159,10 +161,19 @@ export default function JournalPage() {
           <div className="flex flex-wrap items-center gap-2">
             <NotebookPen className="h-4 w-4 text-accent" />
             <h3 className="text-sm font-semibold text-fg">Trade journal</h3>
-            <span className="text-[11px] text-fg-faint">Private to your account</span>
+            <span className="text-[11px] text-fg-faint">
+              {synced
+                ? `Closed cTrader trades import automatically · last synced ${formatLocalDateTime(synced)}`
+                : "Closed cTrader trades import automatically once an account is connected."}
+            </span>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="secondary" icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => void openImport()}>
-                Import cTrader
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<RefreshCw className="h-3.5 w-3.5" />}
+                onClick={() => void load()}
+              >
+                Refresh
               </Button>
               <Button size="sm" variant="secondary" icon={<Download className="h-3.5 w-3.5" />} onClick={() => void exportCsv()}>
                 Export CSV
@@ -234,7 +245,8 @@ export default function JournalPage() {
             <div className="p-6">
               <p className="text-sm font-medium text-fg">No entries yet</p>
               <p className="mt-1 text-[12.5px] leading-relaxed text-fg-muted">
-                Add a trade by hand, or import your closed cTrader deals to start with verified P&amp;L.
+                Add a trade by hand, or wait for the next automatic import: closed cTrader deals appear here
+                with verified P&amp;L.
               </p>
             </div>
           ) : (
@@ -304,15 +316,29 @@ export default function JournalPage() {
                           <Badge tone="muted">Self-reported</Badge>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => void remove(entry.id)}
-                          aria-label={`Delete ${entry.symbol} entry`}
-                          className="rounded-md p-1 text-fg-faint transition hover:bg-danger-soft hover:text-danger"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openNote(entry)}
+                            aria-label={entry.note ? `Edit note for ${entry.symbol}` : `Add note for ${entry.symbol}`}
+                            title={entry.note ? "Edit note" : "Add note"}
+                            className={
+                              "rounded-md p-1 transition hover:bg-surface-hover " +
+                              (entry.note ? "text-accent" : "text-fg-faint hover:text-fg")
+                            }
+                          >
+                            <StickyNote className={"h-3.5 w-3.5 " + (entry.note ? "fill-current" : "")} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void remove(entry)}
+                            aria-label={`Delete ${entry.symbol} entry`}
+                            className="rounded-md p-1 text-fg-faint transition hover:bg-danger-soft hover:text-danger"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -324,46 +350,33 @@ export default function JournalPage() {
       </div>
 
       <AnimatedModal
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        title="Import closed trades"
-        subtitle="Verified P&L straight from your cTrader deal history. Re-importing never duplicates a trade."
+        open={noteTarget != null}
+        onClose={() => setNoteTarget(null)}
+        title={noteTarget ? `${noteTarget.symbol} note` : "Note"}
+        subtitle={
+          noteTarget?.verified
+            ? "Your own record on an imported trade. Broker prices and P&L stay untouched."
+            : "Your own record on this trade."
+        }
       >
-        {accounts.length === 0 ? (
-          <p className="text-sm text-fg-muted">No cTrader account is connected yet.</p>
-        ) : (
-          <div className="space-y-3">
-            <label className="block text-xs text-fg-muted">
-              Account
-              <select
-                className={inputCls + " mt-1"}
-                value={importCtid ?? ""}
-                onChange={(event) => setImportCtid(Number(event.target.value))}
-              >
-                {accounts.map((account) => (
-                  <option key={account.ctid} value={account.ctid}>
-                    {account.nickname || account.broker || account.login}
-                    {account.isLive ? " (live)" : " (demo)"}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs text-fg-muted">
-              Period
-              <select
-                className={inputCls + " mt-1"}
-                value={importDays}
-                onChange={(event) => setImportDays(Number(event.target.value))}
-              >
-                <option value={7}>Last 7 days</option>
-                <option value={30}>Last 30 days</option>
-              </select>
-            </label>
-            <Button variant="primary" disabled={importing} onClick={() => void runImport()}>
-              {importing ? "Importing" : "Import trades"}
+        <div className="space-y-3">
+          {noteError && <Flash tone="danger">{noteError}</Flash>}
+          <textarea
+            className={inputCls + " min-h-[120px]"}
+            value={noteText}
+            onChange={(event) => setNoteText(event.target.value)}
+            placeholder="What did you see, what did you do, what would you repeat?"
+            aria-label="Journal note"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setNoteTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" disabled={noteSaving} onClick={() => void saveNote()}>
+              {noteSaving ? "Saving" : "Save note"}
             </Button>
           </div>
-        )}
+        </div>
       </AnimatedModal>
 
       <JournalFormModal

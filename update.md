@@ -46,7 +46,7 @@ Reference notes taken from the live product:
 - [x] **Watchlist & Alerts**: personal price alerts on symbols, delivered through
       the existing Telegram outbox, with a live watchlist price strip on the
       page. Reuses the market price cache and Telegram integration.
-- [x] **Trade Journal**: personal trade log with manual entries and one-click
+- [x] **Trade Journal**: personal trade log with manual entries and automatic
       import of closed cTrader trades. Imported rows carry verified P&L. Includes
       stats and CSV export. Becomes the foundation for AI Coach.
 
@@ -119,10 +119,21 @@ started, `later` means deliberately deferred, `skip` means not planned.
 
 ### Trade Journal
 
-- New `journal` module, signed-in only.
-- Manual entries plus import from cTrader closed deal history.
-- Imported rows are keyed by `(userId, dealId)` so re-importing is idempotent and
-  never duplicates a trade.
+- Lives as the Journal tab inside `/trading`, replacing the old order-history
+  tab, so it shares that module's signed-in access rule. There is no separate
+  journal tab in the primary navigation.
+- Manual entries plus automatic import from cTrader closed deal history.
+- Import is automatic in two ways: a ten-minute background pass over every user
+  with stored credentials, and a sync after a journal read when the last run is
+  older than five minutes. Both paths share the same minimum-gap guard and the
+  unique (userId, dealId) index, so a trade is never imported twice.
+- The tab shows the last sync time and refreshes every minute, so new broker
+  trades appear without a reload. There is no import button.
+- Every row has a note action next to delete. Notes are the member's own layer:
+  `PATCH /api/journal/:id/note` changes only the note, so verified broker prices
+  and P&L are never overwritten.
+- Imported rows are keyed by `(userId, dealId)` so repeated imports are
+  idempotent and never duplicate a trade.
 - Verified P&L badge on imported rows, self-reported badge on manual rows.
 - Stats: open, closed, verified, win rate, average P&L, total P&L, profit factor.
 - CSV export with the same filters as the list.

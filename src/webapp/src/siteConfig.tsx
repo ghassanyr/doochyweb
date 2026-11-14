@@ -140,7 +140,6 @@ export const FALLBACK_MODULES: ModuleSettings[] = [
   { key: "breakouts", label: "Breakouts", hidden: false, access: "public" },
   { key: "learn", label: "Learn", hidden: false, access: "public" },
   { key: "trading", label: "Trading", hidden: false, access: "signed-in" },
-  { key: "journal", label: "Journal", hidden: false, access: "signed-in" },
   { key: "alerts", label: "Alerts", hidden: false, access: "signed-in" },
 ];
 

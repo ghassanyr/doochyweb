@@ -11,12 +11,15 @@ import { journalCsv } from "./validate";
 import {
   createJournalEntry,
   deleteJournalEntry,
-  importCtraderHistory,
   JournalError,
   listJournal,
   updateJournalEntry,
+  updateJournalNote,
 } from "./store";
+import { syncUserJournal } from "./sync";
 import { validateJournalInput } from "./validate";
+
+const MAX_NOTE = 2000;
 
 export const journalRouter = Router();
 
@@ -43,6 +46,12 @@ journalRouter.get("/", async (req: AuthedRequest, res) => {
     const limit = Number(req.query.limit) || 50;
     const offset = Number(req.query.offset) || 0;
     res.json(await listJournal(req.userId!, { ...queryFilters(req), limit, offset }));
+    // Keep the journal current without a button. The sync backs off on its own
+    // after a recent run, and the response is already sent, so a slow broker
+    // never delays the page.
+    void syncUserJournal(req.userId!).catch((err) => {
+      console.error(`[journal] sync after read failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
   } catch (err) {
     fail(res, err);
   }
@@ -76,22 +85,17 @@ journalRouter.post("/", async (req: AuthedRequest, res) => {
   }
 });
 
-journalRouter.post("/import", async (req: AuthedRequest, res) => {
+journalRouter.patch("/:id/note", async (req: AuthedRequest, res) => {
   try {
-    const ctid = Number(req.body?.ctid);
-    if (!Number.isFinite(ctid) || ctid <= 0) {
-      res.status(400).json({ error: "invalid account id" });
+    const raw = req.body?.note;
+    if (typeof raw !== "string") {
+      res.status(400).json({ error: "note must be text" });
       return;
     }
-    const days = Number(req.body?.days) || 7;
-    res.json(await importCtraderHistory(req.userId!, ctid, days));
+    const note = raw.trim().slice(0, MAX_NOTE);
+    res.json({ entry: await updateJournalNote(req.userId!, req.params.id, note) });
   } catch (err) {
-    if (err instanceof JournalError) {
-      fail(res, err);
-      return;
-    }
-    // Broker failures are upstream errors, not journal validation errors.
-    res.status(502).json({ error: err instanceof Error ? err.message : "import failed" });
+    fail(res, err);
   }
 });
 

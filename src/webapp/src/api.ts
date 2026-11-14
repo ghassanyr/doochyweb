@@ -428,6 +428,7 @@ export interface JournalListResponse {
   entries: JournalEntry[];
   total: number;
   stats: JournalStats;
+  lastSyncedAt: string | null;
 }
 
 export interface JournalInputPayload {
@@ -474,14 +475,14 @@ export const journalApi = {
       body: input,
     }),
 
+  updateNote: (id: string, note: string) =>
+    request<{ entry: JournalEntry }>(`/api/journal/${encodeURIComponent(id)}/note`, {
+      method: "PATCH",
+      body: { note },
+    }),
+
   remove: (id: string) =>
     request<{ ok: boolean }>(`/api/journal/${encodeURIComponent(id)}`, { method: "DELETE" }),
-
-  importHistory: (ctid: number, days = 7) =>
-    request<JournalImportResult>("/api/journal/import", {
-      method: "POST",
-      body: { ctid, days },
-    }),
 
   // The CSV endpoint needs the bearer token, so it cannot be a plain link.
   exportCsv: async (params: { status?: string; source?: string; symbol?: string } = {}) => {
@@ -630,7 +631,6 @@ export type ModuleKey =
   | "breakouts"
   | "learn"
   | "trading"
-  | "journal"
   | "alerts";
 
 export type ModuleAccess = "public" | "signed-in";

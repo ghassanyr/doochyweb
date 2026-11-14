@@ -51,7 +51,6 @@ export type ModuleKey =
   | "breakouts"
   | "learn"
   | "trading"
-  | "journal"
   | "alerts";
 
 export type ModuleAccess = "public" | "signed-in";

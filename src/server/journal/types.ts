@@ -54,6 +54,8 @@ export interface JournalListResponse {
   entries: JournalEntryView[];
   total: number;
   stats: JournalStats;
+  /** Last automatic cTrader import for this user, or null if never run. */
+  lastSyncedAt: string | null;
 }
 
 /** Normalized fields accepted by create/update. */

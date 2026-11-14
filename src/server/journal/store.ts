@@ -52,6 +52,20 @@ entrySchema.index({ userId: 1, createdAt: -1 });
 
 export const JournalEntry = mongoose.model("JournalEntry", entrySchema);
 
+// One row per user recording the last automatic cTrader import, so the tab can
+// say when it last synced and the scheduler can back off after a failure.
+const syncSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    lastRunAt: { type: Date, default: null },
+    lastImported: { type: Number, default: 0 },
+    lastError: { type: String, default: null },
+  },
+  { timestamps: true }
+);
+
+export const JournalSync = mongoose.model("JournalSync", syncSchema);
+
 export class JournalError extends Error {
   status: number;
 
@@ -144,7 +158,7 @@ export async function listJournal(
   const limit = Math.min(200, Math.max(1, options.limit ?? 50));
   const offset = Math.max(0, options.offset ?? 0);
 
-  const [docs, total, all] = await Promise.all([
+  const [docs, total, all, sync] = await Promise.all([
     JournalEntry.find(filter)
       .sort({ closedAt: -1, createdAt: -1 })
       .skip(offset)
@@ -153,12 +167,14 @@ export async function listJournal(
       .exec(),
     JournalEntry.countDocuments(filter).exec(),
     JournalEntry.find(ownerFilter(userId)).lean().exec(),
+    JournalSync.findOne(ownerFilter(userId)).lean().exec(),
   ]);
 
   return {
     entries: docs.map(toJournalView),
     total,
     stats: computeJournalStats(all.map(toJournalView)),
+    lastSyncedAt: iso((sync as any)?.lastRunAt ?? null),
   };
 }
 
@@ -204,6 +220,50 @@ export async function updateJournalEntry(
   doc.note = input.note;
   await doc.save();
   return toJournalView(doc.toObject());
+}
+
+/** Replace only the note. Used by the row action, which leaves broker data alone. */
+export async function updateJournalNote(
+  userId: string,
+  id: string,
+  note: string
+): Promise<JournalEntryView> {
+  if (!mongoose.isValidObjectId(id)) throw new JournalError(404, "journal entry not found");
+  const doc = await JournalEntry.findOne({ _id: id, ...ownerFilter(userId) }).exec();
+  if (!doc) throw new JournalError(404, "journal entry not found");
+  doc.note = note;
+  await doc.save();
+  return toJournalView(doc.toObject());
+}
+
+/** When this user's journal last imported from the broker. */
+export async function readSyncState(userId: string): Promise<Date | null> {
+  const doc = await JournalSync.findOne(ownerFilter(userId))
+    .select({ lastRunAt: 1 })
+    .lean()
+    .exec();
+  const at = (doc as any)?.lastRunAt;
+  if (!at) return null;
+  const date = at instanceof Date ? at : new Date(String(at));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+/** Record the outcome of one automatic import for a user. */
+export async function recordSync(
+  userId: string,
+  params: { at: Date; imported: number; error?: string | null }
+): Promise<void> {
+  await JournalSync.updateOne(
+    ownerFilter(userId),
+    {
+      $set: {
+        lastRunAt: params.at,
+        lastImported: params.imported,
+        lastError: params.error ?? null,
+      },
+    },
+    { upsert: true }
+  ).exec();
 }
 
 export async function deleteJournalEntry(userId: string, id: string): Promise<void> {

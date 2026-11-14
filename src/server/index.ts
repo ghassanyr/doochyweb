@@ -20,6 +20,7 @@ import { marketRouter } from "./market/routes";
 import { signalsRouter } from "./signals/routes";
 import { startSignalResolver } from "./signals/resolver";
 import { journalRouter } from "./journal/routes";
+import { startJournalSync, stopJournalSync } from "./journal/sync";
 import { alertsRouter } from "./alerts/routes";
 import { startAlertRunner, stopAlertRunner } from "./alerts/runner";
 import { promoteConfiguredAdmins } from "./admin/roles";
@@ -625,9 +626,10 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 // -----------------------------------------------------------------------
 app.use("/api/market", maintenanceGate, marketGate, marketRouter);
 app.use("/api/signals", maintenanceGate, moduleGate("signals"), signalsRouter);
-// Journal and Alerts hold personal data, so both routers enforce a session on
-// every route themselves; the module gate adds the maintenance window.
-app.use("/api/journal", maintenanceGate, moduleGate("journal"), journalRouter);
+// The journal lives inside the Trading page, so it follows that module's access
+// rule; both routers also enforce a session on every route themselves, and the
+// module gate adds the maintenance window.
+app.use("/api/journal", maintenanceGate, moduleGate("trading"), journalRouter);
 app.use("/api/alerts", maintenanceGate, moduleGate("alerts"), alertsRouter);
 app.use("/api/trainer", maintenanceGate, moduleGate("learn"), createTrainerRouter());
 app.use("/api/telegram", telegramRouter);
@@ -680,6 +682,7 @@ async function main() {
   startScraperScheduler();
   startSignalResolver();
   startAlertRunner();
+  startJournalSync();
 
   // Telegram is optional; a missing token or a bad one must never stop the
   // web app. The feature logs its own startup failures.
@@ -689,6 +692,7 @@ async function main() {
     process.on(signal, () => {
       stopTelegram();
       stopAlertRunner();
+      stopJournalSync();
       process.exit(0);
     });
   }
