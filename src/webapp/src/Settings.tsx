@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, ArrowLeft, KeyRound, Link2, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, KeyRound, Link2, Mail, RefreshCw, Save } from "lucide-react";
 import {
   api,
   ApiError,
@@ -10,7 +10,7 @@ import ConnectPanel from "./ConnectPanel";
 import { fmtMoney } from "./Dashboard";
 import { ACCOUNT_COLORS, Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
-import { useSiteConfig } from "./siteConfig";
+import { brandMarkUrl, isBundledBrand, useSiteConfig } from "./siteConfig";
 import TelegramNotifications from "./telegram/TelegramNotifications";
 
 type AccountPrefs = { nickname: string; color: string | null };
@@ -40,9 +40,16 @@ export default function SettingsPage({
   const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
   const [oauthAvailable, setOauthAvailable] = useState(false);
   const [reconnectErr, setReconnectErr] = useState<string | null>(null);
-  const { branding } = useSiteConfig();
-  const logoUrl = branding.logoUrl || "/doochy-mark-64.png";
-  const defaultLogo = !branding.logoUrl;
+  const [email, setEmail] = useState<string | null>(null);
+  const [emailVerified, setEmailVerified] = useState(true);
+  const [emailLoaded, setEmailLoaded] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  const { branding, theme } = useSiteConfig();
+  const logoUrl = brandMarkUrl(branding, theme, 64);
+  const defaultLogo = isBundledBrand(branding);
 
   useEffect(() => {
     setPrefs(prefsFrom(accounts));
@@ -58,8 +65,13 @@ export default function SettingsPage({
         if (!alive) return;
         setClientIdMasked(r.clientIdMasked ?? null);
         setOauthAvailable(Boolean(r.ctraderOAuth));
+        setEmail(r.email ?? null);
+        setEmailVerified(r.emailVerified !== false);
+        setEmailLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) setEmailLoaded(true);
+      });
     return () => {
       alive = false;
     };
@@ -108,6 +120,39 @@ export default function SettingsPage({
       setSaveError(err instanceof ApiError ? err.message : "Failed to save nickname / colour");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveEmail() {
+    setEmailError(null);
+    setEmailNotice(null);
+    try {
+      const result = await api.updateEmail(emailInput.trim(), emailPassword);
+      setEmail(result.email);
+      setEmailVerified(result.emailVerified);
+      setEmailInput("");
+      setEmailPassword("");
+      setEmailNotice(
+        result.verificationSent
+          ? `Check ${result.email} for a verification link.`
+          : "Email saved."
+      );
+    } catch (err) {
+      setEmailError(err instanceof ApiError ? err.message : "Could not save your email.");
+    }
+  }
+
+  async function resendVerification() {
+    if (!email) return;
+    setEmailError(null);
+    setEmailNotice(null);
+    try {
+      await api.resendVerification(email);
+      setEmailNotice("A new verification link is on its way. Check your inbox and spam folder.");
+    } catch (err) {
+      setEmailError(
+        err instanceof ApiError ? err.message : "Could not resend the verification email."
+      );
     }
   }
 
@@ -260,6 +305,101 @@ export default function SettingsPage({
                 Save changes
               </Button>
             </div>
+          </Card>
+        </FadeRise>
+
+        <FadeRise>
+          <Card className="p-4">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Email</h2>
+              <p className="text-sm text-fg-muted">
+                {email
+                  ? "Used for password recovery and important account notices."
+                  : "Add an email so you can recover your account if you forget your password."}
+              </p>
+            </div>
+            {!emailLoaded ? (
+              <p className="mt-3 text-xs text-fg-faint">Loading your account email...</p>
+            ) : (
+              <>
+                {email && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-hairline bg-soft px-3 py-2">
+                    <span className="min-w-0 flex-1 truncate text-sm text-fg">{email}</span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                        emailVerified
+                          ? "bg-success-soft text-success"
+                          : "bg-surface-active text-fg-muted"
+                      }`}
+                    >
+                      {emailVerified ? "Verified" : "Verification pending"}
+                    </span>
+                  </div>
+                )}
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="account-email" className="mb-2 block text-sm font-medium text-fg-muted">
+                      {email ? "New email" : "Email"}
+                    </label>
+                    <input
+                      id="account-email"
+                      type="email"
+                      className={inputCls}
+                      value={emailInput}
+                      onChange={(event) => setEmailInput(event.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="account-email-password" className="mb-2 block text-sm font-medium text-fg-muted">
+                      Current password
+                    </label>
+                    <input
+                      id="account-email-password"
+                      type="password"
+                      className={inputCls}
+                      value={emailPassword}
+                      onChange={(event) => setEmailPassword(event.target.value)}
+                      placeholder="Confirm it's you"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="primary"
+                    icon={<Mail className="h-4 w-4" />}
+                    disabled={!emailInput.trim() || !emailPassword}
+                    onClickAsync={saveEmail}
+                  >
+                    {email ? "Change email" : "Add email"}
+                  </Button>
+                  {email && !emailVerified && (
+                    <Button
+                      variant="secondary"
+                      icon={<RefreshCw className="h-4 w-4" />}
+                      onClickAsync={resendVerification}
+                    >
+                      Resend verification
+                    </Button>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-fg-faint">
+                  We ask for your current password to protect your account.
+                </p>
+              </>
+            )}
+            {emailError && (
+              <div className="mt-3">
+                <Flash tone="danger">{emailError}</Flash>
+              </div>
+            )}
+            {emailNotice && (
+              <div className="mt-3">
+                <Flash tone="success">{emailNotice}</Flash>
+              </div>
+            )}
           </Card>
         </FadeRise>
 

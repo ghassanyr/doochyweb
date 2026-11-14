@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { ApiError, marketApi } from "../api";
 import { AnimatedModal } from "../components/Modal";
+import { siteUrlFor } from "../publicUrl";
+import { useSiteConfig } from "../siteConfig";
 import { BREAKOUT_STYLE, breakPct, breakoutDirection, fmtPct, fmtPrice } from "./breakoutFormat";
 import { SESSION_LABEL, fmtCaptureTime, relativeTime } from "./captures";
 import type { Breakout, Evidence, NarrationBrief, NarrationNote, SinceBreak } from "./types";
@@ -13,12 +15,6 @@ const fmtPoints = (ev: Evidence): string => {
   const points = Math.round(ev.diff * 100);
   return `${points > 0 ? "+" : ""}${points} pts`;
 };
-
-function noteUrl(eventKey: string): string {
-  const url = new URL(window.location.href);
-  url.searchParams.set("note", eventKey);
-  return url.toString();
-}
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -174,6 +170,7 @@ export function BreakoutNoteModal({
   const [note, setNote] = useState<NarrationNote | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { config } = useSiteConfig();
 
   useEffect(() => {
     let alive = true;
@@ -195,7 +192,7 @@ export function BreakoutNoteModal({
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(noteUrl(eventKey));
+      await navigator.clipboard.writeText(siteUrlFor(config, "/breakouts", { note: eventKey }));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {

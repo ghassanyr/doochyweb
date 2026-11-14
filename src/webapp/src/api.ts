@@ -626,7 +626,13 @@ export const adminApi = {
 };
 
 export const api = {
-  register: (username: string, email: string, password: string, inviteCode?: string) =>
+  register: (
+    username: string,
+    email: string,
+    password: string,
+    inviteCode?: string,
+    acceptedTerms = false
+  ) =>
     request<{
       token?: string;
       pending?: boolean;
@@ -636,7 +642,7 @@ export const api = {
       email?: string;
     }>("/api/auth/register", {
       method: "POST",
-      body: { username, email, password, inviteCode },
+      body: { username, email, password, inviteCode, acceptedTerms },
     }),
 
   login: (username: string, password: string) =>
@@ -666,10 +672,10 @@ export const api = {
       body: { email },
     }),
 
-  acceptInvite: (token: string, password: string) =>
+  acceptInvite: (token: string, password: string, acceptedTerms = false) =>
     request<{ token: string; username: string }>("/api/auth/accept-invite", {
       method: "POST",
-      body: { token, password },
+      body: { token, password, acceptedTerms },
     }),
 
   me: (token?: string) =>
@@ -683,6 +689,14 @@ export const api = {
       ctraderOAuth: boolean;
       accounts: AccountView[];
     }>("/api/me", { token }),
+
+  updateEmail: (email: string, password: string) =>
+    request<{
+      ok: true;
+      email: string;
+      emailVerified: boolean;
+      verificationSent: boolean;
+    }>("/api/me/email", { method: "PATCH", body: { email, password } }),
 
   connect: (creds: ConnectInput, token?: string) =>
     request<{ accounts: AccountView[] }>("/api/connect", { method: "POST", body: creds, token }),

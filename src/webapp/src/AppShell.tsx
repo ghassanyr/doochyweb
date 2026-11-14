@@ -9,6 +9,8 @@ import {
   FALLBACK_ANNOUNCEMENT,
   FALLBACK_LEGAL,
   FALLBACK_MODULES,
+  brandMarkUrl,
+  isBundledBrand,
   useSiteConfig,
 } from "./siteConfig";
 
@@ -48,7 +50,7 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
-  const { config, branding, mode, toggleMode } = useSiteConfig();
+  const { config, branding, theme, mode, toggleMode } = useSiteConfig();
   const legal = config?.legal ?? FALLBACK_LEGAL;
   const hasLegal = Boolean(legal.termsUrl || legal.privacyUrl || legal.riskDisclaimer);
   const modules = (config?.navigation.modules ?? FALLBACK_MODULES).filter(
@@ -59,8 +61,8 @@ export function AppShell({
     label: module.label,
   }));
   const items = isAdmin ? [...nav, ADMIN_NAV] : nav;
-  const logoUrl = branding.logoUrl || "/doochy-mark-80.png";
-  const defaultLogo = !branding.logoUrl;
+  const logoUrl = brandMarkUrl(branding, theme, 80);
+  const defaultLogo = isBundledBrand(branding);
   const nextMode = mode === "dark" ? "light" : "dark";
   return (
     <div className="min-h-screen bg-transparent text-fg">
@@ -176,12 +178,12 @@ export function AppShell({
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
 
-      {(branding.footerText || branding.supportEmail || hasLegal) && (
+      {(branding.footerText || branding.supportEmail || branding.websiteUrl || hasLegal) && (
         <footer className="mx-auto max-w-page space-y-1 px-4 pb-6 pt-2 text-center text-[11px] leading-relaxed text-fg-faint sm:px-6">
           {legal.riskDisclaimer && <p className="mx-auto max-w-3xl">{legal.riskDisclaimer}</p>}
           <p>
             {branding.footerText}
-            {branding.footerText && branding.supportEmail && (
+            {branding.footerText && (branding.supportEmail || branding.websiteUrl) && (
               <span aria-hidden="true"> • </span>
             )}
             {branding.supportEmail && (
@@ -190,6 +192,19 @@ export function AppShell({
                 className="transition hover:text-accent"
               >
                 {branding.supportEmail}
+              </a>
+            )}
+            {branding.supportEmail && branding.websiteUrl && (
+              <span aria-hidden="true"> • </span>
+            )}
+            {branding.websiteUrl && (
+              <a
+                href={branding.websiteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="transition hover:text-accent"
+              >
+                Website
               </a>
             )}
           </p>

@@ -145,8 +145,8 @@ export function statusTimestamp(signal: Signal): { label: string; iso: string } 
   return null;
 }
 
-/** Plain-text version for the clipboard. */
-export function signalShareText(signal: Signal): string {
+/** Plain-text version for the clipboard, with an optional canonical link. */
+export function signalShareText(signal: Signal, url?: string): string {
   const lines = [
     `${signal.symbol} ${signal.direction.toUpperCase()}${signal.timeframe ? ` (${signal.timeframe})` : ""}`,
   ];
@@ -158,6 +158,7 @@ export function signalShareText(signal: Signal): string {
   const rr = computeRR(signal.entry, signal.target, signal.stop, signal.entryMax);
   if (rr != null) lines.push(`R:R ${rr.toFixed(2)}`);
   if (signal.note) lines.push(`Note: ${signal.note}`);
+  if (url) lines.push("", url);
   return lines.join("\n");
 }
 

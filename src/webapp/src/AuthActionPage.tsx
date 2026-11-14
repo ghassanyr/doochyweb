@@ -3,7 +3,7 @@ import { ArrowLeft, KeyRound, MailCheck } from "lucide-react";
 
 import { api, ApiError } from "./api";
 import { Button, Card, Flash, inputCls } from "./components/ui";
-import { useSiteConfig } from "./siteConfig";
+import { FALLBACK_BRANDING, FALLBACK_LEGAL, useSiteConfig } from "./siteConfig";
 
 export type AuthActionView =
   | "forgot-password"
@@ -26,11 +26,15 @@ export default function AuthActionPage({
   onAuthed: (token: string) => void;
 }) {
   const { config } = useSiteConfig();
-  const brand = config?.branding.name || "Doochy";
+  const brand = config?.branding.name || FALLBACK_BRANDING.name;
+  const legal = config?.legal ?? FALLBACK_LEGAL;
+  const needsLegalAcceptance =
+    view === "accept-invite" && Boolean(legal.termsUrl || legal.privacyUrl);
   const token = tokenFromUrl();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -56,6 +60,10 @@ export default function AuthActionPage({
       setError("The passwords do not match.");
       return;
     }
+    if (needsLegalAcceptance && !acceptedTerms) {
+      setError("Accept the Terms and Privacy Policy to create an account.");
+      return;
+    }
     setBusy(true);
     try {
       if (view === "forgot-password") {
@@ -70,7 +78,7 @@ export default function AuthActionPage({
         await api.verifyEmail(token);
         setDone("Email verified. You can sign in now.");
       } else {
-        const res = await api.acceptInvite(token, password);
+        const res = await api.acceptInvite(token, password, acceptedTerms);
         onAuthed(res.token);
       }
     } catch (err) {
@@ -152,6 +160,42 @@ export default function AuthActionPage({
                 />
               </div>
             </>
+          )}
+
+          {needsLegalAcceptance && (
+            <label className="flex items-start gap-2 text-xs leading-relaxed text-fg-muted">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                checked={acceptedTerms}
+                onChange={(event) => setAcceptedTerms(event.target.checked)}
+              />
+              <span>
+                I agree to the{" "}
+                {legal.termsUrl && (
+                  <a
+                    href={legal.termsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-accent underline-offset-2 hover:underline"
+                  >
+                    Terms
+                  </a>
+                )}
+                {legal.termsUrl && legal.privacyUrl && " and "}
+                {legal.privacyUrl && (
+                  <a
+                    href={legal.privacyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-accent underline-offset-2 hover:underline"
+                  >
+                    Privacy Policy
+                  </a>
+                )}
+                .
+              </span>
+            </label>
           )}
 
           {shownError && <Flash tone="danger">{shownError}</Flash>}

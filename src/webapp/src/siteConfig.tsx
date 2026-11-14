@@ -35,6 +35,7 @@ import {
   type ThemeMode,
   type ThemeSettings,
 } from "./api";
+import { monogramDataUrl } from "./brandMark";
 
 export const FALLBACK_SITE: SiteAddressSettings = {
   publicBaseUrl: "",
@@ -63,6 +64,31 @@ export const FALLBACK_BRANDING: BrandingSettings = {
   websiteUrl: "",
   footerText: "",
 };
+
+/**
+ * True only for the untouched default brand. A renamed deployment without a
+ * uploaded logo gets a generated monogram instead of the bundled Doochy mark.
+ */
+export function isBundledBrand(branding: BrandingSettings): boolean {
+  const name = (branding.name.trim() || FALLBACK_BRANDING.name).toLowerCase();
+  return !branding.logoUrl && name === FALLBACK_BRANDING.name.toLowerCase();
+}
+
+/** The logo shown in the header, settings and maintenance screen. */
+export function brandMarkUrl(
+  branding: BrandingSettings,
+  theme: Pick<ThemeSettings, "accent" | "accentFg">,
+  size: number
+): string {
+  if (branding.logoUrl) return branding.logoUrl;
+  if (isBundledBrand(branding)) return `/doochy-mark-${size}.png`;
+  return monogramDataUrl(
+    branding.name.trim() || FALLBACK_BRANDING.name,
+    theme.accent,
+    theme.accentFg,
+    size
+  );
+}
 
 export const FALLBACK_THEME: ThemeSettings = {
   mode: "dark",
@@ -180,11 +206,34 @@ export function applyTheme(theme: ThemeSettings): void {
   if (meta && hexToRgbTriplet(theme.canvas)) meta.setAttribute("content", theme.canvas);
 }
 
-function applyBranding(branding: BrandingSettings): void {
+function setMeta(selector: string, content: string): void {
+  const meta = document.querySelector(selector);
+  if (meta) meta.setAttribute("content", content);
+}
+
+function applyBranding(branding: BrandingSettings, theme: ThemeSettings): void {
   if (typeof document === "undefined") return;
-  document.title = branding.name || FALLBACK_BRANDING.name;
-  const meta = document.querySelector('meta[name="description"]');
-  if (meta && branding.description) meta.setAttribute("content", branding.description);
+  const name = branding.name.trim() || FALLBACK_BRANDING.name;
+  const description = branding.description.trim() || FALLBACK_BRANDING.description;
+  document.title = name;
+  setMeta('meta[name="description"]', description);
+  setMeta('meta[name="application-name"]', name);
+  setMeta('meta[name="apple-mobile-web-app-title"]', name);
+  setMeta('meta[property="og:title"]', name);
+  setMeta('meta[property="og:site_name"]', name);
+  setMeta('meta[property="og:description"]', description);
+  setMeta('meta[name="twitter:title"]', name);
+  setMeta('meta[name="twitter:description"]', description);
+
+  for (const link of document.querySelectorAll<HTMLLinkElement>(
+    'link[rel="icon"], link[rel="apple-touch-icon"]'
+  )) {
+    const width = Number.parseInt(link.getAttribute("sizes")?.split("x")[0] ?? "", 10);
+    link.href = brandMarkUrl(branding, theme, Number.isFinite(width) ? width : 192);
+    // The generated or uploaded asset may not be a PNG, so let the browser
+    // infer the type from the URL instead of keeping the static hint.
+    link.removeAttribute("type");
+  }
 }
 
 /**
@@ -246,8 +295,8 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
-    applyBranding(branding);
-  }, [branding]);
+    applyBranding(branding, theme);
+  }, [branding, theme]);
 
   const setConfig = useCallback((next: SiteConfig) => {
     setConfigState(next);

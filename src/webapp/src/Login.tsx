@@ -2,7 +2,7 @@ import { useState } from "react";
 import { LogIn, UserPlus } from "lucide-react";
 import { api, ApiError } from "./api";
 import { Button, Flash, inputCls } from "./components/ui";
-import { FALLBACK_REGISTRATION, useSiteConfig } from "./siteConfig";
+import { FALLBACK_LEGAL, FALLBACK_REGISTRATION, useSiteConfig } from "./siteConfig";
 
 // Sign-in form. It is rendered inside the auth modal, so the surrounding modal
 // owns the card, title and close button; this component only owns the fields
@@ -28,8 +28,12 @@ export default function Login({
   const [busy, setBusy] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
   const [resending, setResending] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const { config } = useSiteConfig();
   const registration = config?.registration ?? FALLBACK_REGISTRATION;
+  const legal = config?.legal ?? FALLBACK_LEGAL;
+  const needsLegalAcceptance =
+    mode === "register" && Boolean(legal.termsUrl || legal.privacyUrl);
 
   const cleanEmail = email.trim();
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail);
@@ -39,12 +43,14 @@ export default function Login({
     username.trim() !== "" &&
     password !== "" &&
     (mode === "login" || emailValid) &&
-    (!needsInvite || inviteCode.trim() !== "");
+    (!needsInvite || inviteCode.trim() !== "") &&
+    (!needsLegalAcceptance || acceptedTerms);
   const canSubmit =
     username.trim() !== "" &&
     password !== "" &&
     (mode === "login" || cleanEmail !== "") &&
-    (!needsInvite || inviteCode.trim() !== "");
+    (!needsInvite || inviteCode.trim() !== "") &&
+    (!needsLegalAcceptance || acceptedTerms);
 
   async function doAuth() {
     if (busy) return;
@@ -60,7 +66,13 @@ export default function Login({
         const res = await api.login(username, password);
         onAuthed(res.token, mode);
       } else {
-        const res = await api.register(username, cleanEmail, password, inviteCode);
+        const res = await api.register(
+          username,
+          cleanEmail,
+          password,
+          inviteCode,
+          acceptedTerms
+        );
         if (res.pending) {
           setNotice(
             res.message || "Account created. An admin must approve it before you can sign in."
@@ -220,6 +232,42 @@ export default function Login({
             autoComplete={mode === "login" ? "current-password" : "new-password"}
           />
         </div>
+
+        {needsLegalAcceptance && (
+          <label className="flex items-start gap-2 text-xs leading-relaxed text-fg-muted">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+            />
+            <span>
+              I agree to the{" "}
+              {legal.termsUrl && (
+                <a
+                  href={legal.termsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent underline-offset-2 hover:underline"
+                >
+                  Terms
+                </a>
+              )}
+              {legal.termsUrl && legal.privacyUrl && " and "}
+              {legal.privacyUrl && (
+                <a
+                  href={legal.privacyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent underline-offset-2 hover:underline"
+                >
+                  Privacy Policy
+                </a>
+              )}
+              .
+            </span>
+          </label>
+        )}
 
         {error && <Flash tone="danger">{error}</Flash>}
 

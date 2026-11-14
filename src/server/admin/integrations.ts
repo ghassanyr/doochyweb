@@ -80,7 +80,7 @@ async function testCtrader(
   if (values.missing.length > 0) {
     return { ok: false, message: `Missing required fields: ${values.missing.join(", ")}` };
   }
-  const cfg = ctraderOAuthConfigFrom(values.values);
+  const cfg = ctraderOAuthConfigFrom(values.values, publicBaseUrl);
   if (!cfg) {
     return { ok: false, message: "The cTrader OAuth configuration is incomplete." };
   }

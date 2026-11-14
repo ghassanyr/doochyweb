@@ -195,8 +195,7 @@ export function describeIntegration(
   const def = INTEGRATION_DEFS[provider];
   const values = storedValues(stored);
   const fields = def.fields.map((field) => describeField(provider, field, values, env, key));
-  const legacyBase = typeof values.publicBaseUrl === "string" ? values.publicBaseUrl : null;
-  const issues = providerIssues(provider, fields, publicBaseUrl ?? legacyBase);
+  const issues = providerIssues(provider, fields, publicBaseUrl);
   const ready =
     fields.every((field) => field.error === null) &&
     fields.every((field) => !field.required || field.configured) &&

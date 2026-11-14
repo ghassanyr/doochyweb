@@ -17,8 +17,9 @@ import { Router, type Request, type Response } from "express";
 
 import { authRequired, signOAuthState, verifyOAuthState, type AuthedRequest } from "../auth";
 import { loadCredentials, saveCredentials, type StoredAccount } from "../db";
-import { validateCtraderSetup } from "../integrations/ctraderSetup";
+import { callbackCandidates, validateCtraderSetup } from "../integrations/ctraderSetup";
 import { resolveIntegration } from "../integrations/store";
+import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { discoverAccounts } from "./auth";
 import { userSockets } from "./connection";
 
@@ -48,21 +49,30 @@ function text(value: unknown): string {
 
 /**
  * Judge the OAuth-relevant values without touching the database. The callback
- * URL is required and must be one of the routes this server mounts; there is no
- * compiled-in fallback, because a redirect to someone else's domain cannot
- * complete the flow.
+ * is derived from the canonical site URL and must be one of the routes this
+ * server mounts; there is no stored callback or compiled-in fallback, because
+ * a redirect to someone else's domain cannot complete the flow.
  */
-export function ctraderOAuthIssueFrom(values: Record<string, unknown>): CtraderOAuthIssue | null {
+export function ctraderOAuthIssueFrom(
+  values: Record<string, unknown>,
+  publicBaseUrl: string | null = null
+): CtraderOAuthIssue | null {
   const clientId = text(values.clientId);
   const clientSecret = text(values.clientSecret);
   if (!clientId || !clientSecret) return "app_not_configured";
 
-  const redirectUri = text(values.redirectUri);
-  if (!redirectUri) return "redirect_missing";
+  const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
+  const candidates = callbackCandidates(baseRaw);
+  if (!candidates.primary) return baseRaw ? "redirect_invalid" : "redirect_missing";
 
   const scope = text(values.scope) || "trading";
-  if (validateCtraderSetup({ redirectUri }).errors.length > 0) return "redirect_invalid";
-  if (validateCtraderSetup({ scope }).errors.length > 0) return "invalid_config";
+  const issues = validateCtraderSetup({
+    publicBaseUrl: candidates.baseUrl,
+    redirectUri: candidates.primary,
+    scope,
+  });
+  if (issues.errors.some((error) => /^Scope must be/.test(error))) return "invalid_config";
+  if (issues.errors.length > 0) return "redirect_invalid";
   return null;
 }
 
@@ -71,13 +81,17 @@ export function ctraderOAuthIssueFrom(values: Record<string, unknown>): CtraderO
  * form preview and tests can exercise it without a database.
  */
 export function ctraderOAuthConfigFrom(
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  publicBaseUrl: string | null = null
 ): CtraderOAuthConfig | null {
-  if (ctraderOAuthIssueFrom(values)) return null;
+  if (ctraderOAuthIssueFrom(values, publicBaseUrl)) return null;
+  const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
+  const redirectUri = callbackCandidates(baseRaw).primary;
+  if (!redirectUri) return null;
   return {
     clientId: text(values.clientId),
     clientSecret: text(values.clientSecret),
-    redirectUri: text(values.redirectUri),
+    redirectUri,
     scope: text(values.scope) || "trading",
   };
 }
@@ -85,21 +99,28 @@ export function ctraderOAuthConfigFrom(
 /**
  * The platform-owned Open API app, or null when OAuth is not configured.
  * Database values win over the environment, so a buyer can configure the app
- * from the admin panel; .env still bootstraps existing deployments.
+ * from the admin panel; .env still bootstraps existing deployments. The
+ * callback follows the canonical site URL, with the request origin as the
+ * last-resort bootstrap fallback.
  */
 export async function ctraderOAuthConfig(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  requestOrigin: string | null = null
 ): Promise<CtraderOAuthConfig | null> {
-  const resolved = await resolveIntegration("ctrader", env);
-  return ctraderOAuthConfigFrom(resolved.values);
+  const [resolved, publicBaseUrl] = await Promise.all([
+    resolveIntegration("ctrader", env),
+    canonicalPublicBaseUrl(env, requestOrigin),
+  ]);
+  return ctraderOAuthConfigFrom(resolved.values, publicBaseUrl);
 }
 
 /** Availability check for the browser; corrupt stored secrets mean "off". */
 export async function ctraderOAuthAvailable(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  requestOrigin: string | null = null
 ): Promise<boolean> {
   try {
-    return (await ctraderOAuthConfig(env)) !== null;
+    return (await ctraderOAuthConfig(env, requestOrigin)) !== null;
   } catch (err: any) {
     console.error("[cTrader OAuth] configuration could not be read:", err?.message ?? err);
     return false;
@@ -167,6 +188,15 @@ export async function exchangeAuthorizationCode(
   return { accessToken: data.accessToken, refreshToken: data.refreshToken };
 }
 
+function requestOrigin(req: Request): string | null {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "").split(",")[0].trim();
+  const forwardedHost = String(req.headers["x-forwarded-host"] ?? "").split(",")[0].trim();
+  const proto = forwardedProto || req.protocol;
+  const host = forwardedHost || req.get("host") || "";
+  if (!host) return null;
+  return `${proto === "https" ? "https" : "http"}://${host}`;
+}
+
 function readCookie(req: Request, name: string): string | null {
   const raw = req.headers.cookie;
   if (!raw) return null;
@@ -204,7 +234,7 @@ function redirectError(res: Response, code: string): void {
 export async function ctraderOAuthCallback(req: Request, res: Response): Promise<void> {
   let cfg: CtraderOAuthConfig | null;
   try {
-    cfg = await ctraderOAuthConfig();
+    cfg = await ctraderOAuthConfig(process.env, requestOrigin(req));
   } catch (err: any) {
     console.error("[cTrader OAuth] configuration could not be read:", err?.message ?? err);
     redirectError(res, "not_configured");
@@ -283,10 +313,10 @@ export async function ctraderOAuthCallback(req: Request, res: Response): Promise
 
 function startErrorMessage(issue: CtraderOAuthIssue): string {
   if (issue === "redirect_missing") {
-    return "cTrader OAuth is missing its callback URL. Finish the cTrader setup in the admin panel.";
+    return "cTrader OAuth needs the site URL. Set it under Admin → Site settings.";
   }
   if (issue === "redirect_invalid") {
-    return "cTrader OAuth callback URL is not valid for this deployment. Check the cTrader setup.";
+    return "cTrader OAuth callback is not valid for this deployment. Check the site URL and cTrader setup.";
   }
   if (issue === "invalid_config") {
     return "cTrader OAuth settings are invalid. Check the cTrader setup.";
@@ -298,13 +328,16 @@ export const ctraderOAuthRouter = Router();
 
 ctraderOAuthRouter.post("/start", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
-    const resolved = await resolveIntegration("ctrader");
-    const issue = ctraderOAuthIssueFrom(resolved.values);
+    const [resolved, publicBaseUrl] = await Promise.all([
+      resolveIntegration("ctrader"),
+      canonicalPublicBaseUrl(process.env, requestOrigin(req)),
+    ]);
+    const issue = ctraderOAuthIssueFrom(resolved.values, publicBaseUrl);
     if (issue) {
       res.status(503).json({ error: startErrorMessage(issue), code: issue });
       return;
     }
-    const cfg = ctraderOAuthConfigFrom(resolved.values)!;
+    const cfg = ctraderOAuthConfigFrom(resolved.values, publicBaseUrl)!;
     const state = signOAuthState(req.userId!);
     res.cookie(STATE_COOKIE, state, stateCookieOptions(req));
     res.json({ url: buildAuthorizeUrl(cfg, state) });

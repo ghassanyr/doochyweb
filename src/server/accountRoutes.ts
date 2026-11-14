@@ -12,6 +12,8 @@ import {
   sendPasswordReset,
   sendVerification,
 } from "./email/accountMail";
+import { getSiteSettings } from "./settings/store";
+import { legalAcceptanceRequired, legalAcceptanceSatisfied } from "./legal";
 
 export const accountAuthRouter = Router();
 
@@ -189,6 +191,14 @@ accountAuthRouter.post("/accept-invite", async (req: Request, res: Response) => 
     return;
   }
   try {
+    const settings = await getSiteSettings();
+    const legalRequired = legalAcceptanceRequired(settings.legal);
+    if (!legalAcceptanceSatisfied(settings.legal, req.body?.acceptedTerms)) {
+      res.status(400).json({
+        error: "Accept the Terms and Privacy Policy to create an account.",
+      });
+      return;
+    }
     const userId = await consumeAuthToken(token, "admin_invite");
     if (!userId) {
       res.status(400).json({ error: "This invite link is invalid or has expired." });
@@ -201,6 +211,7 @@ accountAuthRouter.post("/accept-invite", async (req: Request, res: Response) => 
           passwordHash: await hashPassword(password),
           status: "active",
           emailVerified: true,
+          termsAcceptedAt: legalRequired ? new Date() : null,
         },
         $inc: { tokenVersion: 1 },
       }

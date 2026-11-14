@@ -37,7 +37,13 @@ import {
 import { FadeRise } from "../components/motion";
 import { Button, Card, Flash, Skeleton, inputCls } from "../components/ui";
 import type { ViewKey } from "../routing";
-import { FALLBACK_THEME, LIGHT_THEME, applyTheme, useSiteConfig } from "../siteConfig";
+import {
+  FALLBACK_THEME,
+  LIGHT_THEME,
+  applyTheme,
+  brandMarkUrl,
+  useSiteConfig,
+} from "../siteConfig";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -483,7 +489,7 @@ export default function AdminSettingsPage({
     );
   }
 
-  const logoPreview = branding.logoUrl || "/doochy-mark-80.png";
+  const logoPreview = brandMarkUrl(branding, theme, 80);
   const logoIsUpload = branding.logoUrl.startsWith("data:");
 
   function updateModule(index: number, patch: Partial<ModuleSettings>) {
@@ -724,7 +730,7 @@ export default function AdminSettingsPage({
               label="Product name"
               value={branding.name}
               onChange={(name) => setBranding({ ...branding, name })}
-              placeholder="Doochy"
+              placeholder="Your product"
               maxLength={60}
             />
             <TextField
@@ -751,11 +757,11 @@ export default function AdminSettingsPage({
                 label="Logo URL"
                 value={logoIsUpload ? "" : branding.logoUrl}
                 onChange={(logoUrl) => setBranding({ ...branding, logoUrl })}
-                placeholder={logoIsUpload ? "Uploaded image" : "/doochy-mark-80.png"}
+                placeholder={logoIsUpload ? "Uploaded image" : "https://example.com/logo.png"}
                 hint={
                   logoIsUpload
                     ? "Uploaded image in use. Paste a URL or upload another to replace it."
-                    : "A path starting with /, an https URL, or an uploaded image. Empty uses the bundled mark."
+                    : "A path starting with /, an https URL, or an uploaded image. Empty uses a mark generated from the product name."
                 }
                 maxLength={LOGO_URL_LIMIT}
               />

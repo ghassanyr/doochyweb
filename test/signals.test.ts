@@ -476,6 +476,11 @@ describe("signal presentation", () => {
     assert.match(text, /R:R 1\.80/);
   });
 
+  test("share text can include a canonical link", () => {
+    const text = signalShareText(base, "https://example.com/signals?signal=s1");
+    assert.match(text, /\n\nhttps:\/\/example\.com\/signals\?signal=s1$/);
+  });
+
   test("status timestamps reflect the lifecycle", () => {
     assert.equal(statusTimestamp(base), null);
     assert.equal(

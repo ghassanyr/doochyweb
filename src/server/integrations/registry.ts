@@ -18,7 +18,7 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
     provider: "ctrader",
     label: "cTrader",
     description:
-      "The Open API app every user connects through. Register it at openapi.ctrader.com/apps and add the callback URL shown by the setup wizard.",
+      "The Open API app every user connects through. Register it at openapi.ctrader.com/apps and add the callback URL shown below; the callback is derived from your site address.",
     fields: [
       {
         key: "clientId",
@@ -37,17 +37,6 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         required: true,
         maxLength: 500,
         hint: "Encrypted at rest. cTrader can show it again from the app's Credentials page.",
-      },
-      {
-        key: "redirectUri",
-        label: "Callback URL",
-        kind: "text",
-        env: "CTRADER_REDIRECT_URI",
-        required: true,
-        format: "url",
-        maxLength: 500,
-        placeholder: "https://your-domain/callback",
-        hint: "Must exactly match a callback URL registered on the cTrader app. The setup wizard fills this in.",
       },
       {
         key: "scope",
@@ -84,10 +73,9 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         kind: "text",
         env: "TELEGRAM_BOT_USERNAME",
         required: true,
-        defaultValue: "DoochyBot",
         maxLength: 64,
-        placeholder: "DoochyBot",
-        hint: "Without the @. Used for the t.me link.",
+        placeholder: "YourBot",
+        hint: "Without the @. Must match the username assigned by @BotFather; used for the t.me link.",
       },
       {
         key: "enabled",

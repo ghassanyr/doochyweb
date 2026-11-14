@@ -32,6 +32,9 @@ export interface SetupIssues {
   warnings: string[];
 }
 
+const SITE_URL_REQUIRED =
+  "Set the site URL in Site settings; cTrader derives its callback from that origin.";
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -61,6 +64,20 @@ export function callbackCandidates(publicBaseUrl: unknown): CallbackCandidates {
     baseUrl: origin,
     primary: `${origin}/callback`,
     api: `${origin}/api/ctrader/oauth/callback`,
+  };
+}
+
+/** The effective setup values, with the callback derived from the site address. */
+export function ctraderSetupValues(
+  values: Record<string, unknown>,
+  publicBaseUrl?: string | null
+): Record<string, unknown> {
+  const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
+  const candidates = callbackCandidates(baseRaw);
+  return {
+    ...values,
+    publicBaseUrl: candidates.baseUrl ?? baseRaw,
+    redirectUri: candidates.primary ?? "",
   };
 }
 
@@ -134,9 +151,10 @@ export function providerIssuesFromValues(
 ): SetupIssues {
   if (provider === "smtp") return validateSmtpSetup(values);
   if (provider !== "ctrader") return { errors: [], warnings: [] };
-  return validateCtraderSetup(
-    publicBaseUrl ? { ...values, publicBaseUrl } : values
-  );
+  const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
+  const issues = validateCtraderSetup(ctraderSetupValues(values, baseRaw));
+  if (!baseRaw) issues.errors.unshift(SITE_URL_REQUIRED);
+  return issues;
 }
 
 /** Validate the admin-facing field states without decrypting any secret. */
@@ -151,7 +169,8 @@ export function providerIssues(
   for (const field of fields) {
     if (field.kind !== "secret" && field.value !== null) values[field.key] = field.value;
   }
-  return validateCtraderSetup(
-    publicBaseUrl ? { ...values, publicBaseUrl } : values
-  );
+  const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
+  const issues = validateCtraderSetup(ctraderSetupValues(values, baseRaw));
+  if (!baseRaw) issues.errors.unshift(SITE_URL_REQUIRED);
+  return issues;
 }

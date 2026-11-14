@@ -8,7 +8,11 @@ import {
   hashAuthToken,
   revokeAuthTokens,
 } from "../src/server/authTokens";
-import { validateSmtpSetup } from "../src/server/integrations/smtpSetup";
+import {
+  providerSmtpIssues,
+  validateSmtpSetup,
+} from "../src/server/integrations/smtpSetup";
+import type { IntegrationFieldState } from "../src/server/integrations/types";
 import {
   asSmtpValues,
   fromAddress,
@@ -130,9 +134,52 @@ describe("email templates", () => {
   });
 });
 
+function smtpField(
+  key: string,
+  kind: IntegrationFieldState["kind"],
+  overrides: Partial<IntegrationFieldState> = {}
+): IntegrationFieldState {
+  return {
+    key,
+    label: key,
+    kind,
+    required: false,
+    value: null,
+    configured: false,
+    source: "unset",
+    hint: null,
+    error: null,
+    ...overrides,
+  };
+}
+
 describe("SMTP setup", () => {
   test("requires a password when a username is set", () => {
     const issues = validateSmtpSetup({ username: "user", password: "" });
+    assert.deepEqual(issues.errors, ["SMTP password is required when a username is set."]);
+  });
+
+  test("accepts a saved password when checking admin field state", () => {
+    const issues = providerSmtpIssues([
+      smtpField("username", "text", {
+        value: "postmaster@example.test",
+        configured: true,
+        source: "database",
+      }),
+      smtpField("password", "secret", { configured: true, source: "database" }),
+    ]);
+    assert.deepEqual(issues.errors, []);
+  });
+
+  test("does not count an unusable saved password", () => {
+    const issues = providerSmtpIssues([
+      smtpField("username", "text", { value: "user", configured: true }),
+      smtpField("password", "secret", {
+        configured: true,
+        source: "database",
+        error: "stored secret could not be decrypted",
+      }),
+    ]);
     assert.deepEqual(issues.errors, ["SMTP password is required when a username is set."]);
   });
 

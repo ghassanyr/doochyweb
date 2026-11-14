@@ -7,7 +7,7 @@
 import { LogIn, Wrench } from "lucide-react";
 
 import { Button } from "./components/ui";
-import { useSiteConfig } from "./siteConfig";
+import { FALLBACK_BRANDING, brandMarkUrl, useSiteConfig } from "./siteConfig";
 
 export function MaintenanceScreen({
   message,
@@ -19,8 +19,8 @@ export function MaintenanceScreen({
   canSignIn: boolean;
   onSignIn: () => void;
 }) {
-  const { branding } = useSiteConfig();
-  const logoUrl = branding.logoUrl || "/doochy-mark-80.png";
+  const { branding, theme } = useSiteConfig();
+  const logoUrl = brandMarkUrl(branding, theme, 80);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-12 text-center">
@@ -28,7 +28,7 @@ export function MaintenanceScreen({
         <img src={logoUrl} alt="" width={44} height={44} className="h-11 w-11" aria-hidden="true" />
         <div className="text-left">
           <div className="text-lg font-bold tracking-tight text-fg">
-            {branding.name || "Doochy"}
+            {branding.name || FALLBACK_BRANDING.name}
           </div>
           {branding.tagline && (
             <div className="text-[11px] text-fg-muted">{branding.tagline}</div>

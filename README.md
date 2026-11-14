@@ -69,10 +69,14 @@ pnpm admin:revoke <username>    # demote an admin
 ## Buyer handover checklist
 
 1. Set **Admin → Site settings → Site address** to the public HTTPS origin.
-2. Set branding, registration policy, legal links, and the risk disclaimer.
+2. Set branding, registration policy, legal links, and the risk disclaimer. When a Terms or Privacy URL is configured, new registrations and invite acceptances require agreement, and a cookie/storage notice appears site-wide.
 3. Configure SMTP, cTrader and Telegram under **Admin → Integrations**. SMTP is required for password reset, email verification and admin invites.
 4. Run `pnpm doochy:check` and confirm the setup checklist has no required todos.
 5. Take a `pnpm doochy:backup` snapshot before handing over the server.
+
+### White-label checklist
+
+Everything customer-facing follows **Admin → Site settings → Branding**: product name, tagline, description, logo, support email, website and footer copy. The page title, meta/Open Graph tags, favicons, header, maintenance screen, transactional emails and Telegram messages use the same values. If no logo is uploaded, a monogram is generated from the product name; the bundled mark is only used while the product keeps its default name. The Telegram bot username must match the real username assigned by @BotFather so the deep link works.
 
 ## Optional integrations
 
@@ -82,7 +86,7 @@ SMTP, cTrader and Telegram are configured in the admin panel after the first log
 
 Doochy uses generic SMTP through Nodemailer, with no vendor SDK or hardcoded provider. Mailgun, Postmark, Amazon SES, Google Workspace and self-hosted relays all work. For Mailgun, use `smtp.mailgun.org` (US), `smtp.eu.mailgun.org` (EU), port 587, STARTTLS, your SMTP username and SMTP password. The provider must authorize the From address/domain (SPF, DKIM, DMARC).
 
-SMTP enables password reset, optional email verification and admin invites. Verification is off by default and can be enabled under **Admin → Site settings → Registration**; existing accounts are treated as verified. The admin **Test** button sends a real email to the signed-in admin.
+SMTP enables password reset, optional email verification and admin invites. Verification is off by default and can be enabled under **Admin → Site settings → Registration**; existing accounts are treated as verified. Signed-in users can add or change their email under **Settings**, and the current password is required. The admin **Test** button sends a real email to the signed-in admin.
 
 Telegram uses long polling only, so it needs no inbound route or webhook.
 

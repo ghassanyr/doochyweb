@@ -7,7 +7,10 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function validateSmtpSetup(values: Record<string, unknown>): SetupIssues {
+export function validateSmtpSetup(
+  values: Record<string, unknown>,
+  options: { passwordConfigured?: boolean } = {}
+): SetupIssues {
   const errors: string[] = [];
   const warnings: string[] = [];
   const encryption = text(values.encryption) || "starttls";
@@ -26,7 +29,7 @@ export function validateSmtpSetup(values: Record<string, unknown>): SetupIssues 
   if (encryption === "starttls" && port === 465) {
     warnings.push("Port 465 normally uses implicit TLS, not STARTTLS.");
   }
-  if (username && !password) {
+  if (username && !password && !options.passwordConfigured) {
     errors.push("SMTP password is required when a username is set.");
   }
   if (!username && password) {
@@ -38,8 +41,12 @@ export function validateSmtpSetup(values: Record<string, unknown>): SetupIssues 
 
 export function providerSmtpIssues(fields: IntegrationFieldState[]): SetupIssues {
   const values: Record<string, unknown> = {};
+  let passwordConfigured = false;
   for (const field of fields) {
     if (field.kind !== "secret" && field.value !== null) values[field.key] = field.value;
+    if (field.key === "password" && field.kind === "secret") {
+      passwordConfigured = field.configured && field.error === null;
+    }
   }
-  return validateSmtpSetup(values);
+  return validateSmtpSetup(values, { passwordConfigured });
 }

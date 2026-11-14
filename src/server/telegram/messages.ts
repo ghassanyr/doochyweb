@@ -4,6 +4,7 @@
 // only includes src/server), and Telegram's HTML parse mode requires escaping,
 // so these are deliberately local and pure.
 
+import { DEFAULT_BRANDING } from "../settings/defaults";
 import type { SignalView } from "../signals/types";
 
 export function escapeHtml(value: string): string {
@@ -96,11 +97,11 @@ export function signalButtonUrl(baseUrl: string, signalId: string): string | nul
   return origin ? `${origin}/signals?signal=${encodeURIComponent(signalId)}` : null;
 }
 
-export function buildTestMessage(brandName = "Doochy"): string {
+export function buildTestMessage(brandName = DEFAULT_BRANDING.name): string {
   return `✅ <b>${escapeHtml(brandName)} test</b>\nTelegram notifications are working.`;
 }
 
-export function buildWelcomeMessage(settingsUrl: string, brandName = "Doochy"): string {
+export function buildWelcomeMessage(settingsUrl: string, brandName = DEFAULT_BRANDING.name): string {
   const lines = [
     `👋 <b>${escapeHtml(brandName)} signals bot</b>`,
     "",
@@ -113,7 +114,7 @@ export function buildWelcomeMessage(settingsUrl: string, brandName = "Doochy"): 
   return lines.join("\n");
 }
 
-export function buildLinkedMessage(brandName = "Doochy"): string {
+export function buildLinkedMessage(brandName = DEFAULT_BRANDING.name): string {
   return [
     `✅ <b>Linked to ${escapeHtml(brandName)}</b>`,
     "",
@@ -122,7 +123,7 @@ export function buildLinkedMessage(brandName = "Doochy"): string {
   ].join("\n");
 }
 
-export function buildAlreadyLinkedMessage(brandName = "Doochy"): string {
+export function buildAlreadyLinkedMessage(brandName = DEFAULT_BRANDING.name): string {
   return [
     `✅ This chat is already linked to ${escapeHtml(brandName)}.`,
     "",
@@ -130,7 +131,7 @@ export function buildAlreadyLinkedMessage(brandName = "Doochy"): string {
   ].join("\n");
 }
 
-export function buildChatTakenMessage(brandName = "Doochy"): string {
+export function buildChatTakenMessage(brandName = DEFAULT_BRANDING.name): string {
   return [
     `⚠️ This Telegram account is already linked to another ${escapeHtml(brandName)} user.`,
     "",
@@ -161,7 +162,7 @@ export function buildStatusMessage(params: {
   linkedAt: string;
   brandName?: string;
 }): string {
-  const lines = [`📊 <b>${escapeHtml(params.brandName || "Doochy")}</b>`];
+  const lines = [`📊 <b>${escapeHtml(params.brandName || DEFAULT_BRANDING.name)}</b>`];
   if (params.account) lines.push(`Account: ${escapeHtml(params.account)}`);
   lines.push(`Notifications: <b>${params.notificationsEnabled ? "on" : "off"}</b>`);
   const at = formatUtc(params.linkedAt);
@@ -181,7 +182,7 @@ export function buildUnlinkedMessage(): string {
   return "🔌 Disconnected. Generate a new code in Settings to reconnect.";
 }
 
-export function buildHelpMessage(brandName = "Doochy"): string {
+export function buildHelpMessage(brandName = DEFAULT_BRANDING.name): string {
   return [
     `<b>${escapeHtml(brandName)} bot</b>`,
     "",

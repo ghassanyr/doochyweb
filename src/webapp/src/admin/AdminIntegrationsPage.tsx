@@ -233,7 +233,6 @@ function ProviderCard({
   onDraftChange,
   onSave,
   onTest,
-  onUseCallback,
 }: {
   state: IntegrationState;
   draft: Draft;
@@ -244,7 +243,6 @@ function ProviderCard({
   onDraftChange: (draft: Draft) => void;
   onSave: () => Promise<void>;
   onTest: () => Promise<void>;
-  onUseCallback: (url: string) => void;
 }) {
   const patch = buildPatch(state, draft, baseline);
   const dirty = isDirty(patch);
@@ -265,8 +263,6 @@ function ProviderCard({
       : [...draft.cleared, key];
     onDraftChange({ ...draft, cleared, values: { ...draft.values, [key]: "" } });
   }
-
-  const redirectField = state.fields.find((field) => field.key === "redirectUri");
 
   return (
     <Card className="space-y-4 p-4">
@@ -323,7 +319,10 @@ function ProviderCard({
               and create an app.
             </li>
             <li>Copy the app's Client ID and Client secret into the fields below.</li>
-            <li>Add one of the callback URLs below to the app's redirect URIs. It must match exactly.</li>
+            <li>
+              Add one of the callback URLs below to the app's redirect URIs. It must match
+              exactly; it is derived from the site URL in Site settings.
+            </li>
             <li>Save, then run the check. A pass means the URL is reachable, not that cTrader approval is complete.</li>
           </ol>
           <div className="space-y-1.5 pt-1">
@@ -331,20 +330,11 @@ function ProviderCard({
             <CallbackRow label="Alternate" value={callbacks.api} />
             {!callbacks.primary && (
               <p className="text-[11px] text-fg-faint">
-                Set the public base URL (or open this page through the public domain) to see the
-                callback URLs.
+                Set the site URL in Site settings (or open this page through the public domain) to
+                see the callback URLs.
               </p>
             )}
           </div>
-          {redirectField && callbacks.primary && draft.values.redirectUri !== callbacks.primary && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onUseCallback(callbacks.primary!)}
-            >
-              Use the recommended callback
-            </Button>
-          )}
         </div>
       )}
 
@@ -599,19 +589,6 @@ export default function AdminIntegrationsPage({
               }
               onSave={() => save(state.provider)}
               onTest={() => test(state.provider)}
-              onUseCallback={(url) =>
-                setDrafts((current) => {
-                  const currentDraft = current[state.provider];
-                  if (!currentDraft) return current;
-                  return {
-                    ...current,
-                    [state.provider]: {
-                      ...currentDraft,
-                      values: { ...currentDraft.values, redirectUri: url },
-                    },
-                  };
-                })
-              }
             />
           );
         })}

@@ -5,6 +5,7 @@ import type { Request } from "express";
 
 import { createAuthToken, revokeAuthTokens } from "../authTokens";
 import { User } from "../db";
+import { DEFAULT_BRANDING } from "../settings/defaults";
 import { getSiteSettings } from "../settings/store";
 import { publicBaseUrlFor } from "../settings/siteUrl";
 import { sendEmail } from "./transport";
@@ -38,7 +39,7 @@ async function context(req: Request): Promise<{ base: string; brand: string }> {
   const settings = await getSiteSettings();
   const base = publicBaseUrlFor(settings, process.env, requestOrigin(req));
   if (!base) throw new AccountEmailLinkError();
-  return { base, brand: settings.branding.name || "Doochy" };
+  return { base, brand: settings.branding.name || DEFAULT_BRANDING.name };
 }
 
 function link(base: string, path: string, token: string): string {

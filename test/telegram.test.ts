@@ -82,14 +82,17 @@ describe("telegram config", () => {
     assert.equal(config.linkTtlMinutes, 60);
   });
 
-  test("accepts resolved integration values", () => {
-    const config = telegramConfigFromValues({
-      botToken: " 123:abc ",
-      botUsername: "@MyBot",
-      baseUrl: "https://example.com/",
-      enabled: true,
-      linkTtlMinutes: 5,
-    });
+  test("accepts resolved values and uses the canonical site URL", () => {
+    const config = telegramConfigFromValues(
+      {
+        botToken: " 123:abc ",
+        botUsername: "@MyBot",
+        baseUrl: "https://legacy.example/",
+        enabled: true,
+        linkTtlMinutes: 5,
+      },
+      "https://example.com/app"
+    );
     assert.deepEqual(config, {
       enabled: true,
       token: "123:abc",
@@ -98,6 +101,25 @@ describe("telegram config", () => {
       brandName: "Doochy",
       linkTtlMinutes: 5,
     });
+  });
+
+  test("derives the fallback bot username from the configured brand", () => {
+    const config = telegramConfigFromValues(
+      { botToken: "123:abc" },
+      "https://example.com",
+      "Acme Trading"
+    );
+    assert.equal(config.botUsername, "AcmeTradingBot");
+    assert.equal(config.brandName, "Acme Trading");
+  });
+
+  test("ignores a stored legacy base URL without a canonical site URL", () => {
+    const config = telegramConfigFromValues({
+      botToken: "123:abc",
+      baseUrl: "https://legacy.example",
+    });
+    assert.equal(config.baseUrl, "");
+    assert.equal(config.enabled, true);
   });
 
   test("stays disabled when the database flag is off", () => {

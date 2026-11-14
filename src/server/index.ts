@@ -6,6 +6,7 @@ import { maskClientId, resolveConnectInput } from "./credentials";
 import { connectDb, loadCredentials, saveCredentials, User } from "./db";
 import { signToken, authRequired, AuthedRequest, hashPassword, verifyPassword, findUserByUsername } from "./auth";
 import { accountAuthRouter } from "./accountRoutes";
+import { updateOwnEmail } from "./accountEmail";
 import { emailConfigured } from "./email/transport";
 import { sendVerification } from "./email/accountMail";
 import { userSockets } from "./ctrader/connection";
@@ -21,6 +22,7 @@ import { promoteConfiguredAdmins } from "./admin/roles";
 import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
 import { getSiteSettings } from "./settings/store";
+import { legalAcceptanceRequired, legalAcceptanceSatisfied } from "./legal";
 import { registrationDecision } from "./registrationPolicy";
 import { maintenanceGate, marketGate, moduleGate } from "./settings/access";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
@@ -48,6 +50,7 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
   try {
     const settings = await getSiteSettings();
     const registration = settings.registration;
+    const legalRequired = legalAcceptanceRequired(settings.legal);
     const decision = registrationDecision(registration, req.body?.inviteCode);
     if (!decision.allowed) {
       res.status(403).json({ error: decision.error });
@@ -69,6 +72,12 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       res.status(400).json({ error: "password must be at least 8 characters" });
       return;
     }
+    if (!legalAcceptanceSatisfied(settings.legal, req.body?.acceptedTerms)) {
+      res.status(400).json({
+        error: "Accept the Terms and Privacy Policy to create an account.",
+      });
+      return;
+    }
     if (registration.requireEmailVerification && !(await emailConfigured())) {
       res.status(503).json({
         error: "Email verification is required but email delivery is not configured.",
@@ -88,6 +97,7 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       passwordHash: await hashPassword(password),
       status: decision.status,
       emailVerified: !registration.requireEmailVerification,
+      termsAcceptedAt: legalRequired ? new Date() : null,
     });
     if (registration.requireEmailVerification) {
       try {
@@ -200,6 +210,25 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? "failed" });
+  }
+});
+
+app.patch("/api/me/email", authRequired, async (req: AuthedRequest, res: Response) => {
+  try {
+    const result = await updateOwnEmail(
+      req.userId!,
+      req.body?.email,
+      req.body?.password,
+      req
+    );
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  } catch (err: any) {
+    console.error("[account] failed to change email:", err?.message ?? err);
+    res.status(500).json({ error: "failed to change email" });
   }
 });
 
@@ -576,9 +605,10 @@ app.use("/api/admin", adminRouter);
 app.use("/api/config", siteConfigRouter);
 app.use("/api/ctrader/oauth", ctraderOAuthRouter);
 
-// Short callback route registered on the cTrader app. The exact URL is
-// configured in the admin panel (or CTRADER_REDIRECT_URI), so it is no longer
-// hardcoded. Handled outside /api so the registered URL can stay short.
+// Short callback route registered on the cTrader app. The full URL is derived
+// from the canonical site address (saved setting, PUBLIC_BASE_URL, or the
+// request origin), so it is no longer a separate field. Handled outside /api
+// so the registered URL can stay short.
 app.get("/callback", (req: Request, res: Response) => {
   void ctraderOAuthCallback(req, res);
 });

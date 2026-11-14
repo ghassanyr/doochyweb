@@ -114,9 +114,11 @@ export async function sendEmail(message: OutgoingEmail): Promise<void> {
 
 /** Used by the admin Test button with unsaved draft values. */
 export async function sendTestEmail(values: SmtpValues, to: string): Promise<void> {
+  const settings = await getSiteSettings();
+  const brand = settings.branding.name.trim();
   await sendWith(values, {
     to,
-    subject: "SMTP test from your Doochy deployment",
+    subject: brand ? `${brand}: SMTP test` : "SMTP test",
     text: "Your SMTP settings are working. This is a test message.",
     html: "<p>Your SMTP settings are working. This is a test message.</p>",
   });

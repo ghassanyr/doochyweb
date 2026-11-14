@@ -25,6 +25,9 @@ const userSchema = new mongoose.Schema({
   // Missing means verified, so accounts created before verification existed
   // are never locked out when an admin turns the policy on.
   emailVerified: { type: Boolean, default: true },
+  // When the user accepted the admin-configured Terms/Privacy links. Null for
+  // accounts created before legal acceptance existed or when no links are set.
+  termsAcceptedAt: { type: Date, default: null },
   // Incremented on password reset and invite acceptance to invalidate old JWTs.
   tokenVersion: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },

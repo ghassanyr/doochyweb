@@ -1,4 +1,5 @@
 import type { Candle } from "../market/types";
+import { DEFAULT_BRANDING } from "../settings/defaults";
 import type { AnnotationLine, PreviewAnnotations } from "./annotations";
 import { deriveAnnotations } from "./annotations";
 import type { ReviewRow } from "./types";
@@ -456,7 +457,7 @@ export function renderPreviewHtml(
   if (!Number.isInteger(context) || context < 1) {
     throw new Error("context must be a positive integer");
   }
-  const brand = escapeHtml(options.brandName?.trim() || "Doochy");
+  const brand = escapeHtml(options.brandName?.trim() || DEFAULT_BRANDING.name);
 
   const tags = [...new Set(rows.map((row) => row.tag))].sort();
   const series = [...new Set(rows.map((row) => seriesKey(row)))].sort();

@@ -8,6 +8,8 @@ import { Badge, Button, Card, inputCls } from "../components/ui";
 import { MarketDetail } from "../market/MarketDetail";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "../market/timeframes";
 import type { CatalogEntry } from "../market/types";
+import { siteUrlFor } from "../publicUrl";
+import { useSiteConfig } from "../siteConfig";
 import TelegramNotifications from "../telegram/TelegramNotifications";
 import { detectedTimeZone, timeZoneLabel } from "../time";
 import { DeleteSignalModal } from "./DeleteSignalModal";
@@ -61,6 +63,7 @@ export default function SignalsPage({
   const [toast, setToast] = useState<string | null>(null);
   const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
   const [telegramOpen, setTelegramOpen] = useState(false);
+  const { config } = useSiteConfig();
 
   // Only offer the shortcut to signed-in users who can still link Telegram.
   useEffect(() => {
@@ -169,7 +172,9 @@ export default function SignalsPage({
 
   const copy = async (signal: Signal) => {
     try {
-      await navigator.clipboard.writeText(signalShareText(signal));
+      await navigator.clipboard.writeText(
+        signalShareText(signal, siteUrlFor(config, "/signals", { signal: signal.id }))
+      );
       flash("Signal copied to clipboard");
     } catch {
       flash("Could not copy");

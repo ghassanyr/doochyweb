@@ -19,89 +19,84 @@ afterEach(() => {
 });
 
 describe("ctraderOAuthConfigFrom", () => {
+  const BASE = "https://example.com";
   const base = {
     clientId: "28457",
     clientSecret: "secret",
-    redirectUri: "https://example.com/callback",
   };
 
   test("stays disabled until both app credentials are present", () => {
-    assert.equal(ctraderOAuthConfigFrom({}), null);
-    assert.equal(ctraderOAuthConfigFrom({ clientId: "28457" }), null);
-    assert.equal(ctraderOAuthConfigFrom({ clientSecret: "secret" }), null);
-    assert.equal(ctraderOAuthConfigFrom({ clientId: "  ", clientSecret: "  " }), null);
-    assert.equal(ctraderOAuthIssueFrom({}), "app_not_configured");
+    assert.equal(ctraderOAuthConfigFrom({}, BASE), null);
+    assert.equal(ctraderOAuthConfigFrom({ clientId: "28457" }, BASE), null);
+    assert.equal(ctraderOAuthConfigFrom({ clientSecret: "secret" }, BASE), null);
+    assert.equal(ctraderOAuthConfigFrom({ clientId: "  ", clientSecret: "  " }, BASE), null);
+    assert.equal(ctraderOAuthIssueFrom({}, BASE), "app_not_configured");
   });
 
-  test("requires an explicit callback with no compiled-in fallback", () => {
-    assert.equal(ctraderOAuthConfigFrom({ clientId: "28457", clientSecret: "secret" }), null);
-    assert.equal(
-      ctraderOAuthIssueFrom({ clientId: "28457", clientSecret: "secret" }),
-      "redirect_missing"
-    );
+  test("requires a canonical site URL with no compiled-in fallback", () => {
+    assert.equal(ctraderOAuthConfigFrom(base), null);
+    assert.equal(ctraderOAuthIssueFrom(base), "redirect_missing");
   });
 
-  test("rejects callbacks this server does not mount", () => {
-    assert.equal(
-      ctraderOAuthIssueFrom({ ...base, redirectUri: "https://example.com/cb" }),
-      "redirect_invalid"
-    );
-    assert.equal(
-      ctraderOAuthIssueFrom({ ...base, redirectUri: "http://example.com/callback" }),
-      "redirect_invalid"
-    );
-    assert.equal(
-      ctraderOAuthIssueFrom({
-        ...base,
-        redirectUri: "https://example.com/callback?x=1",
-      }),
-      "redirect_invalid"
-    );
+  test("derives the mounted callback from the site URL", () => {
+    assert.equal(ctraderOAuthIssueFrom(base, BASE), null);
+    assert.equal(ctraderOAuthConfigFrom(base, BASE)?.redirectUri, `${BASE}/callback`);
   });
 
-  test("allows the localhost http callbacks", () => {
-    for (const redirectUri of [
-      "http://localhost:9009/callback",
-      "http://localhost:5173/api/ctrader/oauth/callback",
+  test("rejects invalid site URLs", () => {
+    for (const value of ["ftp://example.com", "not a url"]) {
+      assert.equal(ctraderOAuthIssueFrom(base, value), "redirect_invalid");
+    }
+  });
+
+  test("allows localhost http origins and strips any path", () => {
+    for (const [origin, expected] of [
+      ["http://localhost:9009", "http://localhost:9009/callback"],
+      ["http://localhost:5173/app", "http://localhost:5173/callback"],
     ]) {
-      assert.equal(ctraderOAuthIssueFrom({ ...base, redirectUri }), null);
-      assert.equal(ctraderOAuthConfigFrom({ ...base, redirectUri })?.redirectUri, redirectUri);
+      assert.equal(ctraderOAuthIssueFrom(base, origin), null);
+      assert.equal(ctraderOAuthConfigFrom(base, origin)?.redirectUri, expected);
     }
   });
 
   test("applies the default scope", () => {
-    assert.deepEqual(ctraderOAuthConfigFrom(base), {
+    assert.deepEqual(ctraderOAuthConfigFrom(base, BASE), {
       clientId: "28457",
       clientSecret: "secret",
-      redirectUri: "https://example.com/callback",
+      redirectUri: `${BASE}/callback`,
       scope: "trading",
     });
   });
 
   test("honours resolved overrides and trims whitespace", () => {
     assert.deepEqual(
-      ctraderOAuthConfigFrom({
-        clientId: " 1 ",
-        clientSecret: " 2 ",
-        redirectUri: "http://localhost:5173/api/ctrader/oauth/callback",
-        scope: "accounts",
-      }),
+      ctraderOAuthConfigFrom(
+        {
+          clientId: " 1 ",
+          clientSecret: " 2 ",
+          scope: "accounts",
+        },
+        "http://localhost:5173"
+      ),
       {
         clientId: "1",
         clientSecret: "2",
-        redirectUri: "http://localhost:5173/api/ctrader/oauth/callback",
+        redirectUri: "http://localhost:5173/callback",
         scope: "accounts",
       }
     );
   });
 
   test("rejects a space-separated scope", () => {
-    assert.equal(ctraderOAuthConfigFrom({ ...base, scope: "accounts trading" }), null);
-    assert.equal(ctraderOAuthIssueFrom({ ...base, scope: "accounts trading" }), "invalid_config");
+    assert.equal(ctraderOAuthConfigFrom({ ...base, scope: "accounts trading" }, BASE), null);
+    assert.equal(
+      ctraderOAuthIssueFrom({ ...base, scope: "accounts trading" }, BASE),
+      "invalid_config"
+    );
   });
 
   test("ignores non-string resolved values", () => {
-    assert.equal(ctraderOAuthConfigFrom({ clientId: 1, clientSecret: true }), null);
+    assert.equal(ctraderOAuthConfigFrom({ clientId: 1, clientSecret: true }, BASE), null);
   });
 });
 

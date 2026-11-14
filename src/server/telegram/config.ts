@@ -7,8 +7,9 @@
 // api.telegram.org by accident. Updates are always fetched by long polling.
 
 import { resolveIntegration } from "../integrations/store";
+import { DEFAULT_BRANDING } from "../settings/defaults";
 import { getSiteSettings } from "../settings/store";
-import { canonicalPublicBaseUrl } from "../settings/siteUrl";
+import { canonicalPublicBaseUrl, normalizePublicBaseUrl } from "../settings/siteUrl";
 
 export interface TelegramConfig {
   enabled: boolean;
@@ -37,6 +38,11 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function fallbackBotUsername(brandName: string): string {
+  const compact = brandName.replace(/[^A-Za-z0-9_]/g, "");
+  return `${compact || "Market"}Bot`;
+}
+
 /**
  * Normalise resolved integration values (or raw environment values) into the
  * shape the bot uses. Defensive on purpose: a bad admin value must not take
@@ -45,28 +51,31 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
 export function telegramConfigFromValues(
   values: Record<string, unknown>,
   canonicalBaseUrl: string | null = null,
-  brandName = "Doochy"
+  brandName = DEFAULT_BRANDING.name
 ): TelegramConfig {
   const token = text(values.botToken);
   const enabled = token.length > 0 && asBoolean(values.enabled, true);
-  const baseUrl = (canonicalBaseUrl || text(values.baseUrl) || "").replace(/\/+$/, "");
+  const baseUrl = normalizePublicBaseUrl(canonicalBaseUrl) ?? "";
+  const brand = text(brandName) || DEFAULT_BRANDING.name;
   const botUsername =
-    (text(values.botUsername) || "DoochyBot").replace(/^@+/, "") || "DoochyBot";
+    text(values.botUsername).replace(/^@+/, "") || fallbackBotUsername(brand);
   const ttlRaw = Number(values.linkTtlMinutes);
   const linkTtlMinutes =
     Number.isFinite(ttlRaw) && ttlRaw > 0 ? Math.min(60, Math.floor(ttlRaw)) : 15;
-  return { enabled, token, botUsername, baseUrl, brandName: brandName.trim() || "Doochy", linkTtlMinutes };
+  return { enabled, token, botUsername, baseUrl, brandName: brand, linkTtlMinutes };
 }
 
 /** Environment-only view, kept for tests and bootstrap callers. */
 export function telegramConfig(env: NodeJS.ProcessEnv = process.env): TelegramConfig {
-  return telegramConfigFromValues({
-    botToken: env.TELEGRAM_BOT_TOKEN,
-    enabled: env.TELEGRAM_ENABLED,
-    baseUrl: env.PUBLIC_BASE_URL,
-    botUsername: env.TELEGRAM_BOT_USERNAME,
-    linkTtlMinutes: env.TELEGRAM_LINK_TTL_MINUTES,
-  });
+  return telegramConfigFromValues(
+    {
+      botToken: env.TELEGRAM_BOT_TOKEN,
+      enabled: env.TELEGRAM_ENABLED,
+      botUsername: env.TELEGRAM_BOT_USERNAME,
+      linkTtlMinutes: env.TELEGRAM_LINK_TTL_MINUTES,
+    },
+    env.PUBLIC_BASE_URL ?? null
+  );
 }
 
 /**

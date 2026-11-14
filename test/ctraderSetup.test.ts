@@ -106,12 +106,21 @@ describe("validateCtraderSetup", () => {
 });
 
 describe("providerIssuesFromValues", () => {
-  test("passes through cTrader validation", () => {
+  test("derives the callback from the canonical site URL", () => {
+    const issues = providerIssuesFromValues(
+      "ctrader",
+      { clientId: "id", clientSecret: "secret" },
+      BASE
+    );
+    assert.deepEqual(issues.errors, []);
+  });
+
+  test("requires a canonical site URL", () => {
     const issues = providerIssuesFromValues("ctrader", {
-      publicBaseUrl: BASE,
-      redirectUri: "https://other.example/callback",
+      clientId: "id",
+      clientSecret: "secret",
     });
-    assert.equal(issues.errors.length > 0, true);
+    assert.equal(issues.errors.some((error) => /Set the site URL/.test(error)), true);
   });
 
   test("ignores other providers", () => {
@@ -123,24 +132,37 @@ describe("providerIssuesFromValues", () => {
 });
 
 describe("describeIntegration cross-field state", () => {
-  test("blocks readiness when the callback origin disagrees with the base URL", () => {
-    const state = describeIntegration(
+  test("derives readiness from the canonical site URL", () => {
+    const ready = describeIntegration(
       "ctrader",
       {
         values: {
           clientId: "id",
-          redirectUri: "https://other.example/callback",
-          publicBaseUrl: BASE,
+          scope: "trading",
+        },
+      },
+      { CTRADER_CLIENT_SECRET: "secret" },
+      null,
+      BASE
+    );
+    assert.equal(ready.ready, true);
+
+    const missingSite = describeIntegration(
+      "ctrader",
+      {
+        values: {
+          clientId: "id",
+          scope: "trading",
         },
       },
       { CTRADER_CLIENT_SECRET: "secret" },
       null
     );
-    assert.equal(state.ready, false);
-    assert.equal(state.errors.some((error) => /public base URL origin/.test(error)), true);
+    assert.equal(missingSite.ready, false);
+    assert.equal(missingSite.errors.some((error) => /Set the site URL/.test(error)), true);
     // The secret came from the environment, so the provider is otherwise set up.
     assert.equal(
-      state.fields.find((field) => field.key === "clientSecret")?.configured,
+      missingSite.fields.find((field) => field.key === "clientSecret")?.configured,
       true
     );
   });

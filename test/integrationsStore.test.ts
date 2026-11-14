@@ -104,7 +104,12 @@ describe("coerceFieldValue", () => {
   });
 
   test("validates http(s) URLs", () => {
-    const fieldDef = def("ctrader", "redirectUri");
+    const fieldDef: IntegrationFieldDef = {
+      key: "callbackUrl",
+      label: "Callback URL",
+      kind: "text",
+      format: "url",
+    };
     assert.equal(
       coerceFieldValue(fieldDef, "https://example.com/api/ctrader/oauth/callback"),
       "https://example.com/api/ctrader/oauth/callback"
@@ -347,14 +352,14 @@ describe("describeIntegration", () => {
     }
   });
 
-  test("marks cTrader ready only with both credentials and a callback", () => {
+  test("marks cTrader ready only with credentials and a canonical site URL", () => {
     const missing = describeIntegration("ctrader", null, EMPTY_ENV, null);
     assert.equal(missing.ready, false);
     assert.equal(field(missing, "clientId").configured, false);
     assert.equal(field(missing, "clientSecret").configured, false);
     assert.equal(field(missing, "scope").source, "default");
     assert.equal(field(missing, "scope").value, "trading");
-    assert.equal(missing.errors.length, 0);
+    assert.equal(missing.errors.some((error) => /Set the site URL/.test(error)), true);
 
     const noCallback = describeIntegration(
       "ctrader",
@@ -370,30 +375,47 @@ describe("describeIntegration", () => {
         values: {
           clientId: "id",
           clientSecret: storedSecret("ctrader", "clientSecret", "shh"),
-          redirectUri: "https://example.com/callback",
         },
       },
       EMPTY_ENV,
-      KEY
+      KEY,
+      "https://example.com"
     );
     assert.equal(ready.ready, true);
     assert.equal(field(ready, "clientId").source, "database");
     assert.equal(field(ready, "clientSecret").source, "database");
   });
 
-  test("marks Telegram ready from defaults plus a token", () => {
+  test("marks Telegram ready with a token and the real bot username", () => {
+    const state = describeIntegration(
+      "telegram",
+      {
+        values: {
+          botToken: storedSecret("telegram", "botToken", "123:abc"),
+          botUsername: "MyBot",
+        },
+      },
+      EMPTY_ENV,
+      KEY
+    );
+    assert.equal(state.ready, true);
+    assert.equal(field(state, "botUsername").value, "MyBot");
+    assert.equal(field(state, "botUsername").source, "database");
+    assert.equal(state.fields.some((entry) => entry.key === "baseUrl"), false);
+    assert.equal(field(state, "enabled").value, true);
+    assert.equal(field(state, "linkTtlMinutes").value, 15);
+  });
+
+  test("does not invent a bot username for a white-label deployment", () => {
     const state = describeIntegration(
       "telegram",
       { values: { botToken: storedSecret("telegram", "botToken", "123:abc") } },
       EMPTY_ENV,
       KEY
     );
-    assert.equal(state.ready, true);
-    assert.equal(field(state, "botUsername").value, "DoochyBot");
-    assert.equal(field(state, "botUsername").source, "default");
-    assert.equal(state.fields.some((entry) => entry.key === "baseUrl"), false);
-    assert.equal(field(state, "enabled").value, true);
-    assert.equal(field(state, "linkTtlMinutes").value, 15);
+    assert.equal(state.ready, false);
+    assert.equal(field(state, "botUsername").value, null);
+    assert.equal(field(state, "botUsername").source, "unset");
   });
 
   test("falls back to the environment when nothing is stored", () => {
@@ -403,9 +425,9 @@ describe("describeIntegration", () => {
       {
         CTRADER_CLIENT_ID: "env-id",
         CTRADER_CLIENT_SECRET: "env-secret",
-        CTRADER_REDIRECT_URI: "https://example.com/callback",
       },
-      null
+      null,
+      "https://example.com"
     );
     assert.equal(state.ready, true);
     assert.equal(field(state, "clientId").value, "env-id");
@@ -415,7 +437,6 @@ describe("describeIntegration", () => {
     // Environment secrets are never hinted at.
     assert.equal(field(state, "clientSecret").hint, null);
     assert.equal(field(state, "clientSecret").value, null);
-    assert.equal(field(state, "redirectUri").value, "https://example.com/callback");
   });
 
   test("database values win over the environment", () => {
@@ -596,12 +617,11 @@ describe("describeIntegration", () => {
 describe("resolveIntegrationValues", () => {
   test("resolves defaults and reports missing required fields", () => {
     const resolved = resolveIntegrationValues("ctrader", null, EMPTY_ENV, null);
-    assert.deepEqual(resolved.missing, ["clientId", "clientSecret", "redirectUri"]);
+    assert.deepEqual(resolved.missing, ["clientId", "clientSecret"]);
     assert.equal(resolved.values.scope, "trading");
     assert.equal(resolved.sources.scope, "default");
     assert.equal("clientId" in resolved.values, false);
     assert.equal("clientSecret" in resolved.values, false);
-    assert.equal("redirectUri" in resolved.values, false);
   });
 
   test("decrypts database secrets and applies database precedence", () => {
@@ -611,7 +631,6 @@ describe("resolveIntegrationValues", () => {
         values: {
           clientId: "db-id",
           clientSecret: storedSecret("ctrader", "clientSecret", "db-secret"),
-          redirectUri: "https://example.com/callback",
           scope: "trading",
         },
       },
@@ -775,7 +794,6 @@ describe("resolveDraftValues", () => {
     values: {
       clientId: "saved-id",
       clientSecret: storedSecret("ctrader", "clientSecret", "saved-secret"),
-      redirectUri: "https://example.com/callback",
     },
   };
 
@@ -789,7 +807,6 @@ describe("resolveDraftValues", () => {
     );
     assert.equal(resolved.values.clientId, "draft-id");
     assert.equal(resolved.values.clientSecret, "saved-secret");
-    assert.equal(resolved.values.redirectUri, "https://example.com/callback");
     assert.deepEqual(resolved.missing, []);
   });
 
@@ -808,12 +825,12 @@ describe("resolveDraftValues", () => {
     const resolved = resolveDraftValues(
       "ctrader",
       stored,
-      { clear: ["redirectUri"] },
-      { CTRADER_REDIRECT_URI: "https://env.example/callback" },
+      { clear: ["clientId"] },
+      { CTRADER_CLIENT_ID: "env-id" },
       KEY
     );
-    assert.equal(resolved.values.redirectUri, "https://env.example/callback");
-    assert.equal(resolved.sources.redirectUri, "environment");
+    assert.equal(resolved.values.clientId, "env-id");
+    assert.equal(resolved.sources.clientId, "environment");
   });
 
   test("a draft secret can replace one that cannot be decrypted", () => {
