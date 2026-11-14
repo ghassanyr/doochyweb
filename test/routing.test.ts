@@ -19,6 +19,24 @@ describe("path routing", () => {
     }
   });
 
+  test("legal pages have public canonical paths", () => {
+    const routes = [
+      ["legal", "/legal"],
+      ["terms", "/terms"],
+      ["privacy", "/privacy"],
+      ["risk", "/risk-disclosure"],
+      ["cookies", "/cookies"],
+    ] as const;
+    for (const [view, path] of routes) {
+      assert.equal(pathForView(view), path);
+      assert.equal(viewFromPath(path), view);
+      assert.deepEqual(resolveRoute({ pathname: path, search: "", hostname: D }), {
+        view,
+        redirectTo: null,
+      });
+    }
+  });
+
   test("settings is a routable signed-in takeover", () => {
     assert.deepEqual(resolveRoute({ pathname: "/settings", search: "", hostname: D }), {
       view: "settings",

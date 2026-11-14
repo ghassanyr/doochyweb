@@ -40,7 +40,8 @@ export function CookieNotice() {
     setVisible(false);
   }
 
-  const hasLinks = Boolean(legal.termsUrl || legal.privacyUrl);
+  const termsHref = legal.termsUrl || "/terms";
+  const privacyHref = legal.privacyUrl || "/privacy";
 
   return (
     <section
@@ -57,34 +58,26 @@ export function CookieNotice() {
             This site uses essential cookies and browser storage to keep you signed in, remember
             your preferences and secure cTrader sign-in. It does not use advertising or analytics
             cookies.
-            {hasLinks && (
-              <>
-                {" "}
-                See{" "}
-                {legal.termsUrl && (
-                  <a
-                    href={legal.termsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-accent underline-offset-2 hover:underline"
-                  >
-                    Terms
-                  </a>
-                )}
-                {legal.termsUrl && legal.privacyUrl && " and "}
-                {legal.privacyUrl && (
-                  <a
-                    href={legal.privacyUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-accent underline-offset-2 hover:underline"
-                  >
-                    Privacy
-                  </a>
-                )}
-                .
-              </>
-            )}
+            {" "}
+            See the{" "}
+            <a
+              href={termsHref}
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              Terms
+            </a>{" "}
+            and{" "}
+            <a
+              href={privacyHref}
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              Privacy Policy
+            </a>
+            , and our{" "}
+            <a href="/cookies" className="text-accent underline-offset-2 hover:underline">
+              Cookie Policy
+            </a>
+            .
           </p>
         </div>
         <Button variant="primary" size="sm" className="shrink-0" onClick={accept}>

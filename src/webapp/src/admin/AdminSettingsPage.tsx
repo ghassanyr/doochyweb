@@ -673,17 +673,24 @@ export default function AdminSettingsPage({
               label="Terms URL"
               value={legal.termsUrl}
               onChange={(termsUrl) => setLegal({ ...legal, termsUrl })}
-              placeholder="/terms or https://example.com/terms"
+              placeholder="Leave blank for the built-in /terms page"
+              hint="Set this to replace the built-in Terms link and require acceptance at signup."
               maxLength={500}
             />
             <TextField
               label="Privacy URL"
               value={legal.privacyUrl}
               onChange={(privacyUrl) => setLegal({ ...legal, privacyUrl })}
-              placeholder="/privacy or https://example.com/privacy"
+              placeholder="Leave blank for the built-in /privacy page"
+              hint="Set this to replace the built-in Privacy link and require acceptance at signup."
               maxLength={500}
             />
           </div>
+          <p className="text-[11px] leading-relaxed text-fg-faint">
+            Footer links always include the built-in Legal, Terms, Privacy, Risk disclosure, and
+            Cookie pages. Have the built-in templates reviewed for your jurisdiction before
+            relying on them.
+          </p>
           <TextField
             label="Risk disclaimer"
             value={legal.riskDisclaimer}

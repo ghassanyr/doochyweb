@@ -4,7 +4,7 @@ import { LogIn, LogOut, Moon, Settings, Sun } from "lucide-react";
 import { AnnouncementBanner } from "./AnnouncementBanner";
 import { RouteLink } from "./components/RouteLink";
 import { Button } from "./components/ui";
-import { pathForView, type ViewKey } from "./routing";
+import { pathForView, viewFromPath, type ViewKey } from "./routing";
 import {
   FALLBACK_ANNOUNCEMENT,
   FALLBACK_LEGAL,
@@ -52,7 +52,6 @@ export function AppShell({
 }) {
   const { config, branding, theme, mode, toggleMode } = useSiteConfig();
   const legal = config?.legal ?? FALLBACK_LEGAL;
-  const hasLegal = Boolean(legal.termsUrl || legal.privacyUrl || legal.riskDisclaimer);
   const modules = (config?.navigation.modules ?? FALLBACK_MODULES).filter(
     (module) => !module.hidden
   );
@@ -178,9 +177,9 @@ export function AppShell({
 
       <main className="mx-auto max-w-page px-4 py-5 sm:px-6">{children}</main>
 
-      {(branding.footerText || branding.supportEmail || branding.websiteUrl || hasLegal) && (
-        <footer className="mx-auto max-w-page space-y-1 px-4 pb-6 pt-2 text-center text-[11px] leading-relaxed text-fg-faint sm:px-6">
-          {legal.riskDisclaimer && <p className="mx-auto max-w-3xl">{legal.riskDisclaimer}</p>}
+      <footer className="mx-auto max-w-page space-y-1.5 px-4 pb-6 pt-2 text-center text-[11px] leading-relaxed text-fg-faint sm:px-6">
+        {legal.riskDisclaimer && <p className="mx-auto max-w-3xl">{legal.riskDisclaimer}</p>}
+        {(branding.footerText || branding.supportEmail || branding.websiteUrl) && (
           <p>
             {branding.footerText}
             {branding.footerText && (branding.supportEmail || branding.websiteUrl) && (
@@ -208,24 +207,66 @@ export function AppShell({
               </a>
             )}
           </p>
-          {(legal.termsUrl || legal.privacyUrl) && (
-            <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-              {legal.termsUrl && (
-                <a href={legal.termsUrl} className="transition hover:text-accent">
-                  Terms
-                </a>
-              )}
-              {legal.privacyUrl && (
-                <a href={legal.privacyUrl} className="transition hover:text-accent">
-                  Privacy
-                </a>
-              )}
-            </p>
-          )}
-        </footer>
-      )}
+        )}
+        <nav
+          aria-label="Legal"
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1"
+        >
+          <FooterLegalLink label="Legal" fallback="legal" onNavigate={onViewChange} />
+          <FooterLegalLink
+            label="Terms"
+            url={legal.termsUrl}
+            fallback="terms"
+            onNavigate={onViewChange}
+          />
+          <FooterLegalLink
+            label="Privacy"
+            url={legal.privacyUrl}
+            fallback="privacy"
+            onNavigate={onViewChange}
+          />
+          <FooterLegalLink
+            label="Risk disclosure"
+            fallback="risk"
+            onNavigate={onViewChange}
+          />
+          <FooterLegalLink label="Cookies" fallback="cookies" onNavigate={onViewChange} />
+        </nav>
+        <p>
+          © {new Date().getFullYear()} {branding.name}
+          {branding.name ? " · All rights reserved." : ""}
+        </p>
+      </footer>
     </div>
   );
 }
 
 export default AppShell;
+
+function FooterLegalLink({
+  label,
+  url,
+  fallback,
+  onNavigate,
+}: {
+  label: string;
+  /** Admin-configured URL; when it is an in-app path the view is reused. */
+  url?: string;
+  fallback: ViewKey;
+  onNavigate: (view: ViewKey) => void;
+}) {
+  const className = "transition hover:text-accent";
+  const view = url ? viewFromPath(url) : fallback;
+  if (url && !view) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className={className}>
+        {label}
+      </a>
+    );
+  }
+  return (
+    <RouteLink view={view ?? fallback} onNavigate={onNavigate} className={className}>
+      {label}
+    </RouteLink>
+  );
+}

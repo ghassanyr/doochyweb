@@ -11,6 +11,11 @@ export type ViewKey =
   | "signals"
   | "breakouts"
   | "learn"
+  | "legal"
+  | "terms"
+  | "privacy"
+  | "risk"
+  | "cookies"
   | "admin"
   | "admin-settings"
   | "admin-integrations"
@@ -27,6 +32,11 @@ export const VIEW_KEYS: readonly ViewKey[] = [
   "signals",
   "breakouts",
   "learn",
+  "legal",
+  "terms",
+  "privacy",
+  "risk",
+  "cookies",
   "admin",
   "admin-settings",
   "admin-integrations",
@@ -47,6 +57,7 @@ export function pathForView(view: ViewKey): string {
   if (view === "home") return "/";
   if (view === "admin-settings") return "/admin/settings";
   if (view === "admin-integrations") return "/admin/integrations";
+  if (view === "risk") return "/risk-disclosure";
   return `/${view}`;
 }
 
@@ -60,6 +71,7 @@ export function viewFromPath(pathname: string): ViewKey | null {
   if (path === "/") return "home";
   if (path === "/admin/settings") return "admin-settings";
   if (path === "/admin/integrations") return "admin-integrations";
+  if (path === "/risk-disclosure") return "risk";
   const key = path.slice(1);
   return isViewKey(key) ? key : null;
 }

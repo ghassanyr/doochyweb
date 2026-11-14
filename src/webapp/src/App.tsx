@@ -8,6 +8,7 @@ import AdminPage from "./admin/AdminPage";
 import AdminSettingsPage from "./admin/AdminSettingsPage";
 import AdminIntegrationsPage from "./admin/AdminIntegrationsPage";
 import LearnPage from "./learn/LearnPage";
+import LegalPage, { isLegalView } from "./legal/LegalPage";
 import HomePage from "./home/HomePage";
 import { isViewKey, pathForView, resolveRoute, type ViewKey } from "./routing";
 import AppShell from "./AppShell";
@@ -360,6 +361,8 @@ export default function App() {
           <BreakoutsPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
         ) : view === "learn" ? (
           <LearnPage />
+        ) : isLegalView(view) ? (
+          <LegalPage view={view} onNavigate={handleViewChange} />
         ) : view === "settings" ? (
           <SignInPrompt
             title="Sign in to manage settings"
