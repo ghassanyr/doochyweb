@@ -15,6 +15,25 @@ import { resolveIntegration } from "../integrations/store";
 export const DEFAULT_AI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_AI_MODEL = "gpt-4o-mini";
 
+export const AI_PROVIDER_PRESETS = {
+  openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+  openrouter: { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+  groq: { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
+  nvidia: { label: "NVIDIA", baseUrl: "https://integrate.api.nvidia.com/v1" },
+  ollama: { label: "Ollama (local)", baseUrl: "http://localhost:11434/v1" },
+} as const;
+
+export type AiProviderPreset = keyof typeof AI_PROVIDER_PRESETS;
+
+export function isAiProviderPreset(value: unknown): value is AiProviderPreset {
+  return typeof value === "string" && value in AI_PROVIDER_PRESETS;
+}
+
+/** Base URL implied by the selected provider, or null for a custom endpoint. */
+export function presetBaseUrl(provider: unknown): string | null {
+  return isAiProviderPreset(provider) ? AI_PROVIDER_PRESETS[provider].baseUrl : null;
+}
+
 export interface AiConfig {
   apiKey: string;
   baseUrl: string;
@@ -36,10 +55,25 @@ export class AiError extends Error {
   }
 }
 
-/** Trim, drop a trailing slash and fall back to the OpenAI base URL. */
-export function normalizeBaseUrl(value: unknown): string {
+/** Trim and drop a trailing slash. Empty becomes null. */
+export function normalizeBaseUrl(value: unknown): string | null {
   const text = typeof value === "string" ? value.trim() : "";
-  return (text || DEFAULT_AI_BASE_URL).replace(/\/+$/, "");
+  if (!text) return null;
+  return text.replace(/\/+$/, "");
+}
+
+/**
+ * Effective base URL: an explicit value wins (keeps legacy/custom configs
+ * working), otherwise the selected provider's preset, otherwise OpenAI.
+ */
+export function resolveAiBaseUrl(
+  values: Record<string, string | number | boolean>
+): string {
+  return (
+    normalizeBaseUrl(values.baseUrl) ??
+    presetBaseUrl(values.provider) ??
+    DEFAULT_AI_BASE_URL
+  );
 }
 
 /** Build a config from resolved integration values, or null when unconfigured. */
@@ -49,7 +83,7 @@ export function aiConfigFromValues(
   const apiKey = String(values.apiKey ?? "").trim();
   if (!apiKey) return null;
   const model = String(values.model ?? "").trim() || DEFAULT_AI_MODEL;
-  return { apiKey, baseUrl: normalizeBaseUrl(values.baseUrl), model };
+  return { apiKey, baseUrl: resolveAiBaseUrl(values), model };
 }
 
 /** Runtime read. Null means the AI provider is not ready yet. */

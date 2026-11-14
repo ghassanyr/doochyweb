@@ -210,8 +210,30 @@ describe("aiConfigFromValues", () => {
     assert.equal(config?.model, "some/model");
   });
 
-  test("normalizeBaseUrl falls back on an empty value", () => {
-    assert.equal(normalizeBaseUrl(""), DEFAULT_AI_BASE_URL);
-    assert.equal(normalizeBaseUrl(undefined), DEFAULT_AI_BASE_URL);
+  test("normalizeBaseUrl returns null on an empty value", () => {
+    assert.equal(normalizeBaseUrl(""), null);
+    assert.equal(normalizeBaseUrl(undefined), null);
+  });
+
+  test("resolves the base URL from a known provider preset", () => {
+    const config = aiConfigFromValues({
+      apiKey: "sk-test",
+      provider: "openrouter",
+    });
+    assert.equal(config?.baseUrl, "https://openrouter.ai/api/v1");
+  });
+
+  test("keeps an explicit base URL for custom providers", () => {
+    const config = aiConfigFromValues({
+      apiKey: "sk-test",
+      provider: "custom",
+      baseUrl: "https://my.gateway.example/v1/",
+    });
+    assert.equal(config?.baseUrl, "https://my.gateway.example/v1");
+  });
+
+  test("resolves the NVIDIA preset base URL", () => {
+    const config = aiConfigFromValues({ apiKey: "nv-test", provider: "nvidia" });
+    assert.equal(config?.baseUrl, "https://integrate.api.nvidia.com/v1");
   });
 });

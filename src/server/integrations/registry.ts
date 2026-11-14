@@ -183,8 +183,24 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
     provider: "ai",
     label: "AI provider",
     description:
-      "Chat completions endpoint used by the daily briefing and, later, trade reviews. Any OpenAI compatible API works: OpenAI, OpenRouter, Groq, Azure gateways or a local server. The key is left empty until you add one; features that need it stay off until then.",
+      'Chat completions endpoint used by the daily briefing and, later, trade reviews. Pick your provider and the base URL is filled in for you. Choose "Custom" only if your provider is not listed and you need to enter a URL yourself. The key is left empty until you add one; features that need it stay off until then.',
     fields: [
+      {
+        key: "provider",
+        label: "Provider",
+        kind: "select",
+        env: "AI_PROVIDER",
+        defaultValue: "openai",
+        options: [
+          { value: "openai", label: "OpenAI (api.openai.com)" },
+          { value: "openrouter", label: "OpenRouter (openrouter.ai)" },
+          { value: "groq", label: "Groq (api.groq.com)" },
+          { value: "nvidia", label: "NVIDIA (integrate.api.nvidia.com)" },
+          { value: "ollama", label: "Ollama (local, localhost:11434)" },
+          { value: "custom", label: "Custom (enter a base URL)" },
+        ],
+        hint: "Selecting a provider fills and locks the base URL automatically. Use Custom for providers not listed.",
+      },
       {
         key: "apiKey",
         label: "API key",
@@ -192,7 +208,7 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         env: "OPENAI_API_KEY",
         required: true,
         maxLength: 500,
-        hint: "Encrypted at rest and never returned to the browser. Leave empty until you have a key.",
+        hint: "Encrypted at rest and never returned to the browser. Leave empty until you have a key. Ollama needs no key; type any placeholder to satisfy the field.",
       },
       {
         key: "baseUrl",
@@ -202,7 +218,7 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         defaultValue: "https://api.openai.com/v1",
         format: "url",
         maxLength: 300,
-        hint: "Include the version segment (/v1 for OpenAI). A trailing slash is ignored.",
+        hint: "Filled automatically for known providers. For Custom, paste the chat-completions base URL including the version segment (usually ending in /v1). A trailing slash is ignored.",
       },
       {
         key: "model",
@@ -217,7 +233,6 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
     ],
   },
 };
-
 export function isIntegrationProvider(value: unknown): value is IntegrationProvider {
   return typeof value === "string" && value in INTEGRATION_DEFS;
 }

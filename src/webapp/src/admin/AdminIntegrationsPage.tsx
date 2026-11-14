@@ -224,6 +224,14 @@ function CallbackRow({ label, value }: { label: string; value: string | null }) 
   );
 }
 
+const AI_PROVIDER_BASE_URLS: Record<string, string> = {
+  openai: "https://api.openai.com/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+  groq: "https://api.groq.com/openai/v1",
+  ollama: "http://localhost:11434/v1",
+  nvidia: "https://integrate.api.nvidia.com/v1",
+};
+
 function ProviderCard({
   state,
   draft,
@@ -250,12 +258,24 @@ function ProviderCard({
   const provider = state.provider;
   const Icon =
     provider === "ctrader" ? Plug : provider === "smtp" ? Mail : provider === "ai" ? Sparkles : Send;
+  const aiProviderValue = provider === "ai" ? draft.values.provider || "openai" : "";
+  const aiIsCustom = provider === "ai" && aiProviderValue === "custom";
+  const aiPresetBaseUrl = AI_PROVIDER_BASE_URLS[aiProviderValue];
+  const [editAiEndpoint, setEditAiEndpoint] = useState(false);
 
   function updateValue(key: string, value: string) {
+    const nextValues = { ...draft.values, [key]: value };
+    let nextCleared = draft.cleared.filter((entry) => entry !== key);
+    if (provider === "ai" && key === "provider") {
+      const preset = AI_PROVIDER_BASE_URLS[value];
+      nextValues.baseUrl = value === "custom" ? "" : preset ?? draft.values.baseUrl ?? "";
+      nextCleared = nextCleared.filter((entry) => entry !== "baseUrl");
+      setEditAiEndpoint(false);
+    }
     onDraftChange({
       ...draft,
-      cleared: draft.cleared.filter((entry) => entry !== key),
-      values: { ...draft.values, [key]: value },
+      cleared: nextCleared,
+      values: nextValues,
     });
   }
 
@@ -358,17 +378,63 @@ function ProviderCard({
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {state.fields.map((field) => (
-          <Field
-            key={field.key}
-            field={field}
-            draft={draft}
-            baseline={baseline}
-            disabled={!encryptionAvailable && field.kind === "secret"}
-            onChange={(value) => updateValue(field.key, value)}
-            onClear={() => toggleClear(field.key)}
-          />
-        ))}
+        {state.fields.map((field) => {
+          const isAiBaseUrl = provider === "ai" && field.key === "baseUrl";
+          const baseUrlLocked = isAiBaseUrl && !aiIsCustom && !editAiEndpoint;
+          const renderedField: IntegrationFieldState =
+            isAiBaseUrl && aiIsCustom
+              ? {
+                  ...field,
+                  required: true,
+                  hint:
+                    "Required for Custom. Paste the chat-completions base URL from your provider’s API docs (usually ending in /v1). Requests are sent to {base URL}/chat/completions.",
+                }
+              : isAiBaseUrl && !aiIsCustom
+                ? {
+                    ...field,
+                    hint: `Filled automatically for ${aiProviderValue === "nvidia" ? "NVIDIA" : "this provider"} (${aiPresetBaseUrl || draft.values.baseUrl || "preset endpoint"}). Use “Change endpoint” only if you need a different compatible URL.`,
+                  }
+                : field;
+          const fieldDisabled =
+            (!encryptionAvailable && field.kind === "secret") || baseUrlLocked;
+
+          return (
+            <div key={field.key} className="space-y-1">
+              <Field
+                field={renderedField}
+                draft={draft}
+                baseline={baseline}
+                disabled={fieldDisabled}
+                onChange={(value) => updateValue(field.key, value)}
+                onClear={() => toggleClear(field.key)}
+              />
+              {isAiBaseUrl && !aiIsCustom && (
+                <button
+                  type="button"
+                  className="text-[11px] font-medium text-accent underline-offset-2 hover:underline disabled:opacity-50"
+                  onClick={() => {
+                    if (editAiEndpoint) {
+                      onDraftChange({
+                        ...draft,
+                        values: {
+                          ...draft.values,
+                          baseUrl: aiPresetBaseUrl || draft.values.baseUrl || "",
+                        },
+                      });
+                      setEditAiEndpoint(false);
+                    } else {
+                      setEditAiEndpoint(true);
+                    }
+                  }}
+                >
+                  {editAiEndpoint
+                    ? "Use preset endpoint"
+                    : "Advanced: change endpoint"}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {(testResult || state.lastTestAt) && (
