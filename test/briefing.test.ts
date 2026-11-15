@@ -463,4 +463,68 @@ describe("aiChat", () => {
       globalThis.fetch = original;
     }
   });
+
+  test("turns NVIDIA thinking off by default and can keep it on", async () => {
+    const original = globalThis.fetch;
+    const bodies: any[] = [];
+    (globalThis as any).fetch = async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const config = {
+      apiKey: "nv-test",
+      baseUrl: "https://integrate.api.nvidia.com/v1",
+      model: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    };
+    try {
+      await aiChat(config, [{ role: "user", content: "hi" }]);
+      assert.deepEqual(bodies[0].chat_template_kwargs, { enable_thinking: false });
+
+      await aiChat(config, [{ role: "user", content: "hi" }], { thinking: true });
+      assert.equal(bodies[1].chat_template_kwargs, undefined);
+
+      await aiChat(
+        { ...config, baseUrl: "https://api.openai.com/v1" },
+        [{ role: "user", content: "hi" }]
+      );
+      assert.equal(bodies[2].chat_template_kwargs, undefined);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("refuses a reasoning trace cut off by the token budget", async () => {
+    const original = globalThis.fetch;
+    (globalThis as any).fetch = async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "length",
+              message: { content: "", reasoning_content: "Here's a thinking process: 1. Analyz" },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    try {
+      await assert.rejects(
+        () =>
+          aiChat(
+            {
+              apiKey: "nv-test",
+              baseUrl: "https://integrate.api.nvidia.com/v1",
+              model: "nvidia/nemotron-3.5-lightning-30b-a3b",
+            },
+            [{ role: "user", content: "hi" }]
+          ),
+        /token budget on reasoning/
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
 });

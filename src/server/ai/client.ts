@@ -106,6 +106,12 @@ export interface AiChatOptions {
   maxTokens?: number;
   temperature?: number;
   timeoutMs?: number;
+  /**
+   * NVIDIA thinking models spend the token budget on reasoning and can return a
+   * truncated plan instead of the answer. Thinking is off by default on NVIDIA;
+   * pass true to keep it for models that need it.
+   */
+  thinking?: boolean;
 }
 
 /** One chat completion. Throws AiError with a browser-safe message. */
@@ -117,6 +123,8 @@ export async function aiChat(
   const timeoutMs = options.timeoutMs ?? 25_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const nvidia = isNvidiaEndpoint(config.baseUrl);
+  const thinking = options.thinking ?? !nvidia;
 
   try {
     const res = await fetch(`${config.baseUrl}/chat/completions`, {
@@ -130,6 +138,7 @@ export async function aiChat(
         messages,
         temperature: options.temperature ?? 0.4,
         max_tokens: options.maxTokens ?? 500,
+        ...(nvidia && !thinking ? { chat_template_kwargs: { enable_thinking: false } } : {}),
       }),
       signal: controller.signal,
     });
@@ -162,7 +171,8 @@ export async function aiChat(
     }
 
     const data: any = await res.json().catch(() => null);
-    const message = data?.choices?.[0]?.message;
+    const choice = data?.choices?.[0];
+    const message = choice?.message;
     const rawContent = message?.content;
     const content = Array.isArray(rawContent)
       ? rawContent
@@ -173,17 +183,23 @@ export async function aiChat(
       : rawContent;
     // Reasoning models can return an empty visible reply while placing their
     // output in reasoning_content. That is still a usable answer, so fall back
-    // to it instead of reporting an empty reply.
+    // to it, but never when the token budget ran out mid-thought: a truncated
+    // plan is not a briefing.
     const reasoning =
       typeof message?.reasoning_content === "string" ? message.reasoning_content : "";
-    const text =
-      typeof content === "string" && content.trim()
-        ? content
-        : reasoning.trim()
-          ? reasoning
-          : "";
+    const truncated = choice?.finish_reason === "length";
+    const visible = typeof content === "string" ? content.trim() : "";
+    const text = visible
+      ? content
+      : reasoning.trim() && !truncated
+        ? reasoning
+        : "";
     if (!text.trim()) {
-      throw new AiError("AI provider returned an empty reply");
+      throw new AiError(
+        truncated && reasoning.trim()
+          ? "The model spent its token budget on reasoning and returned no answer. Choose a model without a thinking mode."
+          : "AI provider returned an empty reply"
+      );
     }
     return { text: text.trim(), model: String(data?.model || config.model) };
   } catch (err) {

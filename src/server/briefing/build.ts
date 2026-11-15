@@ -103,6 +103,7 @@ export function buildBriefingPrompt(
     "Use only the data in the user message. Do not invent symbols, prices or signals.",
     "Write 3 to 5 short sentences of plain prose, no lists, no headings, no markdown.",
     "Describe what moved and which signals are live. Never give financial advice, never predict, never recommend a trade.",
+    "Return only the finished brief. Do not show reasoning, planning or commentary.",
     "Do not mention being an AI or a model. Never use an em dash.",
   ].join(" ");
 
