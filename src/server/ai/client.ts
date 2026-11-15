@@ -235,7 +235,7 @@ export async function testAi(values: Record<string, string | number | boolean>):
     );
     return {
       ok: true,
-      message: `Connected to ${reply.model}. Reply: ${reply.text.slice(0, 40)}`,
+      message: `Connected to ${reply.model}.`,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "AI test failed" };
@@ -326,7 +326,6 @@ export async function listAiModels(
     }
 
     const models = availability.available;
-    const skipped = catalog.length - candidates.length;
     const counts = {
       total: catalog.length,
       available: models.length,
@@ -346,15 +345,6 @@ export async function listAiModels(
       `${label} returned ${catalog.length} models.`,
       `${models.length} ${models.length === 1 ? "chat model is" : "chat models are"} available to this key.`,
     ];
-    if (availability.unavailable.length > 0) {
-      parts.push(`${availability.unavailable.length} not available.`);
-    }
-    if (availability.unknown.length > 0) {
-      parts.push(`${availability.unknown.length} still unchecked; use Refresh to check more.`);
-    }
-    if (skipped > 0) {
-      parts.push(`${skipped} non-chat ${skipped === 1 ? "model is" : "models are"} hidden.`);
-    }
 
     return { ok: true, models, message: parts.join(" "), ...counts };
   } catch (err) {

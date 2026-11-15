@@ -287,9 +287,12 @@ export function Chip({
 // A save-state flash: brief success/error tint, auto-shown alongside results.
 export function Flash({
   tone,
+  icon,
   children,
 }: {
   tone: "success" | "warning" | "danger";
+  // Replaces the tone's default icon; pass null for no icon at all.
+  icon?: ReactNode;
   children: ReactNode;
 }) {
   const cls =
@@ -298,11 +301,17 @@ export function Flash({
       : tone === "warning"
         ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
         : "border-danger/30 bg-danger-soft text-danger";
+  const defaultIcon =
+    tone === "success" ? (
+      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+    ) : tone === "warning" ? (
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+    ) : (
+      <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+    );
   return (
     <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${cls}`}>
-      {tone === "success" && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
-      {tone === "warning" && <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
-      {tone === "danger" && <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      {icon === undefined ? defaultIcon : icon}
       <span className="min-w-0">{children}</span>
     </div>
   );

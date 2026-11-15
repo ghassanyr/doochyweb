@@ -144,6 +144,9 @@ export function validateCtraderSetup(values: Record<string, unknown>): SetupIssu
   return { errors, warnings };
 }
 
+/** Shown when a provider with no recommended model has no model selected. */
+export const AI_MODEL_REQUIRED_MESSAGE = "Choose a model for this provider.";
+
 function validateAiSetup(
   values: Record<string, unknown>,
   keyConfigured?: boolean
@@ -159,7 +162,7 @@ function validateAiSetup(
     errors.push("API base URL is required when Provider is Custom.");
   }
   if (!text(values.model) && !aiDefaultModel(selectedProvider)) {
-    errors.push("Choose a model for this provider.");
+    errors.push(AI_MODEL_REQUIRED_MESSAGE);
   }
   return { errors, warnings: [] };
 }

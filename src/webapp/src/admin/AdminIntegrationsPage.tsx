@@ -537,19 +537,13 @@ function AiProviderCard({
       </div>
 
       {state.errors.length > 0 && (
-        <Flash tone="danger">
-          <span className="inline-flex items-start gap-1.5">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{state.errors.join(" ")}</span>
-          </span>
+        <Flash tone="danger" icon={<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
+          {state.errors.join(" ")}
         </Flash>
       )}
       {state.warnings.length > 0 && (
-        <Flash tone="danger">
-          <span className="inline-flex items-start gap-1.5">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{state.warnings.join(" ")}</span>
-          </span>
+        <Flash tone="danger" icon={<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
+          {state.warnings.join(" ")}
         </Flash>
       )}
 
@@ -969,19 +963,13 @@ function ProviderCard({
       )}
 
       {state.errors.length > 0 && (
-        <Flash tone="danger">
-          <span className="inline-flex items-start gap-1.5">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{state.errors.join(" ")}</span>
-          </span>
+        <Flash tone="danger" icon={<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
+          {state.errors.join(" ")}
         </Flash>
       )}
       {state.warnings.length > 0 && (
-        <Flash tone="danger">
-          <span className="inline-flex items-start gap-1.5">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{state.warnings.join(" ")}</span>
-          </span>
+        <Flash tone="danger" icon={<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
+          {state.warnings.join(" ")}
         </Flash>
       )}
 
@@ -1197,15 +1185,10 @@ export default function AdminIntegrationsPage({
         {error && <Flash tone="danger">{error}</Flash>}
         {saved && <Flash tone="success">Saved. The new values are live.</Flash>}
         {!data.encryptionAvailable && (
-          <Flash tone="danger">
-            <span className="inline-flex items-start gap-1.5">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>
-                <code className="font-mono">INTEGRATIONS_ENCRYPTION_KEY</code> is not set. Generate
-                one with <code className="font-mono">openssl rand -base64 32</code> and add it to
-                the server environment before saving secrets.
-              </span>
-            </span>
+          <Flash tone="danger" icon={<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
+            <code className="font-mono">INTEGRATIONS_ENCRYPTION_KEY</code> is not set. Generate
+            one with <code className="font-mono">openssl rand -base64 32</code> and add it to
+            the server environment before saving secrets.
           </Flash>
         )}
 

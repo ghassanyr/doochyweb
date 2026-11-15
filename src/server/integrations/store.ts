@@ -21,7 +21,11 @@ import {
   requireEncryptionKey,
 } from "./crypto";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
-import { providerIssues, providerIssuesFromValues } from "./ctraderSetup";
+import {
+  AI_MODEL_REQUIRED_MESSAGE,
+  providerIssues,
+  providerIssuesFromValues,
+} from "./ctraderSetup";
 import {
   INTEGRATION_DEFS,
   INTEGRATION_PROVIDERS,
@@ -196,6 +200,11 @@ export function describeIntegration(
   const values = storedValues(stored);
   const fields = def.fields.map((field) => describeField(provider, field, values, env, key));
   const issues = providerIssues(provider, fields, publicBaseUrl);
+  // The model is picked from the provider list, so a missing model is reported
+  // when Save is clicked (the PUT validates the resolved values) instead of as
+  // a permanent banner above the provider and key fields. It still blocks
+  // readiness because a provider without a recommended model cannot be used.
+  const errors = issues.errors.filter((message) => message !== AI_MODEL_REQUIRED_MESSAGE);
   const ready =
     fields.every((field) => field.error === null) &&
     fields.every((field) => !field.required || field.configured) &&
@@ -207,7 +216,7 @@ export function describeIntegration(
     description: def.description,
     ready,
     fields,
-    errors: issues.errors,
+    errors,
     warnings: issues.warnings,
     updatedAt: iso(stored?.updatedAt),
     updatedBy: typeof stored?.updatedBy === "string" ? stored.updatedBy : null,
