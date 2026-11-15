@@ -143,6 +143,16 @@ export function validateCtraderSetup(values: Record<string, unknown>): SetupIssu
   return { errors, warnings };
 }
 
+function validateAiSetup(values: Record<string, unknown>): SetupIssues {
+  const errors: string[] = [];
+  const selectedProvider = text(values.provider) || "openai";
+  const baseUrl = text(values.baseUrl);
+  if (selectedProvider === "custom" && !baseUrl) {
+    errors.push("API base URL is required when Provider is Custom.");
+  }
+  return { errors, warnings: [] };
+}
+
 /** Validate already-resolved values (used by the draft test endpoint). */
 export function providerIssuesFromValues(
   provider: IntegrationProvider,
@@ -150,6 +160,7 @@ export function providerIssuesFromValues(
   publicBaseUrl?: string | null
 ): SetupIssues {
   if (provider === "smtp") return validateSmtpSetup(values);
+  if (provider === "ai") return validateAiSetup(values);
   if (provider !== "ctrader") return { errors: [], warnings: [] };
   const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
   const issues = validateCtraderSetup(ctraderSetupValues(values, baseRaw));
@@ -164,6 +175,13 @@ export function providerIssues(
   publicBaseUrl?: string | null
 ): SetupIssues {
   if (provider === "smtp") return providerSmtpIssues(fields);
+  if (provider === "ai") {
+    const values: Record<string, unknown> = {};
+    for (const field of fields) {
+      if (field.kind !== "secret" && field.value !== null) values[field.key] = field.value;
+    }
+    return validateAiSetup(values);
+  }
   if (provider !== "ctrader") return { errors: [], warnings: [] };
   const values: Record<string, unknown> = {};
   for (const field of fields) {
