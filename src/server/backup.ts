@@ -18,7 +18,113 @@ const { EJSON } = mongoose.mongo.BSON;
 export const BACKUP_FORMAT = "doochy-backup";
 export const BACKUP_VERSION = 1;
 export const DEFAULT_BACKUP_DIR = "backups";
+export const DEFAULT_BACKUP_KEEP = 14;
+export const BACKUP_STALE_MS = 7 * 24 * 60 * 60 * 1_000;
 export const RESTORE_BATCH_SIZE = 1_000;
+
+const BACKUP_NAME_RE = /^doochy-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
+
+export function backupDir(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = (env.BACKUP_DIR ?? "").trim();
+  return configured || DEFAULT_BACKUP_DIR;
+}
+
+export function backupKeep(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = (env.BACKUP_KEEP ?? "").trim();
+  if (!raw) return DEFAULT_BACKUP_KEEP;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 1 && value <= 365 ? value : DEFAULT_BACKUP_KEEP;
+}
+
+export interface BackupSnapshot {
+  path: string;
+  fileName: string;
+  size: number;
+  modifiedAt: string;
+  modifiedAtMs: number;
+  ageMs: number;
+}
+
+export interface BackupStatus {
+  dir: string;
+  keep: number;
+  count: number;
+  latestAt: string | null;
+  latestAgeMs: number | null;
+  fresh: boolean;
+}
+
+export async function listBackupSnapshots(
+  dir: string = backupDir(),
+  now: Date = new Date()
+): Promise<BackupSnapshot[]> {
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+
+  const snapshots: BackupSnapshot[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !BACKUP_NAME_RE.test(entry.name)) continue;
+    const filePath = path.join(dir, entry.name);
+    try {
+      const stat = await fs.stat(filePath);
+      const modifiedAtMs = stat.mtimeMs;
+      snapshots.push({
+        path: filePath,
+        fileName: entry.name,
+        size: stat.size,
+        modifiedAt: new Date(modifiedAtMs).toISOString(),
+        modifiedAtMs,
+        ageMs: Math.max(0, now.getTime() - modifiedAtMs),
+      });
+    } catch {
+      /* The file disappeared between readdir and stat. */
+    }
+  }
+
+  return snapshots.sort((a, b) => b.modifiedAtMs - a.modifiedAtMs || b.fileName.localeCompare(a.fileName));
+}
+
+export async function backupStatus(
+  now: Date = new Date(),
+  dir: string = backupDir(),
+  keep: number = backupKeep()
+): Promise<BackupStatus> {
+  const snapshots = await listBackupSnapshots(dir, now);
+  const latest = snapshots[0] ?? null;
+  return {
+    dir,
+    keep,
+    count: snapshots.length,
+    latestAt: latest?.modifiedAt ?? null,
+    latestAgeMs: latest?.ageMs ?? null,
+    fresh: latest != null && latest.ageMs <= BACKUP_STALE_MS,
+  };
+}
+
+export async function pruneBackups(
+  keep: number = backupKeep(),
+  dir: string = backupDir()
+): Promise<string[]> {
+  if (!Number.isInteger(keep) || keep < 1) {
+    throw new BackupError("backup retention must be a positive whole number");
+  }
+  const snapshots = await listBackupSnapshots(dir);
+  const removed: string[] = [];
+  for (const snapshot of snapshots.slice(keep)) {
+    try {
+      await fs.unlink(snapshot.path);
+      removed.push(snapshot.path);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  }
+  return removed;
+}
 
 export interface BackupFile {
   format: typeof BACKUP_FORMAT;
@@ -219,7 +325,7 @@ export async function applyBackup(
 }
 
 /** A timestamped path under backups/ with no filename collisions. */
-export function defaultBackupPath(now: Date = new Date(), dir = DEFAULT_BACKUP_DIR): string {
+export function defaultBackupPath(now: Date = new Date(), dir: string = backupDir()): string {
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   return path.join(dir, `doochy-${stamp}.json`);
 }

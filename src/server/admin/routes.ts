@@ -7,9 +7,11 @@
 import { Router } from "express";
 
 import { adminRequired, type AuthedRequest } from "../auth";
+import { backupStatus } from "../backup";
 import { encryptionKeyFromEnv } from "../integrations/crypto";
 import { getIntegrationStates } from "../integrations/store";
 import { getSiteSettings, saveSiteSettings } from "../settings/store";
+import { exportUserData, userDataExportFilename } from "../userDataExport";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { SettingsValidationError } from "../settings/validate";
 import { integrationAdminRouter } from "./integrations";
@@ -30,15 +32,17 @@ adminRouter.use(integrationAdminRouter);
 
 adminRouter.get("/status", adminRequired, async (_req, res) => {
   try {
-    const [settings, integrations, publicBaseUrl, users] = await Promise.all([
+    const [settings, integrations, publicBaseUrl, users, backups] = await Promise.all([
       getSiteSettings(),
       getIntegrationStates(),
       canonicalPublicBaseUrl(),
       listUsers(),
+      backupStatus(),
     ]);
     const ctrader = integrations.find((entry) => entry.provider === "ctrader");
     const telegram = integrations.find((entry) => entry.provider === "telegram");
     const smtp = integrations.find((entry) => entry.provider === "smtp");
+    const ai = integrations.find((entry) => entry.provider === "ai");
     let encryptionReady = false;
     try {
       encryptionReady = encryptionKeyFromEnv() !== null;
@@ -60,6 +64,18 @@ adminRouter.get("/status", adminRequired, async (_req, res) => {
         label: "Database",
         status: "ok",
         detail: "Connected; the admin API is reading site settings.",
+      },
+      {
+        key: "backups",
+        label: "Backups",
+        status: backups.fresh ? "ok" : "todo",
+        detail: backups.latestAt
+          ? `Latest timestamped snapshot: ${backups.latestAt}. ${
+              backups.fresh
+                ? `Retention keeps up to ${backups.keep}.`
+                : "It is over 7 days old; take a fresh one."
+            }`
+          : `No timestamped snapshots found in ${backups.dir}. Run pnpm doochy:backup.`,
       },
       {
         key: "encryption",
@@ -118,12 +134,13 @@ adminRouter.get("/status", adminRequired, async (_req, res) => {
           : "Optional: set TWELVE_DATA_API_KEY for live quote refreshes.",
       },
       {
-        key: "narration",
-        label: "Narration model",
-        status: process.env.NVIDIA_API_KEY ? "ok" : "optional",
-        detail: process.env.NVIDIA_API_KEY
-          ? "NVIDIA narration is configured."
-          : "Optional: set NVIDIA_API_KEY to enable model-written market narration.",
+        key: "ai",
+        label: "AI provider",
+        status: ai?.ready ? "ok" : "optional",
+        detail: ai?.ready
+          ? "Daily briefing narratives and AI-assisted features are configured."
+          : ai?.errors[0] ??
+            "Optional: add an AI provider key in Integrations to enable the daily briefing narrative.",
       },
     ] as const;
     res.json({
@@ -234,6 +251,23 @@ adminRouter.patch("/users/:id", adminRequired, async (req: AuthedRequest, res) =
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "failed to update user" });
+  }
+});
+
+adminRouter.get("/users/:id/export", adminRequired, async (req: AuthedRequest, res) => {
+  try {
+    const data = await exportUserData(req.params.id);
+    if (!data) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${userDataExportFilename(data.user.username)}"`
+    );
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to export user data" });
   }
 });
 

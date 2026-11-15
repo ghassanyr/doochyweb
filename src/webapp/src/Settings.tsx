@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, ArrowLeft, KeyRound, Link2, Mail, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, KeyRound, Link2, Mail, RefreshCw, Save } from "lucide-react";
 import {
   api,
   ApiError,
@@ -47,6 +47,8 @@ export default function SettingsPage({
   const [emailPassword, setEmailPassword] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
   const { branding, theme } = useSiteConfig();
   const logoUrl = brandMarkUrl(branding, theme, 64);
   const defaultLogo = isBundledBrand(branding);
@@ -139,6 +141,17 @@ export default function SettingsPage({
       );
     } catch (err) {
       setEmailError(err instanceof ApiError ? err.message : "Could not save your email.");
+    }
+  }
+
+  async function downloadData() {
+    setExportError(null);
+    setExportNotice(null);
+    try {
+      await api.exportMyData();
+      setExportNotice("Your data export was downloaded.");
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : "Could not download your data.");
     }
   }
 
@@ -398,6 +411,38 @@ export default function SettingsPage({
             {emailNotice && (
               <div className="mt-3">
                 <Flash tone="success">{emailNotice}</Flash>
+              </div>
+            )}
+          </Card>
+        </FadeRise>
+
+        <FadeRise>
+          <Card className="p-4">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Your data</h2>
+              <p className="text-sm text-fg-muted">
+                Download a JSON copy of your profile, cTrader account labels, alerts, journal,
+                paper trades, briefings and Telegram link. Password hashes and integration secrets
+                are never included.
+              </p>
+            </div>
+            <div className="mt-3">
+              <Button
+                variant="secondary"
+                icon={<Download className="h-4 w-4" />}
+                onClickAsync={downloadData}
+              >
+                Download my data
+              </Button>
+            </div>
+            {exportError && (
+              <div className="mt-3">
+                <Flash tone="danger">{exportError}</Flash>
+              </div>
+            )}
+            {exportNotice && (
+              <div className="mt-3">
+                <Flash tone="success">{exportNotice}</Flash>
               </div>
             )}
           </Card>

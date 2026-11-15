@@ -190,7 +190,7 @@ started, `later` means deliberately deferred, `skip` means not planned.
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 809 tests, all passing.
+- `pnpm test`: 818 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

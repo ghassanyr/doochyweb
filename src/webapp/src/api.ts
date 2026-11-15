@@ -52,6 +52,42 @@ async function request<T>(path: string, opts: { method?: string; body?: unknown;
   return data as T;
 }
 
+async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(path, { headers });
+  } catch {
+    throw new ApiError("Network error - is the server running?", 0);
+  }
+
+  if (!res.ok) {
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      /* non-JSON response */
+    }
+    throw new ApiError(data?.error || `HTTP ${res.status}`, res.status, data);
+  }
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const name = match?.[1]?.trim() || fallbackName;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export interface AccountView {
   ctid: number;
   login: number;
@@ -924,6 +960,9 @@ export const adminApi = {
   deleteUser: (id: string) =>
     request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
+  exportUser: (id: string) =>
+    downloadFile(`/api/admin/users/${encodeURIComponent(id)}/export`, "doochy-user-data.json"),
+
   settings: () => request<{ settings: SiteSettings }>("/api/admin/settings"),
 
   saveSettings: (patch: {
@@ -1020,6 +1059,8 @@ export const api = {
       ctraderOAuth: boolean;
       accounts: AccountView[];
     }>("/api/me", { token }),
+
+  exportMyData: () => downloadFile("/api/me/export", "doochy-my-data.json"),
 
   updateEmail: (email: string, password: string) =>
     request<{

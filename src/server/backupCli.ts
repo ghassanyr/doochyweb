@@ -13,8 +13,10 @@ import mongoose from "mongoose";
 
 import {
   applyBackup,
+  backupKeep,
   collectBackup,
   defaultBackupPath,
+  pruneBackups,
   readBackupFile,
   serializeBackup,
   writeBackupFile,
@@ -25,6 +27,7 @@ import { connectDb } from "./db";
 
 interface BackupOptions {
   out: string | null;
+  keep: number | null;
   help: boolean;
 }
 
@@ -37,13 +40,15 @@ interface RestoreOptions {
 
 function usage(): string {
   return `Usage:
-  pnpm doochy:backup [--out <file>]
+  pnpm doochy:backup [--out <file>] [--keep <count>]
   pnpm doochy:restore <file> --merge
   pnpm doochy:restore <file> --replace --yes
 
 Backup:
   Writes an Extended JSON snapshot of every non-system Mongo collection.
   Defaults to backups/doochy-<timestamp>.json.
+  --keep <count>  Keep this many timestamped snapshots (default 14 or
+                   BACKUP_KEEP). Set BACKUP_DIR to use another directory.
 
 Restore:
   --merge    Overwrite documents with matching _id and keep everything else.
@@ -51,8 +56,17 @@ Restore:
              This is destructive and additionally requires --yes.`;
 }
 
+function parseKeep(value: string | undefined): number {
+  if (!value) throw new Error("--keep needs a number");
+  const keep = Number(value);
+  if (!Number.isInteger(keep) || keep < 1 || keep > 365) {
+    throw new Error("--keep must be a whole number between 1 and 365");
+  }
+  return keep;
+}
+
 function parseBackupArgs(args: string[]): BackupOptions {
-  const options: BackupOptions = { out: null, help: false };
+  const options: BackupOptions = { out: null, keep: null, help: false };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--help" || arg === "-h") options.help = true;
@@ -60,6 +74,8 @@ function parseBackupArgs(args: string[]): BackupOptions {
       const value = args[++index];
       if (!value) throw new Error("--out needs a file path");
       options.out = value;
+    } else if (arg === "--keep") {
+      options.keep = parseKeep(args[++index]);
     } else {
       throw new Error(`unknown option: ${arg}`);
     }
@@ -95,6 +111,13 @@ async function runBackup(options: BackupOptions): Promise<number> {
   const stat = await fs.stat(filePath);
   console.log(
     `Wrote ${filePath} (${collections} collections, ${documents} documents, ${stat.size} bytes).`
+  );
+  const keep = options.keep ?? backupKeep();
+  const removed = await pruneBackups(keep);
+  console.log(
+    removed.length
+      ? `Retention: kept ${keep} timestamped snapshots and removed ${removed.length} old one(s).`
+      : `Retention: keeping up to ${keep} timestamped snapshots.`
   );
   console.log("Keep this file private: it contains account hashes and encrypted secrets.");
   return 0;

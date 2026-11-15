@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 import mongoose from "mongoose";
@@ -6,9 +8,13 @@ import mongoose from "mongoose";
 import {
   BackupError,
   applyBackup,
+  backupKeep,
+  backupStatus,
   collectBackup,
   defaultBackupPath,
+  listBackupSnapshots,
   parseBackup,
+  pruneBackups,
   serializeBackup,
   validateBackup,
   type BackupCollection,
@@ -142,6 +148,70 @@ describe("backup snapshot", () => {
       defaultBackupPath(new Date("2026-11-13T10:11:12.345Z")),
       path.join("backups", "doochy-2026-11-13T10-11-12-345Z.json")
     );
+  });
+});
+
+describe("backup retention", () => {
+  test("reads BACKUP_KEEP with safe defaults", () => {
+    assert.equal(backupKeep({}), 14);
+    assert.equal(backupKeep({ BACKUP_KEEP: "3" }), 3);
+    assert.equal(backupKeep({ BACKUP_KEEP: "0" }), 14);
+    assert.equal(backupKeep({ BACKUP_KEEP: "many" }), 14);
+  });
+
+  test("lists timestamped snapshots only and prunes the oldest", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "doochy-backup-"));
+    try {
+      const names = [
+        "doochy-2026-11-01T10-00-00-000Z.json",
+        "doochy-2026-11-02T10-00-00-000Z.json",
+        "doochy-2026-11-03T10-00-00-000Z.json",
+      ];
+      for (const [index, name] of names.entries()) {
+        const file = path.join(dir, name);
+        await fs.writeFile(file, "{}");
+        const when = new Date(`2026-11-0${index + 1}T10:00:00.000Z`);
+        await fs.utimes(file, when, when);
+      }
+      const custom = path.join(dir, "doochy-before-upgrade.json");
+      await fs.writeFile(custom, "{}");
+
+      const snapshots = await listBackupSnapshots(dir, new Date("2026-11-04T10:00:00.000Z"));
+      assert.deepEqual(
+        snapshots.map((snapshot) => snapshot.fileName),
+        [...names].reverse()
+      );
+
+      const removed = await pruneBackups(2, dir);
+      assert.deepEqual(removed, [path.join(dir, names[0])]);
+      assert.equal((await listBackupSnapshots(dir)).length, 2);
+      await assert.doesNotReject(fs.stat(custom));
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("marks old or missing backups as stale", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "doochy-backup-"));
+    try {
+      const missing = await backupStatus(new Date("2026-11-15T10:00:00.000Z"), dir, 7);
+      assert.equal(missing.latestAt, null);
+      assert.equal(missing.fresh, false);
+
+      const file = path.join(dir, "doochy-2026-11-01T10-00-00-000Z.json");
+      await fs.writeFile(file, "{}");
+      const when = new Date("2026-11-01T10:00:00.000Z");
+      await fs.utimes(file, when, when);
+
+      const old = await backupStatus(new Date("2026-11-15T10:00:00.000Z"), dir, 7);
+      assert.equal(old.fresh, false);
+      assert.equal(old.count, 1);
+
+      const fresh = await backupStatus(new Date("2026-11-03T10:00:00.000Z"), dir, 7);
+      assert.equal(fresh.fresh, true);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

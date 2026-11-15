@@ -31,6 +31,7 @@ import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
 import { getSiteSettings } from "./settings/store";
 import { legalAcceptanceRequired, legalAcceptanceSatisfied } from "./legal";
+import { exportUserData, userDataExportFilename } from "./userDataExport";
 import { registrationDecision } from "./registrationPolicy";
 import { maintenanceGate, marketGate, moduleGate } from "./settings/access";
 import { startBreakoutScheduler } from "./market/breakoutRunner";
@@ -218,6 +219,23 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? "failed" });
+  }
+});
+
+app.get("/api/me/export", authRequired, async (req: AuthedRequest, res: Response) => {
+  try {
+    const data = await exportUserData(req.userId!);
+    if (!data) {
+      res.status(401).json({ error: "user no longer exists" });
+      return;
+    }
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${userDataExportFilename(data.user.username)}"`
+    );
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "failed to export account data" });
   }
 });
 

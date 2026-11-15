@@ -40,6 +40,7 @@ This is read-only. It checks Node, `.env`, secrets, MongoDB, the admin account, 
 
 ```bash
 pnpm doochy:backup
+pnpm doochy:backup --keep 30
 pnpm doochy:backup --out /secure/doochy-before-upgrade.json
 pnpm doochy:restore /secure/doochy-before-upgrade.json --merge
 pnpm doochy:restore /secure/doochy-before-upgrade.json --replace --yes
@@ -48,6 +49,12 @@ pnpm doochy:restore /secure/doochy-before-upgrade.json --replace --yes
 Backups are Extended JSON snapshots of every non-system MongoDB collection. They contain password hashes and encrypted integration secrets, so keep them private and store `.env` with them. Restoring needs the same `INTEGRATIONS_ENCRYPTION_KEY` to read stored integration secrets.
 
 `--merge` overwrites documents with matching `_id` values and keeps everything else. `--replace` deletes each collection present in the backup first; it also requires `--yes`.
+
+`pnpm doochy:backup` keeps the 14 newest timestamped snapshots in `backups/` by default. Change that with `--keep <count>` or `BACKUP_KEEP`, and change the directory with `BACKUP_DIR`. Retention only removes files named `doochy-<timestamp>.json`; custom `--out` files are left alone. The admin setup checklist asks for a snapshot less than 7 days old.
+
+Old snapshots keep data that was later deleted from the database. Match retention to your own policy, then remove expired snapshots securely. On POSIX use `shred -u <file>` when the filesystem supports it; on SSDs, cloud volumes and snapshots, full-disk or volume encryption is the reliable protection because overwriting a file cannot guarantee every stored copy is gone.
+
+Signed-in users can download their own JSON export under **Settings → Your data**. Admins can download the same export from the user row in **Admin**. Exports include profile data, cTrader account labels, alerts, journal, paper trades, briefings and the Telegram link; password hashes and integration secrets are excluded.
 
 ## Common commands
 
@@ -72,7 +79,7 @@ pnpm admin:revoke <username>    # demote an admin
 2. Set branding, registration policy, legal links, and the risk disclaimer. When a Terms or Privacy URL is configured, new registrations and invite acceptances require agreement, and a cookie/storage notice appears site-wide.
 3. Configure SMTP, cTrader and Telegram under **Admin → Integrations**. SMTP is required for password reset, email verification and admin invites.
 4. Run `pnpm doochy:check` and confirm the setup checklist has no required todos.
-5. Take a `pnpm doochy:backup` snapshot before handing over the server.
+5. Take a `pnpm doochy:backup` snapshot before handing over the server. Keep backups within the 7-day freshness window the admin checklist expects.
 
 ### White-label checklist
 

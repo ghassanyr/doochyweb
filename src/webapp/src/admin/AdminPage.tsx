@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Circle, GripVertical, KeyRound, Mail, Palette, Plug, Trash2, UserPlus, X } from "lucide-react";
+import { CheckCircle2, Circle, Download, GripVertical, KeyRound, Mail, Palette, Plug, Trash2, UserPlus, X } from "lucide-react";
 
 import { adminApi, marketApi, type AdminSetupCheck, type AdminUser, type UserRole } from "../api";
 import { ConfirmModal } from "../components/Modal";
@@ -227,6 +227,17 @@ export default function AdminPage({
       await loadChecks();
     } catch (err) {
       setUsersError(err instanceof Error ? err.message : "Failed to update the user");
+    }
+  }
+
+  async function exportUser(user: AdminUser) {
+    setUsersError(null);
+    setUsersNotice(null);
+    try {
+      await adminApi.exportUser(user.id);
+      setUsersNotice(`Downloaded ${user.username}'s data.`);
+    } catch (err) {
+      setUsersError(err instanceof Error ? err.message : "Failed to export the user's data");
     }
   }
 
@@ -518,6 +529,15 @@ export default function AdminPage({
                         Require approval
                       </Button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void exportUser(u)}
+                      aria-label={`Export ${u.username} data`}
+                      title={`Export ${u.username} data`}
+                      className="rounded-md p-1.5 text-fg-muted transition duration-150 hover:bg-surface-hover hover:text-fg"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
