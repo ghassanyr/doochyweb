@@ -4,20 +4,20 @@ import {
   ArrowLeft,
   Check,
   Copy,
+  ExternalLink,
   FlaskConical,
-  KeyRound,
   Mail,
   Plug,
+  RefreshCw,
   Save,
   Send,
   Sparkles,
-  Trash2,
 } from "lucide-react";
 
 import {
   adminApi,
-  type AdminApiKey,
   type AdminIntegrationsResponse,
+  type AiProviderOption,
   type CallbackCandidates,
   type IntegrationFieldState,
   type IntegrationPatch,
@@ -96,6 +96,7 @@ function Field({
   draft,
   baseline,
   disabled,
+  suggestions,
   onChange,
   onClear,
 }: {
@@ -103,6 +104,7 @@ function Field({
   draft: Draft;
   baseline: Record<string, string>;
   disabled: boolean;
+  suggestions?: readonly string[];
   onChange: (value: string) => void;
   onClear: () => void;
 }) {
@@ -171,6 +173,7 @@ function Field({
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
+          list={suggestions && suggestions.length > 0 ? "ai-model-options" : undefined}
           placeholder={
             field.kind === "secret" && field.configured && !cleared
               ? "Saved. Leave empty to keep it"
@@ -190,6 +193,13 @@ function Field({
           </Button>
         )}
       </div>
+      {suggestions && suggestions.length > 0 && (
+        <datalist id="ai-model-options">
+          {suggestions.map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
+      )}
       {field.hint && <span className="block text-[11px] text-fg-faint">{field.hint}</span>}
       {field.error && <span className="block text-[11px] text-danger">{field.error}</span>}
     </label>
@@ -227,13 +237,362 @@ function CallbackRow({ label, value }: { label: string; value: string | null }) 
   );
 }
 
-const AI_PROVIDER_BASE_URLS: Record<string, string> = {
-  openai: "https://api.openai.com/v1",
-  openrouter: "https://openrouter.ai/api/v1",
-  groq: "https://api.groq.com/openai/v1",
-  ollama: "http://localhost:11434/v1",
-  nvidia: "https://integrate.api.nvidia.com/v1",
-};
+function AiProviderCard({
+  state,
+  draft,
+  baseline,
+  encryptionAvailable,
+  aiProviders,
+  testResult,
+  onDraftChange,
+  onSave,
+  onTest,
+}: {
+  state: IntegrationState;
+  draft: Draft;
+  baseline: Record<string, string>;
+  encryptionAvailable: boolean;
+  aiProviders: AiProviderOption[];
+  testResult: IntegrationTestResult | null;
+  onDraftChange: (draft: Draft) => void;
+  onSave: () => Promise<void>;
+  onTest: () => Promise<void>;
+}) {
+  const patch = buildPatch(state, draft, baseline);
+  const dirty = isDirty(patch);
+  const providerField = state.fields.find((field) => field.key === "provider");
+  const keyField = state.fields.find((field) => field.key === "apiKey");
+  const modelField = state.fields.find((field) => field.key === "model");
+  const baseUrlField = state.fields.find((field) => field.key === "baseUrl");
+  const currentProvider = String(draft.values.provider || providerField?.value || "openai");
+  const info = aiProviders.find((entry) => entry.value === currentProvider) ?? null;
+  const isCustom = currentProvider === "custom";
+  const keyRequired = info?.keyRequired ?? true;
+  const [editEndpoint, setEditEndpoint] = useState(false);
+  const [loadedModels, setLoadedModels] = useState<string[] | null>(null);
+  const [modelNotice, setModelNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const baseUrlValue = (draft.values.baseUrl ?? "").trim();
+  const customEndpoint =
+    isCustom ||
+    editEndpoint ||
+    (!!info && baseUrlValue !== "" && baseUrlValue !== info.baseUrl);
+  const suggestions = loadedModels ?? info?.models ?? [];
+  const statusLabel = !state.ready
+    ? "Needs setup"
+    : state.lastTestOk === true
+      ? state.lastTestDraft
+        ? "Tested draft"
+        : "Connected"
+      : "Ready to test";
+  const statusTone = !state.ready
+    ? "muted"
+    : state.lastTestOk === true
+      ? "success"
+      : "accent";
+
+  function chooseProvider(value: string) {
+    const nextInfo = aiProviders.find((entry) => entry.value === value) ?? null;
+    const currentModel = (draft.values.model ?? "").trim();
+    const stillDefault = !currentModel || currentModel === info?.defaultModel;
+    const nextModel = stillDefault ? nextInfo?.defaultModel ?? currentModel : currentModel;
+    onDraftChange({
+      ...draft,
+      cleared: draft.cleared.filter((key) => key !== "baseUrl" && key !== "model"),
+      values: {
+        ...draft.values,
+        provider: value,
+        baseUrl: value === "custom" ? "" : nextInfo?.baseUrl ?? "",
+        model: nextModel,
+      },
+    });
+    setEditEndpoint(false);
+    setLoadedModels(null);
+    setModelNotice(null);
+  }
+
+  async function loadModels() {
+    setModelNotice(null);
+    try {
+      const result = await adminApi.aiModels(patch);
+      if (result.ok) setLoadedModels(result.models);
+      setModelNotice({ ok: result.ok, message: result.message });
+    } catch (err) {
+      setModelNotice({
+        ok: false,
+        message: err instanceof Error ? err.message : "Could not load models.",
+      });
+    }
+  }
+
+  function usePresetEndpoint() {
+    onDraftChange({
+      ...draft,
+      cleared: draft.cleared.filter((key) => key !== "baseUrl"),
+      values: { ...draft.values, baseUrl: info?.baseUrl ?? "" },
+    });
+    setEditEndpoint(false);
+  }
+
+  return (
+    <Card className="space-y-4 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-fg">
+              {state.label}
+              <Badge tone={statusTone}>{statusLabel}</Badge>
+            </h2>
+            <p className="mt-0.5 max-w-xl text-xs text-fg-muted">{state.description}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<FlaskConical className="h-3.5 w-3.5" />}
+            onClickAsync={onTest}
+          >
+            Test connection
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            icon={<Save className="h-3.5 w-3.5" />}
+            onClickAsync={onSave}
+            disabled={!dirty || !encryptionAvailable}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-hairline bg-soft/60 p-3 text-[11px] leading-relaxed text-fg-muted">
+        Pick a provider, paste its key, then test the connection and save. Testing uses the
+        fields above immediately, even before they are saved, and catches key or model problems
+        before the next briefing.
+      </div>
+
+      {state.errors.length > 0 && (
+        <Flash tone="danger">
+          <span className="inline-flex items-start gap-1.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{state.errors.join(" ")}</span>
+          </span>
+        </Flash>
+      )}
+      {state.warnings.length > 0 && (
+        <Flash tone="danger">
+          <span className="inline-flex items-start gap-1.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{state.warnings.join(" ")}</span>
+          </span>
+        </Flash>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {providerField && (
+          <Field
+            field={providerField}
+            draft={draft}
+            baseline={baseline}
+            disabled={false}
+            onChange={chooseProvider}
+            onClear={() => undefined}
+          />
+        )}
+        {keyField && (
+          <div className="space-y-1.5">
+            <Field
+              field={{
+                ...keyField,
+                required: keyRequired,
+                hint: info?.keyHint ?? keyField.hint,
+              }}
+              draft={draft}
+              baseline={baseline}
+              disabled={!encryptionAvailable}
+              onChange={(value) =>
+                onDraftChange({
+                  ...draft,
+                  cleared: draft.cleared.filter((key) => key !== "apiKey"),
+                  values: { ...draft.values, apiKey: value },
+                })
+              }
+              onClear={() =>
+                onDraftChange({
+                  ...draft,
+                  cleared: [...draft.cleared.filter((key) => key !== "apiKey"), "apiKey"],
+                  values: { ...draft.values, apiKey: "" },
+                })
+              }
+            />
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              {info?.keyUrl ? (
+                <a
+                  href={info.keyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-accent underline-offset-2 hover:underline"
+                >
+                  Get a {info.label} key
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : isCustom ? (
+                <span className="text-fg-faint">Paste the key issued by your provider.</span>
+              ) : (
+                <span className="text-fg-faint">No API key is needed for this provider.</span>
+              )}
+              {info?.docsUrl && (
+                <a
+                  href={info.docsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-fg-muted underline-offset-2 hover:underline"
+                >
+                  Model docs
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {modelField && (
+            <Field
+              field={{
+                ...modelField,
+                placeholder: info?.defaultModel ?? modelField.placeholder ?? suggestions[0] ?? "",
+                hint: info
+                  ? `Recommended: ${info.defaultModel}. Leave empty to use it.`
+                  : modelField.hint,
+              }}
+              draft={draft}
+              baseline={baseline}
+              disabled={false}
+              suggestions={suggestions}
+              onChange={(value) =>
+                onDraftChange({
+                  ...draft,
+                  cleared: draft.cleared.filter((key) => key !== "model"),
+                  values: { ...draft.values, model: value },
+                })
+              }
+              onClear={() => undefined}
+            />
+          )}
+          <div className="flex flex-wrap items-center gap-2 self-end pb-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<RefreshCw className="h-3.5 w-3.5" />}
+              onClickAsync={loadModels}
+              disabled={
+                (keyRequired && !(draft.values.apiKey ?? "").trim() && !keyField?.configured) ||
+                (isCustom && !baseUrlValue)
+              }
+            >
+              Load models
+            </Button>
+            <span className="text-[11px] text-fg-faint">
+              Uses the saved key or the unsaved key above.
+            </span>
+          </div>
+        </div>
+        {modelNotice && (
+          <p className={`text-[11px] ${modelNotice.ok ? "text-success" : "text-danger"}`}>
+            {modelNotice.message}
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        {baseUrlField && customEndpoint ? (
+          <>
+            <Field
+              field={{
+                ...baseUrlField,
+                required: isCustom,
+                hint: isCustom
+                  ? "Paste the chat-completions base URL from your provider's docs, usually ending in /v1."
+                  : "Override the preset endpoint only if the provider requires a different URL.",
+              }}
+              draft={draft}
+              baseline={baseline}
+              disabled={false}
+              onChange={(value) =>
+                onDraftChange({
+                  ...draft,
+                  cleared: draft.cleared.filter((key) => key !== "baseUrl"),
+                  values: { ...draft.values, baseUrl: value },
+                })
+              }
+              onClear={() => undefined}
+            />
+            {!isCustom && info && (
+              <button
+                type="button"
+                className="text-[11px] font-medium text-accent underline-offset-2 hover:underline"
+                onClick={usePresetEndpoint}
+              >
+                Use the preset endpoint
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-hairline bg-soft px-3 py-2 text-[11px]">
+            <span className="font-medium text-fg-muted">Endpoint</span>
+            <code className="min-w-0 flex-1 break-all font-mono text-fg">
+              {info?.baseUrl ?? baseUrlValue}
+            </code>
+            {!isCustom && info && (
+              <button
+                type="button"
+                className="font-medium text-accent underline-offset-2 hover:underline"
+                onClick={() => setEditEndpoint(true)}
+              >
+                Override endpoint
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {(testResult || state.lastTestAt) && (
+        <div className="rounded-lg border border-hairline bg-soft px-3 py-2 text-[11px] leading-relaxed">
+          {testResult ? (
+            <span className={testResult.ok ? "text-success" : "text-danger"}>
+              {testResult.ok ? "Connection passed: " : "Connection failed: "}
+              {testResult.message}
+            </span>
+          ) : (
+            <span className={state.lastTestOk ? "text-success" : "text-danger"}>
+              Last check {state.lastTestOk ? "passed" : "failed"}: {state.lastTestMessage}
+            </span>
+          )}
+          {state.lastTestAt && (
+            <span className="ml-1 text-fg-faint">
+              ({formatLocalDateTime(state.lastTestAt)}
+              {state.lastTestDraft ? ", unsaved draft" : ""})
+            </span>
+          )}
+        </div>
+      )}
+
+      {state.updatedAt && (
+        <p className="text-[11px] text-fg-faint">
+          Last saved {formatLocalDateTime(state.updatedAt)}
+          {state.updatedBy ? ` by ${state.updatedBy}` : ""}.
+        </p>
+      )}
+    </Card>
+  );
+}
 
 function ProviderCard({
   state,
@@ -260,25 +619,13 @@ function ProviderCard({
   const dirty = isDirty(patch);
   const provider = state.provider;
   const Icon =
-    provider === "ctrader" ? Plug : provider === "smtp" ? Mail : provider === "ai" ? Sparkles : Send;
-  const aiProviderValue = provider === "ai" ? draft.values.provider || "openai" : "";
-  const aiIsCustom = provider === "ai" && aiProviderValue === "custom";
-  const aiPresetBaseUrl = AI_PROVIDER_BASE_URLS[aiProviderValue];
-  const [editAiEndpoint, setEditAiEndpoint] = useState(false);
+    provider === "ctrader" ? Plug : provider === "smtp" ? Mail : Send;
 
   function updateValue(key: string, value: string) {
-    const nextValues = { ...draft.values, [key]: value };
-    let nextCleared = draft.cleared.filter((entry) => entry !== key);
-    if (provider === "ai" && key === "provider") {
-      const preset = AI_PROVIDER_BASE_URLS[value];
-      nextValues.baseUrl = value === "custom" ? "" : preset ?? draft.values.baseUrl ?? "";
-      nextCleared = nextCleared.filter((entry) => entry !== "baseUrl");
-      setEditAiEndpoint(false);
-    }
     onDraftChange({
       ...draft,
-      cleared: nextCleared,
-      values: nextValues,
+      cleared: draft.cleared.filter((entry) => entry !== key),
+      values: { ...draft.values, [key]: value },
     });
   }
 
@@ -396,63 +743,18 @@ function ProviderCard({
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {state.fields.map((field) => {
-          const isAiBaseUrl = provider === "ai" && field.key === "baseUrl";
-          const baseUrlLocked = isAiBaseUrl && !aiIsCustom && !editAiEndpoint;
-          const renderedField: IntegrationFieldState =
-            isAiBaseUrl && aiIsCustom
-              ? {
-                  ...field,
-                  required: true,
-                  hint:
-                    "Required for Custom. Paste the chat-completions base URL from your provider’s API docs (usually ending in /v1). Requests are sent to {base URL}/chat/completions.",
-                }
-              : isAiBaseUrl && !aiIsCustom
-                ? {
-                    ...field,
-                    hint: `Filled automatically for ${aiProviderValue === "nvidia" ? "NVIDIA" : "this provider"} (${aiPresetBaseUrl || draft.values.baseUrl || "preset endpoint"}). Use “Change endpoint” only if you need a different compatible URL.`,
-                  }
-                : field;
-          const fieldDisabled =
-            (!encryptionAvailable && field.kind === "secret") || baseUrlLocked;
-
-          return (
-            <div key={field.key} className="space-y-1">
-              <Field
-                field={renderedField}
-                draft={draft}
-                baseline={baseline}
-                disabled={fieldDisabled}
-                onChange={(value) => updateValue(field.key, value)}
-                onClear={() => toggleClear(field.key)}
-              />
-              {isAiBaseUrl && !aiIsCustom && (
-                <button
-                  type="button"
-                  className="text-[11px] font-medium text-accent underline-offset-2 hover:underline disabled:opacity-50"
-                  onClick={() => {
-                    if (editAiEndpoint) {
-                      onDraftChange({
-                        ...draft,
-                        values: {
-                          ...draft.values,
-                          baseUrl: aiPresetBaseUrl || draft.values.baseUrl || "",
-                        },
-                      });
-                      setEditAiEndpoint(false);
-                    } else {
-                      setEditAiEndpoint(true);
-                    }
-                  }}
-                >
-                  {editAiEndpoint
-                    ? "Use preset endpoint"
-                    : "Advanced: change endpoint"}
-                </button>
-              )}
-            </div>
-          );
-        })}
+        {state.fields.map((field) => (
+          <div key={field.key} className="space-y-1">
+            <Field
+              field={field}
+              draft={draft}
+              baseline={baseline}
+              disabled={!encryptionAvailable && field.kind === "secret"}
+              onChange={(value) => updateValue(field.key, value)}
+              onClear={() => toggleClear(field.key)}
+            />
+          </div>
+        ))}
       </div>
 
       {(testResult || state.lastTestAt) && (
@@ -507,10 +809,6 @@ export default function AdminIntegrationsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<IntegrationProvider | null>(null);
-  const [apiKeys, setApiKeys] = useState<AdminApiKey[]>([]);
-  const [keyLabel, setKeyLabel] = useState("");
-  const [newKey, setNewKey] = useState<string | null>(null);
-  const [keyBusy, setKeyBusy] = useState(false);
 
   function applyIntegrations(integrations: IntegrationState[]) {
     const nextDrafts: Drafts = {};
@@ -543,49 +841,6 @@ export default function AdminIntegrationsPage({
       alive = false;
     };
   }, []);
-
-  useEffect(() => {
-    let alive = true;
-    adminApi
-      .apiKeys()
-      .then((response) => {
-        if (alive) setApiKeys(response.keys);
-      })
-      .catch(() => {
-        // The integrations page still works if key listing fails.
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  async function createKey() {
-    setKeyBusy(true);
-    setError(null);
-    try {
-      const created = await adminApi.createApiKey(keyLabel);
-      setApiKeys((current) => [created.record, ...current]);
-      setNewKey(created.key);
-      setKeyLabel("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create API key");
-    } finally {
-      setKeyBusy(false);
-    }
-  }
-
-  async function revokeKey(id: string) {
-    setKeyBusy(true);
-    setError(null);
-    try {
-      await adminApi.revokeApiKey(id);
-      setApiKeys((current) => current.filter((key) => key.id !== id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to revoke API key");
-    } finally {
-      setKeyBusy(false);
-    }
-  }
 
   function updateIntegrationState(integration: IntegrationState) {
     setData((current) => {
@@ -715,6 +970,24 @@ export default function AdminIntegrationsPage({
           const draft = drafts[state.provider];
           const baseline = baselines[state.provider];
           if (!draft || !baseline) return null;
+          if (state.provider === "ai") {
+            return (
+              <AiProviderCard
+                key={state.provider}
+                state={state}
+                draft={draft}
+                baseline={baseline}
+                encryptionAvailable={data.encryptionAvailable}
+                aiProviders={data.aiProviders}
+                testResult={testResults[state.provider] ?? null}
+                onDraftChange={(next) =>
+                  setDrafts((current) => ({ ...current, [state.provider]: next }))
+                }
+                onSave={() => save(state.provider)}
+                onTest={() => test(state.provider)}
+              />
+            );
+          }
           return (
             <ProviderCard
               key={state.provider}
@@ -732,77 +1005,6 @@ export default function AdminIntegrationsPage({
             />
           );
         })}
-
-        <Card className="space-y-4 p-4">
-          <div className="flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-accent" />
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight text-fg">Admin API keys</h2>
-              <p className="text-xs text-fg-muted">
-                Use a key in the <code className="font-mono">X-API-Key</code> header for
-                automation. Keys have full admin access, so keep them secret.
-              </p>
-            </div>
-          </div>
-          {newKey && (
-            <Flash tone="success">
-              <div className="space-y-1">
-                <p>Copy this key now. It will not be shown again.</p>
-                <code className="block break-all rounded-md bg-canvas px-2 py-1 font-mono text-[11px]">
-                  {newKey}
-                </code>
-              </div>
-            </Flash>
-          )}
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="min-w-[180px] flex-1 space-y-1">
-              <span className="text-xs font-medium text-fg-muted">Label</span>
-              <input
-                className={inputCls}
-                value={keyLabel}
-                onChange={(event) => setKeyLabel(event.target.value)}
-                placeholder="Reporting job"
-                maxLength={80}
-              />
-            </label>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!keyLabel.trim() || keyBusy}
-              onClickAsync={createKey}
-            >
-              Create key
-            </Button>
-          </div>
-          {apiKeys.length > 0 ? (
-            <div className="divide-y divide-hairline">
-              {apiKeys.map((key) => (
-                <div key={key.id} className="flex items-center gap-2 py-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-fg">{key.label}</div>
-                    <div className="text-[11px] text-fg-faint">
-                      <code className="font-mono">{key.prefix}…</code> · created{" "}
-                      {formatLocalDateTime(key.createdAt)}
-                      {key.lastUsedAt ? ` · last used ${formatLocalDateTime(key.lastUsedAt)}` : ""}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Trash2 className="h-3.5 w-3.5" />}
-                    disabled={keyBusy}
-                    onClick={() => void revokeKey(key.id)}
-                    aria-label={`Revoke ${key.label}`}
-                  >
-                    Revoke
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-fg-faint">No keys yet.</p>
-          )}
-        </Card>
 
         <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
           Saving here overrides the server environment. Clear a field to fall back to it again.

@@ -13,6 +13,7 @@ import {
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_MODEL,
   aiConfigFromValues,
+  listAiModels,
   normalizeBaseUrl,
 } from "../src/server/ai/client";
 import type { Candle } from "../src/server/market/types";
@@ -235,5 +236,57 @@ describe("aiConfigFromValues", () => {
   test("resolves the NVIDIA preset base URL", () => {
     const config = aiConfigFromValues({ apiKey: "nv-test", provider: "nvidia" });
     assert.equal(config?.baseUrl, "https://integrate.api.nvidia.com/v1");
+  });
+
+  test("uses provider-specific default models", () => {
+    const groq = aiConfigFromValues({ apiKey: "gsk-test", provider: "groq" });
+    assert.equal(groq?.model, "llama-3.1-8b-instant");
+    const openrouter = aiConfigFromValues({ apiKey: "sk-or", provider: "openrouter" });
+    assert.equal(openrouter?.model, "openai/gpt-4o-mini");
+  });
+
+  test("allows Ollama without an API key", () => {
+    const config = aiConfigFromValues({ provider: "ollama" });
+    assert.equal(config?.apiKey, "");
+    assert.equal(config?.baseUrl, "http://localhost:11434/v1");
+    assert.equal(config?.model, "llama3.2");
+  });
+
+  test("requires a base URL for a custom provider", () => {
+    assert.equal(aiConfigFromValues({ apiKey: "sk-test", provider: "custom" }), null);
+  });
+});
+
+describe("listAiModels", () => {
+  test("loads, de-duplicates and sorts advertised models", async () => {
+    const original = globalThis.fetch;
+    (globalThis as any).fetch = async () =>
+      new Response(JSON.stringify({ data: [{ id: "b-model" }, { id: "a-model" }, { id: "b-model" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    try {
+      const result = await listAiModels({ provider: "openai", apiKey: "sk-test" });
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.models, ["a-model", "b-model"]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("does not call the network without a required key", async () => {
+    const original = globalThis.fetch;
+    let called = false;
+    (globalThis as any).fetch = async () => {
+      called = true;
+      return new Response("{}", { status: 200 });
+    };
+    try {
+      const result = await listAiModels({ provider: "openai" });
+      assert.equal(result.ok, false);
+      assert.equal(called, false);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

@@ -7,10 +7,10 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 
 ## Current state
 
-- P0 is complete. The setup checklist now covers backups and the generic AI provider, and backups have retention, status, per-user export and secure-deletion guidance.
+- P0 is complete. The setup checklist now covers backups and guided AI provider setup, and backups have retention, status, per-user export and secure-deletion guidance.
 - P1 is complete: metadata, content copy, defaults, locale/formats, roles, templates and theme extras are implemented.
-- P2 is complete: PWA metadata, social links, webhooks, API keys and deployment version information are implemented.
-- Last verified: `pnpm typecheck`, `pnpm test` with 820 tests, and `pnpm build` all pass.
+- P2 is complete: PWA metadata, social links, webhooks and deployment version information are implemented.
+- Last verified: `pnpm typecheck`, `pnpm test` with 825 tests, and `pnpm build` all pass.
 
 ## P0: needed for a sellable self-hosted product
 
@@ -20,7 +20,7 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 | 2 | Canonical site URL | Done | One saved site origin drives callbacks, bot links, share links and account email links. |
 | 3 | Email/SMTP, reset, verification, invites | Done | SMTP is admin-configurable; password reset, email verification and admin invites are implemented. |
 | 4 | Legal/risk content | Done | Built-in legal pages, admin links, risk disclaimer, cookie notice and acceptance are implemented. |
-| 5 | Buyer setup checklist | Done | The checklist covers admin, database, site URL, encryption, cTrader, Telegram, SMTP, legal, market data, backups and the generic AI provider. |
+| 5 | Buyer setup checklist | Done | The checklist covers admin, database, site URL, encryption, cTrader, Telegram, SMTP, legal, market data, backups and guided AI provider setup. |
 | 6 | White-label runtime strings | Done | Branding now drives titles, meta, favicons, logos, email and Telegram copy. Remaining Doochy references are internal defaults, comments and setup CLI text. |
 | 7 | Admin user management | Done | List, create, invite, reset password, promote/demote, approve and block future sign-ins are present. "Block" is represented by moving a user to pending/approval. |
 | 8 | Backups/export/retention | Done | Full Mongo backup and restore, timestamped snapshot retention with configurable count and directory, 7-day freshness status in the admin checklist, per-user JSON export from Settings and Admin, and documented secure-deletion guidance. |
@@ -44,7 +44,6 @@ All done.
 - PWA manifest, install icons, theme/background colours and display mode.
 - Social links beyond the single website URL.
 - Signed outbound webhooks for signal and alert events.
-- Admin API keys for automation, with one-time secret display and revocation.
 - Deployment version and runtime information in the admin panel.
 
 ## cTrader fresh-buyer audit

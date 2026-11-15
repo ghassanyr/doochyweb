@@ -15,18 +15,96 @@ import { resolveIntegration } from "../integrations/store";
 export const DEFAULT_AI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_AI_MODEL = "gpt-4o-mini";
 
+export interface AiProviderPresetInfo {
+  label: string;
+  baseUrl: string;
+  keyRequired: boolean;
+  keyUrl: string | null;
+  keyHint: string;
+  docsUrl: string | null;
+  models: readonly string[];
+  defaultModel: string;
+}
+
 export const AI_PROVIDER_PRESETS = {
-  openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
-  openrouter: { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
-  groq: { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
-  nvidia: { label: "NVIDIA", baseUrl: "https://integrate.api.nvidia.com/v1" },
-  ollama: { label: "Ollama (local)", baseUrl: "http://localhost:11434/v1" },
-} as const;
+  openai: {
+    label: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    keyRequired: true,
+    keyUrl: "https://platform.openai.com/api-keys",
+    keyHint: "Create a project API key in the OpenAI dashboard.",
+    docsUrl: "https://platform.openai.com/docs/models",
+    models: ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o"],
+    defaultModel: "gpt-4o-mini",
+  },
+  openrouter: {
+    label: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    keyRequired: true,
+    keyUrl: "https://openrouter.ai/keys",
+    keyHint: "Create a key in OpenRouter. Model names usually include a vendor prefix.",
+    docsUrl: "https://openrouter.ai/models",
+    models: ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "google/gemini-2.0-flash-001"],
+    defaultModel: "openai/gpt-4o-mini",
+  },
+  groq: {
+    label: "Groq",
+    baseUrl: "https://api.groq.com/openai/v1",
+    keyRequired: true,
+    keyUrl: "https://console.groq.com/keys",
+    keyHint: "Create an API key in the Groq console.",
+    docsUrl: "https://console.groq.com/docs/models",
+    models: ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
+    defaultModel: "llama-3.1-8b-instant",
+  },
+  nvidia: {
+    label: "NVIDIA",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
+    keyRequired: true,
+    keyUrl: "https://build.nvidia.com/",
+    keyHint: "Create an API key for the model you want to use on build.nvidia.com.",
+    docsUrl: "https://build.nvidia.com/",
+    models: ["meta/llama-3.1-8b-instruct", "meta/llama-3.1-70b-instruct"],
+    defaultModel: "meta/llama-3.1-8b-instruct",
+  },
+  ollama: {
+    label: "Ollama (local)",
+    baseUrl: "http://localhost:11434/v1",
+    keyRequired: false,
+    keyUrl: null,
+    keyHint: "Ollama runs locally and does not need an API key.",
+    docsUrl: "https://ollama.com/download",
+    models: ["llama3.2", "qwen2.5", "mistral"],
+    defaultModel: "llama3.2",
+  },
+} as const satisfies Record<string, AiProviderPresetInfo>;
 
 export type AiProviderPreset = keyof typeof AI_PROVIDER_PRESETS;
 
+export interface AiProviderOption extends AiProviderPresetInfo {
+  value: AiProviderPreset;
+}
+
+export function aiProviderCatalog(): AiProviderOption[] {
+  return (Object.entries(AI_PROVIDER_PRESETS) as [AiProviderPreset, AiProviderPresetInfo][]).map(
+    ([value, info]) => ({ value, ...info })
+  );
+}
+
 export function isAiProviderPreset(value: unknown): value is AiProviderPreset {
   return typeof value === "string" && value in AI_PROVIDER_PRESETS;
+}
+
+export function aiProviderInfo(value: unknown): AiProviderPresetInfo | null {
+  return isAiProviderPreset(value) ? AI_PROVIDER_PRESETS[value] : null;
+}
+
+export function aiProviderKeyRequired(value: unknown): boolean {
+  return aiProviderInfo(value)?.keyRequired ?? true;
+}
+
+export function aiDefaultModel(value: unknown): string {
+  return aiProviderInfo(value)?.defaultModel ?? DEFAULT_AI_MODEL;
 }
 
 /** Base URL implied by the selected provider, or null for a custom endpoint. */
@@ -76,14 +154,21 @@ export function resolveAiBaseUrl(
   );
 }
 
+export function resolveAiModel(
+  values: Record<string, string | number | boolean>
+): string {
+  return String(values.model ?? "").trim() || aiDefaultModel(values.provider);
+}
+
 /** Build a config from resolved integration values, or null when unconfigured. */
 export function aiConfigFromValues(
   values: Record<string, string | number | boolean>
 ): AiConfig | null {
+  const provider = values.provider ?? "openai";
   const apiKey = String(values.apiKey ?? "").trim();
-  if (!apiKey) return null;
-  const model = String(values.model ?? "").trim() || DEFAULT_AI_MODEL;
-  return { apiKey, baseUrl: resolveAiBaseUrl(values), model };
+  if (!apiKey && aiProviderKeyRequired(provider)) return null;
+  if (String(provider) === "custom" && !normalizeBaseUrl(values.baseUrl)) return null;
+  return { apiKey, baseUrl: resolveAiBaseUrl(values), model: resolveAiModel(values) };
 }
 
 /** Runtime read. Null means the AI provider is not ready yet. */
@@ -120,7 +205,7 @@ export async function aiChat(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
+        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       },
       body: JSON.stringify({
         model: config.model,
@@ -133,8 +218,29 @@ export async function aiChat(
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      const detail = body.trim() ? `: ${body.trim().slice(0, 200)}` : "";
-      throw new AiError(`AI provider returned HTTP ${res.status}${detail}`, res.status);
+      const detail = body.trim() ? ` Detail: ${body.trim().slice(0, 200)}` : "";
+      if (res.status === 401) {
+        throw new AiError("The API key was rejected (HTTP 401). Check the key and try again.", 401);
+      }
+      if (res.status === 403) {
+        throw new AiError(
+          "The provider refused access (HTTP 403). Check the key permissions and model access.",
+          403
+        );
+      }
+      if (res.status === 404) {
+        throw new AiError(
+          `The endpoint or model was not found (HTTP 404). Check the base URL and model name.${detail}`,
+          404
+        );
+      }
+      if (res.status === 429) {
+        throw new AiError("The provider rate-limited the request (HTTP 429). Try again shortly.", 429);
+      }
+      if (res.status === 400) {
+        throw new AiError(`The provider rejected the request (HTTP 400).${detail}`, 400);
+      }
+      throw new AiError(`AI provider returned HTTP ${res.status}.${detail}`, res.status);
     }
 
     const data: any = await res.json().catch(() => null);
@@ -156,13 +262,27 @@ export async function aiChat(
   }
 }
 
+function aiSetupMessage(values: Record<string, string | number | boolean>): string | null {
+  const provider = values.provider ?? "openai";
+  const apiKey = String(values.apiKey ?? "").trim();
+  if (!apiKey && aiProviderKeyRequired(provider)) {
+    return "Add an API key first.";
+  }
+  if (String(provider) === "custom" && !normalizeBaseUrl(values.baseUrl)) {
+    return "Add the chat-completions base URL first.";
+  }
+  return null;
+}
+
 /** Admin "Test" button: one tiny round trip, no secrets in the result. */
 export async function testAi(values: Record<string, string | number | boolean>): Promise<{
   ok: boolean;
   message: string;
 }> {
+  const setupMessage = aiSetupMessage(values);
+  if (setupMessage) return { ok: false, message: setupMessage };
   const config = aiConfigFromValues(values);
-  if (!config) return { ok: false, message: "Add an API key first." };
+  if (!config) return { ok: false, message: "The AI configuration is incomplete." };
 
   try {
     const reply = await aiChat(
@@ -176,5 +296,64 @@ export async function testAi(values: Record<string, string | number | boolean>):
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "AI test failed" };
+  }
+}
+
+export interface AiModelsResult {
+  ok: boolean;
+  models: string[];
+  message: string;
+}
+
+/** Load the model IDs the configured endpoint advertises. */
+export async function listAiModels(
+  values: Record<string, string | number | boolean>
+): Promise<AiModelsResult> {
+  const setupMessage = aiSetupMessage(values);
+  if (setupMessage) return { ok: false, models: [], message: setupMessage };
+  const config = aiConfigFromValues(values);
+  if (!config) {
+    return { ok: false, models: [], message: "The AI configuration is incomplete." };
+  }
+
+  try {
+    const res = await fetch(`${config.baseUrl}/models`, {
+      headers: {
+        Accept: "application/json",
+        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new AiError("The API key was rejected (HTTP 401).", 401);
+      if (res.status === 403) throw new AiError("The provider refused access (HTTP 403).", 403);
+      if (res.status === 404) throw new AiError("The models endpoint was not found (HTTP 404).", 404);
+      if (res.status === 429) throw new AiError("The provider rate-limited the request (HTTP 429).", 429);
+      throw new AiError(`The models endpoint returned HTTP ${res.status}.`, res.status);
+    }
+    const data: any = await res.json().catch(() => null);
+    const rows = Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data?.models)
+        ? data.models
+        : [];
+    const ids = rows
+      .map((row: any) => (typeof row === "string" ? row : row?.id ?? row?.name))
+      .filter((value: unknown): value is string => typeof value === "string" && !!value.trim())
+      .map((value: string) => value.trim());
+    const models = [...new Set<string>(ids)].sort((a, b) => a.localeCompare(b)).slice(0, 200);
+    if (models.length === 0) {
+      return { ok: false, models: [], message: "The provider returned no models. Enter the model name manually." };
+    }
+    return { ok: true, models, message: `Found ${models.length} models.` };
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      return { ok: false, models: [], message: "The provider timed out while loading models." };
+    }
+    return {
+      ok: false,
+      models: [],
+      message: err instanceof Error ? err.message : "Could not load models.",
+    };
   }
 }

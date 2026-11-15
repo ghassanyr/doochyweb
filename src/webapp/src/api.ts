@@ -971,14 +971,6 @@ export interface SiteSettings extends Omit<SiteConfig, "registration"> {
   updatedBy: string | null;
 }
 
-export interface AdminApiKey {
-  id: string;
-  label: string;
-  prefix: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-}
-
 export interface AdminSetupCheck {
   key: string;
   label: string;
@@ -1049,11 +1041,30 @@ export interface CallbackCandidates {
   api: string | null;
 }
 
+export interface AiProviderOption {
+  value: string;
+  label: string;
+  baseUrl: string;
+  keyRequired: boolean;
+  keyUrl: string | null;
+  keyHint: string;
+  docsUrl: string | null;
+  models: readonly string[];
+  defaultModel: string;
+}
+
+export interface AiModelsResult {
+  ok: boolean;
+  models: string[];
+  message: string;
+}
+
 export interface AdminIntegrationsResponse {
   integrations: IntegrationState[];
   encryptionAvailable: boolean;
   requestOrigin: string | null;
   callbacks: CallbackCandidates;
+  aiProviders: AiProviderOption[];
 }
 
 export const configApi = {
@@ -1074,19 +1085,6 @@ export const adminApi = {
   users: () => request<{ users: AdminUser[] }>("/api/admin/users"),
 
   ctraderHealth: () => request<AdminCtraderHealth>("/api/admin/ctrader/health"),
-
-  apiKeys: () => request<{ keys: AdminApiKey[] }>("/api/admin/api-keys"),
-
-  createApiKey: (label: string) =>
-    request<{ key: string; record: AdminApiKey }>("/api/admin/api-keys", {
-      method: "POST",
-      body: { label },
-    }),
-
-  revokeApiKey: (id: string) =>
-    request<{ ok: boolean }>(`/api/admin/api-keys/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    }),
 
   createUser: (input: {
     username: string;
@@ -1160,6 +1158,12 @@ export const adminApi = {
       `/api/admin/integrations/${encodeURIComponent(provider)}/test`,
       { method: "POST", body: patch }
     ),
+
+  aiModels: (patch: IntegrationPatch) =>
+    request<AiModelsResult>("/api/admin/integrations/ai/models", {
+      method: "POST",
+      body: patch,
+    }),
 };
 
 export const api = {

@@ -21,7 +21,7 @@ import {
   requireEncryptionKey,
 } from "./crypto";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
-import { providerIssues } from "./ctraderSetup";
+import { providerIssues, providerIssuesFromValues } from "./ctraderSetup";
 import {
   INTEGRATION_DEFS,
   INTEGRATION_PROVIDERS,
@@ -415,6 +415,13 @@ export async function saveIntegration(
   const providers = await loadProviders();
   const current = storedValues(providers[provider]);
   const values = applyIntegrationPatch(provider, current, patch, key);
+  if (provider === "ai") {
+    const resolved = resolvePlainValues(provider, values, env);
+    const issues = providerIssuesFromValues(provider, resolved.values);
+    if (issues.errors.length > 0) {
+      throw new IntegrationValidationError(issues.errors[0]);
+    }
+  }
 
   await IntegrationsModel.findOneAndUpdate(
     { key: "integrations" },

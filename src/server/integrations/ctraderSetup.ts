@@ -143,10 +143,17 @@ export function validateCtraderSetup(values: Record<string, unknown>): SetupIssu
   return { errors, warnings };
 }
 
-function validateAiSetup(values: Record<string, unknown>): SetupIssues {
+function validateAiSetup(
+  values: Record<string, unknown>,
+  keyConfigured?: boolean
+): SetupIssues {
   const errors: string[] = [];
   const selectedProvider = text(values.provider) || "openai";
   const baseUrl = text(values.baseUrl);
+  const hasKey = keyConfigured ?? text(values.apiKey).length > 0;
+  if (selectedProvider !== "ollama" && !hasKey) {
+    errors.push("Add an API key for this provider.");
+  }
   if (selectedProvider === "custom" && !baseUrl) {
     errors.push("API base URL is required when Provider is Custom.");
   }
@@ -180,7 +187,8 @@ export function providerIssues(
     for (const field of fields) {
       if (field.kind !== "secret" && field.value !== null) values[field.key] = field.value;
     }
-    return validateAiSetup(values);
+    const keyField = fields.find((field) => field.key === "apiKey");
+    return validateAiSetup(values, keyField?.configured === true);
   }
   if (provider !== "ctrader") return { errors: [], warnings: [] };
   const values: Record<string, unknown> = {};

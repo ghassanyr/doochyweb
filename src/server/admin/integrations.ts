@@ -10,7 +10,7 @@ import { adminRequired, type AuthedRequest } from "../auth";
 import { User } from "../db";
 import { buildAuthorizeUrl, ctraderOAuthConfigFrom } from "../ctrader/oauth";
 import { callbackCandidates, providerIssuesFromValues } from "../integrations/ctraderSetup";
-import { testAi } from "../ai/client";
+import { aiProviderCatalog, listAiModels, testAi } from "../ai/client";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { IntegrationCryptoError, encryptionKeyFromEnv } from "../integrations/crypto";
 import { INTEGRATION_DEFS, isIntegrationProvider } from "../integrations/registry";
@@ -209,11 +209,37 @@ integrationAdminRouter.get("/integrations", adminRequired, async (req, res) => {
       encryptionAvailable,
       requestOrigin: origin,
       callbacks: callbackCandidates(publicBaseUrl),
+      aiProviders: aiProviderCatalog(),
     });
   } catch (err) {
     fail(res, err, "failed to load integrations");
   }
 });
+
+integrationAdminRouter.post(
+  "/integrations/ai/models",
+  adminRequired,
+  async (req: AuthedRequest, res: Response) => {
+    if (!allow(`ai-models:${req.userId}`, 10, 5 * 60_000)) {
+      res.status(429).json({ error: "Too many model lookups. Try again in a few minutes." });
+      return;
+    }
+    try {
+      const values = await resolveDraftIntegration("ai", req.body ?? {});
+      res.json(await listAiModels(values.values));
+    } catch (err) {
+      if (err instanceof IntegrationValidationError) {
+        fail(res, err, "invalid AI settings", 400);
+        return;
+      }
+      if (err instanceof IntegrationCryptoError) {
+        fail(res, err, "encryption key is not configured", 400);
+        return;
+      }
+      fail(res, err, "failed to load AI models");
+    }
+  }
+);
 
 integrationAdminRouter.put(
   "/integrations/:provider",

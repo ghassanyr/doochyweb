@@ -129,6 +129,22 @@ describe("providerIssuesFromValues", () => {
       warnings: [],
     });
   });
+
+  test("requires an AI key except for Ollama", () => {
+    assert.equal(
+      providerIssuesFromValues("ai", { provider: "openai" }).errors.some((error) => /API key/.test(error)),
+      true
+    );
+    assert.deepEqual(
+      providerIssuesFromValues("ai", { provider: "ollama" }).errors,
+      []
+    );
+  });
+
+  test("requires a custom AI base URL", () => {
+    const issues = providerIssuesFromValues("ai", { provider: "custom", apiKey: "sk-test" });
+    assert.equal(issues.errors.some((error) => /base URL/.test(error)), true);
+  });
 });
 
 describe("describeIntegration cross-field state", () => {

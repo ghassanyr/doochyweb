@@ -15,7 +15,6 @@ import { exportUserData, userDataExportFilename } from "../userDataExport";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { SettingsValidationError } from "../settings/validate";
 import { sendWebhook } from "../webhooks";
-import { createApiKey, listApiKeys, revokeApiKey } from "../apiKeys";
 import fs from "node:fs";
 import path from "node:path";
 import { integrationAdminRouter } from "./integrations";
@@ -339,37 +338,6 @@ adminRouter.delete("/users/:id", adminRequired, async (req: AuthedRequest, res) 
 // ---------------------------------------------------------------------------
 // Site settings: branding and theme for every visitor.
 // ---------------------------------------------------------------------------
-
-adminRouter.get("/api-keys", adminRequired, async (_req, res) => {
-  try {
-    res.json({ keys: await listApiKeys() });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? "failed to list API keys" });
-  }
-});
-
-adminRouter.post("/api-keys", adminRequired, async (req: AuthedRequest, res) => {
-  try {
-    const label = typeof req.body?.label === "string" ? req.body.label : "";
-    const created = await createApiKey(label);
-    res.status(201).json(created);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? "failed to create API key" });
-  }
-});
-
-adminRouter.delete("/api-keys/:id", adminRequired, async (req: AuthedRequest, res) => {
-  try {
-    const deleted = await revokeApiKey(req.params.id);
-    if (!deleted) {
-      res.status(404).json({ error: "API key not found" });
-      return;
-    }
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? "failed to revoke API key" });
-  }
-});
 
 adminRouter.post("/settings/webhooks/test", adminRequired, async (_req, res) => {
   try {

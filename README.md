@@ -97,11 +97,13 @@ SMTP enables password reset, optional email verification and admin invites. Veri
 
 Telegram uses long polling only, so it needs no inbound route or webhook.
 
-### Webhooks and API keys
+### AI provider
+
+AI features are optional and configured under **Admin → Integrations**. Pick OpenAI, OpenRouter, Groq, NVIDIA or a local Ollama server, or enter any other OpenAI-compatible endpoint with **Custom**. The page links to the provider key page, fills in the endpoint and recommended model, can load the models the endpoint advertises, and tests the connection before you save. Ollama needs no API key. The key is encrypted at rest and never returned to the browser.
+
+### Webhooks
 
 Outbound webhooks are configured under **Admin → Site settings → Webhooks**. Enable the events you want and set an HTTPS endpoint; the optional secret signs each JSON payload with `X-Doochy-Signature: sha256=<hex>`. Deliveries are queued in the background and retried, and the settings page has a test button that uses the saved configuration.
-
-Admin API keys are created under **Admin → Integrations**. The plaintext key is shown once. Send it in the `X-API-Key` header to call admin endpoints from automation. Keys have full admin access, so store them like passwords and revoke them when no longer needed.
 
 cTrader OAuth needs HTTPS outside localhost. Register these callback URLs in the cTrader Open API portal:
 
