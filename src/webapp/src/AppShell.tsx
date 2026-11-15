@@ -50,11 +50,12 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
-  const { config, branding, theme, mode, toggleMode } = useSiteConfig();
+  const { config, branding, theme, mode, toggleMode, social } = useSiteConfig();
   const legal = config?.legal ?? FALLBACK_LEGAL;
   const modules = (config?.navigation.modules ?? FALLBACK_MODULES).filter(
-    (module) => !module.hidden
+    (module) => !module.hidden && (module.access !== "admin" || isAdmin)
   );
+  const socialLinks = Object.entries(social).filter(([, url]) => url.trim() !== "");
   const nav: { key: ViewKey; label: string }[] = modules.map((module) => ({
     key: module.key,
     label: module.label,
@@ -232,6 +233,24 @@ export function AppShell({
           />
           <FooterLegalLink label="Cookies" fallback="cookies" onNavigate={onViewChange} />
         </nav>
+        {socialLinks.length > 0 && (
+          <nav
+            aria-label="Social links"
+            className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1"
+          >
+            {socialLinks.map(([key, url]) => (
+              <a
+                key={key}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="capitalize transition hover:text-accent"
+              >
+                {key === "x" ? "X" : key}
+              </a>
+            ))}
+          </nav>
+        )}
         <p>
           © {new Date().getFullYear()} {branding.name}
           {branding.name ? " · All rights reserved." : ""}

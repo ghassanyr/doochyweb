@@ -14,6 +14,10 @@ import { getSiteSettings, saveSiteSettings } from "../settings/store";
 import { exportUserData, userDataExportFilename } from "../userDataExport";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { SettingsValidationError } from "../settings/validate";
+import { sendWebhook } from "../webhooks";
+import { createApiKey, listApiKeys, revokeApiKey } from "../apiKeys";
+import fs from "node:fs";
+import path from "node:path";
 import { integrationAdminRouter } from "./integrations";
 import { sendAdminInvite } from "../email/accountMail";
 import { emailConfigured } from "../email/transport";
@@ -21,6 +25,7 @@ import {
   createUser,
   deleteUser,
   inviteUser,
+  listCtraderHealth,
   listUsers,
   resetUserPassword,
   updateUser,
@@ -29,6 +34,16 @@ import {
 export const adminRouter = Router();
 
 adminRouter.use(integrationAdminRouter);
+
+function appVersion(): string {
+  try {
+    const file = path.resolve(__dirname, "..", "..", "..", "package.json");
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    return typeof parsed.version === "string" ? parsed.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 adminRouter.get("/status", adminRequired, async (_req, res) => {
   try {
@@ -147,6 +162,9 @@ adminRouter.get("/status", adminRequired, async (_req, res) => {
       checks,
       registrationMode: settings.registration.mode,
       requireEmailVerification: settings.registration.requireEmailVerification,
+      version: appVersion(),
+      nodeVersion: process.version,
+      settingsUpdatedAt: settings.updatedAt,
     });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "failed to build setup status" });
@@ -158,6 +176,14 @@ adminRouter.get("/users", adminRequired, async (_req, res) => {
     res.json({ users: await listUsers() });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "failed to list users" });
+  }
+});
+
+adminRouter.get("/ctrader/health", adminRequired, async (_req, res) => {
+  try {
+    res.json(await listCtraderHealth());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to load cTrader connection health" });
   }
 });
 
@@ -313,6 +339,52 @@ adminRouter.delete("/users/:id", adminRequired, async (req: AuthedRequest, res) 
 // ---------------------------------------------------------------------------
 // Site settings: branding and theme for every visitor.
 // ---------------------------------------------------------------------------
+
+adminRouter.get("/api-keys", adminRequired, async (_req, res) => {
+  try {
+    res.json({ keys: await listApiKeys() });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to list API keys" });
+  }
+});
+
+adminRouter.post("/api-keys", adminRequired, async (req: AuthedRequest, res) => {
+  try {
+    const label = typeof req.body?.label === "string" ? req.body.label : "";
+    const created = await createApiKey(label);
+    res.status(201).json(created);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? "failed to create API key" });
+  }
+});
+
+adminRouter.delete("/api-keys/:id", adminRequired, async (req: AuthedRequest, res) => {
+  try {
+    const deleted = await revokeApiKey(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: "API key not found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to revoke API key" });
+  }
+});
+
+adminRouter.post("/settings/webhooks/test", adminRequired, async (_req, res) => {
+  try {
+    const result = await sendWebhook("webhook.test", {
+      message: "This is a test webhook from your site settings.",
+    });
+    if (!result.ok) {
+      res.status(400).json({ error: result.error ?? "webhook delivery failed" });
+      return;
+    }
+    res.json({ ok: true, status: result.status });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "webhook test failed" });
+  }
+});
 
 adminRouter.get("/settings", adminRequired, async (_req, res) => {
   try {

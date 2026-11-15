@@ -39,6 +39,7 @@ export default function SettingsPage({
   const [showConnect, setShowConnect] = useState(false);
   const [clientIdMasked, setClientIdMasked] = useState<string | null>(null);
   const [oauthAvailable, setOauthAvailable] = useState(false);
+  const [manualAvailable, setManualAvailable] = useState(false);
   const [reconnectErr, setReconnectErr] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [emailVerified, setEmailVerified] = useState(true);
@@ -67,6 +68,7 @@ export default function SettingsPage({
         if (!alive) return;
         setClientIdMasked(r.clientIdMasked ?? null);
         setOauthAvailable(Boolean(r.ctraderOAuth));
+        setManualAvailable(Boolean(r.ctraderManual));
         setEmail(r.email ?? null);
         setEmailVerified(r.emailVerified !== false);
         setEmailLoaded(true);
@@ -98,6 +100,12 @@ export default function SettingsPage({
   async function reconnectCtrader() {
     setReconnectErr(null);
     if (!oauthAvailable) {
+      if (!manualAvailable) {
+        setReconnectErr(
+          "cTrader sign-in is unavailable and manual connections are disabled. Ask the administrator to finish the cTrader setup."
+        );
+        return;
+      }
       setShowConnect(true);
       return;
     }

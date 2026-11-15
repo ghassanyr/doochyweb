@@ -9,7 +9,7 @@ import mongoose from "mongoose";
 
 import { hashPassword } from "../auth";
 import { revokeAuthTokens } from "../authTokens";
-import { Credentials, User, type UserRole, type UserStatus } from "../db";
+import { Credentials, User, type StoredAccount, type UserRole, type UserStatus } from "../db";
 import { dropUserSockets } from "../ctrader/connection";
 import { TelegramLink, TelegramLinkCode } from "../telegram/store";
 
@@ -25,6 +25,26 @@ export interface AdminUserRow {
 
 export type DeleteUserResult = "deleted" | "missing" | "self" | "last_admin";
 export type UserUpdateResult = "updated" | "missing" | "last_admin";
+
+export interface AdminCtraderHealthRow {
+  userId: string;
+  username: string;
+  mode: "oauth" | "manual";
+  accounts: StoredAccount[];
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  reauthRequired: boolean;
+}
+
+export interface AdminCtraderHealth {
+  connections: AdminCtraderHealthRow[];
+  summary: {
+    connected: number;
+    reauthRequired: number;
+    failing: number;
+  };
+}
 
 function iso(value: unknown): string | null {
   if (!value) return null;
@@ -48,6 +68,37 @@ function rowFrom(doc: any): AdminUserRow {
 export async function listUsers(): Promise<AdminUserRow[]> {
   const docs = await User.find({}).sort({ createdAt: -1 }).lean().exec();
   return docs.map(rowFrom);
+}
+
+/** Per-user cTrader connection state without tokens, secrets or app fields. */
+export async function listCtraderHealth(): Promise<AdminCtraderHealth> {
+  const docs = await Credentials.find({}).sort({ updatedAt: -1 }).lean().exec();
+  if (docs.length === 0) {
+    return { connections: [], summary: { connected: 0, reauthRequired: 0, failing: 0 } };
+  }
+  const users = await User.find({ _id: { $in: docs.map((doc: any) => doc.userId) } })
+    .select({ username: 1 })
+    .lean()
+    .exec();
+  const names = new Map(users.map((user: any) => [String(user._id), String(user.username ?? "unknown")]));
+  const connections = docs.map((doc: any): AdminCtraderHealthRow => ({
+    userId: String(doc.userId),
+    username: names.get(String(doc.userId)) ?? "unknown",
+    mode: typeof doc.clientId === "string" && doc.clientId ? "manual" : "oauth",
+    accounts: Array.isArray(doc.accounts) ? (doc.accounts as StoredAccount[]) : [],
+    lastOkAt: iso(doc.lastOkAt),
+    lastError: typeof doc.lastError === "string" && doc.lastError ? doc.lastError : null,
+    lastErrorAt: iso(doc.lastErrorAt),
+    reauthRequired: doc.reauthRequired === true,
+  }));
+  return {
+    connections,
+    summary: {
+      connected: connections.length,
+      reauthRequired: connections.filter((row) => row.reauthRequired).length,
+      failing: connections.filter((row) => row.lastError !== null).length,
+    },
+  };
 }
 
 /** Create an active account from the admin panel, bypassing registration mode. */

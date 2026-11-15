@@ -4,6 +4,7 @@ import { api, AccountView, OrderKind, OrderPreview, Side, SymbolQuote } from "..
 import { fmtMoney } from "../Dashboard";
 import { accountColorHex, Button, Metric } from "../components/ui";
 import { ConfirmModal, ModalShell, Seg, TicketField, posNum } from "./ui";
+import { useSiteConfig } from "../siteConfig";
 
 const PREVIEW_MS = 300;
 
@@ -11,6 +12,8 @@ function fmtLots(n: number | null | undefined, digits?: number): string {
   if (n == null) return "-";
   return n.toLocaleString(undefined, { maximumFractionDigits: digits ?? 4 });
 }
+
+
 
 // New-order ticket. The server's preview endpoint is the authority: it resolves
 // the symbol, validates the levels and snaps the size to the broker's grid, and
@@ -34,9 +37,10 @@ export default function OrderTicket({
   defaultCtids: number[];
   symbols: string[];
 }) {
+  const { tradingDefaults } = useSiteConfig();
   const [symbol, setSymbol] = useState("");
   const [side, setSide] = useState<Side>("BUY");
-  const [orderType, setOrderType] = useState<OrderKind>("MARKET");
+  const [orderType, setOrderType] = useState<OrderKind>(tradingDefaults.defaultOrderType);
   const [price, setPrice] = useState("");
   const [lots, setLots] = useState("");
   const [sl, setSl] = useState("");
@@ -155,7 +159,7 @@ export default function OrderTicket({
       setSymbolsErr({});
       setSymbol((cur) => (symbolsRef.current.includes(cur) ? cur : symbolsRef.current[0] ?? ""));
       setSide("BUY");
-      setOrderType("MARKET");
+      setOrderType(tradingDefaults.defaultOrderType);
       setPrice("");
       setLots("");
       setSl("");
@@ -172,7 +176,7 @@ export default function OrderTicket({
     // Only reset when the ticket opens; account ticks and typing must survive
     // the polling/refresh renders around it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, tradingDefaults.defaultOrderType]);
 
   // Load every selected account's broker symbol list. The server caches it per
   // account, so reopening or re-ticks are cheap.

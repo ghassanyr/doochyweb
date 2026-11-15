@@ -72,7 +72,7 @@ export default function SignalsPage({
   const [toast, setToast] = useState<string | null>(null);
   const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
   const [telegramOpen, setTelegramOpen] = useState(false);
-  const { config } = useSiteConfig();
+  const { config, content } = useSiteConfig();
 
   // Only offer the shortcut to signed-in users who can still link Telegram.
   useEffect(() => {
@@ -323,7 +323,7 @@ export default function SignalsPage({
             <GridMessage>
               {mode === "active"
                 ? "No active signals match these filters."
-                : "No signals yet. Published signals appear here."}
+                : content.emptyStates.signals}
             </GridMessage>
           ) : (
             rows.map((signal) => (

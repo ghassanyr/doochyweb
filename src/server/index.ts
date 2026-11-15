@@ -10,7 +10,7 @@ import { updateOwnEmail } from "./accountEmail";
 import { emailConfigured } from "./email/transport";
 import { sendVerification } from "./email/accountMail";
 import { userSockets } from "./ctrader/connection";
-import { ctraderAppCredentials } from "./ctrader/appConfig";
+import { ctraderAppCredentials, ctraderManualAvailable } from "./ctrader/appConfig";
 import { discoverAccounts } from "./ctrader/auth";
 import { ctraderOAuthAvailable, ctraderOAuthCallback, ctraderOAuthRouter } from "./ctrader/oauth";
 import { reconcileAccount, listAccounts, listTradableNames, symbolQuote } from "./ctrader/reads";
@@ -29,6 +29,7 @@ import { briefingRouter } from "./briefing/routes";
 import { promoteConfiguredAdmins } from "./admin/roles";
 import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
+import { siteMetaRouter } from "./settings/metaRoutes";
 import { getSiteSettings } from "./settings/store";
 import { legalAcceptanceRequired, legalAcceptanceSatisfied } from "./legal";
 import { exportUserData, userDataExportFilename } from "./userDataExport";
@@ -215,6 +216,7 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
       // sending the secret, or even the whole client id, to the browser.
       clientIdMasked: creds?.clientId ? maskClientId(creds.clientId) : null,
       ctraderOAuth: await ctraderOAuthAvailable(),
+      ctraderManual: await ctraderManualAvailable(),
       accounts,
     });
   } catch (err: any) {
@@ -281,6 +283,13 @@ app.put("/api/credentials", authRequired, async (req: AuthedRequest, res: Respon
 
 app.post("/api/connect", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
+    if (!(await ctraderManualAvailable())) {
+      res.status(403).json({
+        error:
+          "Manual cTrader connections are disabled. Use Continue with cTrader to sign in with the platform app.",
+      });
+      return;
+    }
     const existing = await loadCredentials(req.userId!);
     let platform: { clientId: string; clientSecret: string } | null = null;
     try {
@@ -660,6 +669,7 @@ app.use("/api/telegram", telegramRouter);
 app.use("/api/auth", accountAuthRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/config", siteConfigRouter);
+app.use(siteMetaRouter);
 app.use("/api/ctrader/oauth", ctraderOAuthRouter);
 
 // Short callback route registered on the cTrader app. The full URL is derived

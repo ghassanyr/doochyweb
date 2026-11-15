@@ -6,6 +6,7 @@ import { Button, inputCls } from "../components/ui";
 import type { CatalogEntry } from "../market/types";
 import { formatLocalDateTime } from "../time";
 import { EXPIRY_PRESETS, computeRR, expiryIsoForPreset, fmtRR } from "./signalFormat";
+import { useSiteConfig } from "../siteConfig";
 import type { ExpiryPresetId } from "./signalFormat";
 import type { Signal, SignalDirection, SignalDraft } from "./types";
 
@@ -31,6 +32,7 @@ export function SignalFormModal({
   onSaved: (signal: Signal) => void;
 }) {
   const editing = !!signal;
+  const { tradingDefaults } = useSiteConfig();
   const [symbol, setSymbol] = useState("");
   const [direction, setDirection] = useState<SignalDirection>("buy");
   const [entryMode, setEntryMode] = useState<"entry" | "range">("entry");
@@ -67,11 +69,15 @@ export function SignalFormModal({
     setStop(draft?.stop != null ? String(draft.stop) : "");
     setTimeframe(signal?.timeframe ?? "");
     setNote(signal?.note ?? "");
-    setExpiryChoice(signal?.expiresAt ? "keep" : "none");
+    const defaultPreset = EXPIRY_PRESETS.find(
+      (preset) => preset.ms === tradingDefaults.signalExpiryHours * 60 * 60_000
+    );
+    setExpiryChoice(signal?.expiresAt ? "keep" : defaultPreset?.id ?? "none");
     setError(null);
     setConflict(false);
     setSymbolOpen(false);
-  }, [open, signal, initial]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, signal, initial, tradingDefaults.signalExpiryHours]);
 
   const entryNum = entry.trim() === "" ? null : Number(entry);
   const entryMaxNum = entryMode === "range" && entryMax.trim() !== "" ? Number(entryMax) : null;

@@ -716,6 +716,26 @@ export interface AdminUser {
   createdAt: string | null;
 }
 
+export interface AdminCtraderHealthRow {
+  userId: string;
+  username: string;
+  mode: "oauth" | "manual";
+  accounts: AccountView[];
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  reauthRequired: boolean;
+}
+
+export interface AdminCtraderHealth {
+  connections: AdminCtraderHealthRow[];
+  summary: {
+    connected: number;
+    reauthRequired: number;
+    failing: number;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Site presentation, see src/server/settings
 // ---------------------------------------------------------------------------
@@ -758,8 +778,14 @@ export interface BrandingSettings {
   footerText: string;
 }
 
+export type ThemeFont = "inter" | "system" | "serif";
+export type ThemeDensity = "compact" | "comfortable" | "spacious";
+
 export interface ThemeSettings {
   mode: ThemeMode;
+  font: ThemeFont;
+  density: ThemeDensity;
+  radius: number;
   accent: string;
   accentHover: string;
   accentDeep: string;
@@ -787,7 +813,7 @@ export type ModuleKey =
   | "alerts"
   | "briefing";
 
-export type ModuleAccess = "public" | "signed-in";
+export type ModuleAccess = "public" | "signed-in" | "admin";
 
 export interface ModuleSettings {
   key: ModuleKey;
@@ -825,6 +851,100 @@ export interface AnnouncementSettings {
   endsAt: string | null;
 }
 
+export type AnalyticsProvider = "none" | "plausible" | "umami" | "google";
+
+export interface SeoSettings {
+  title: string;
+  description: string;
+  canonicalUrl: string;
+  ogImageUrl: string;
+  keywords: string;
+  noindex: boolean;
+  analyticsProvider: AnalyticsProvider;
+  analyticsScriptUrl: string;
+  analyticsSiteId: string;
+  analyticsRequireConsent: boolean;
+}
+
+export interface ContentSettings {
+  heroTitle: string;
+  heroBody: string;
+  featuresTitle: string;
+  featuresBody: string;
+  loginIntro: string;
+  registerIntro: string;
+  emptyStates: {
+    analysis: string;
+    signals: string;
+    breakouts: string;
+    trading: string;
+    alerts: string;
+    briefing: string;
+  };
+}
+
+export type DefaultOrderType = "MARKET" | "LIMIT";
+
+export interface TradingDefaultsSettings {
+  defaultOrderType: DefaultOrderType;
+  defaultRiskPercent: number;
+  signalExpiryHours: number;
+}
+
+export type DateFormat = "locale" | "iso" | "dmy" | "mdy";
+export type NumberFormat = "locale" | "comma-dot" | "dot-comma";
+
+export interface LocaleSettings {
+  locale: string;
+  timezone: string;
+  currency: string;
+  dateFormat: DateFormat;
+  numberFormat: NumberFormat;
+}
+
+export interface SocialSettings {
+  x: string;
+  telegram: string;
+  discord: string;
+  youtube: string;
+  linkedin: string;
+  github: string;
+}
+
+export interface PwaSettings {
+  enabled: boolean;
+  shortName: string;
+  themeColor: string;
+  backgroundColor: string;
+  display: "standalone" | "browser";
+}
+
+export interface EmailTemplateSettings {
+  subject: string;
+  body: string;
+}
+
+export interface TemplateSettings {
+  email: {
+    passwordReset: EmailTemplateSettings;
+    verifyEmail: EmailTemplateSettings;
+    adminInvite: EmailTemplateSettings;
+  };
+  telegram: {
+    signalPublished: string;
+    alertTriggered: string;
+    test: string;
+  };
+}
+
+export interface WebhookSettings {
+  enabled: boolean;
+  url: string;
+  secret: string;
+  signalPublished: boolean;
+  alertTriggered: boolean;
+}
+
 export interface SiteConfig {
   site: SiteAddressSettings;
   branding: BrandingSettings;
@@ -834,13 +954,29 @@ export interface SiteConfig {
   announcement: AnnouncementSettings;
   registration: PublicRegistrationSettings;
   legal: LegalSettings;
+  seo: SeoSettings;
+  content: ContentSettings;
+  tradingDefaults: TradingDefaultsSettings;
+  locale: LocaleSettings;
+  social: SocialSettings;
+  pwa: PwaSettings;
   version: string | null;
 }
 
 export interface SiteSettings extends Omit<SiteConfig, "registration"> {
   registration: RegistrationSettings;
+  templates: TemplateSettings;
+  webhooks: WebhookSettings;
   updatedAt: string | null;
   updatedBy: string | null;
+}
+
+export interface AdminApiKey {
+  id: string;
+  label: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
 }
 
 export interface AdminSetupCheck {
@@ -930,9 +1066,27 @@ export const adminApi = {
       checks: AdminSetupCheck[];
       registrationMode: RegistrationMode;
       requireEmailVerification: boolean;
+      version: string;
+      nodeVersion: string;
+      settingsUpdatedAt: string | null;
     }>("/api/admin/status"),
 
   users: () => request<{ users: AdminUser[] }>("/api/admin/users"),
+
+  ctraderHealth: () => request<AdminCtraderHealth>("/api/admin/ctrader/health"),
+
+  apiKeys: () => request<{ keys: AdminApiKey[] }>("/api/admin/api-keys"),
+
+  createApiKey: (label: string) =>
+    request<{ key: string; record: AdminApiKey }>("/api/admin/api-keys", {
+      method: "POST",
+      body: { label },
+    }),
+
+  revokeApiKey: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/api-keys/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   createUser: (input: {
     username: string;
@@ -965,6 +1119,11 @@ export const adminApi = {
 
   settings: () => request<{ settings: SiteSettings }>("/api/admin/settings"),
 
+  testWebhook: () =>
+    request<{ ok: boolean; status: number | null }>("/api/admin/settings/webhooks/test", {
+      method: "POST",
+    }),
+
   saveSettings: (patch: {
     site?: Partial<SiteAddressSettings>;
     branding?: Partial<BrandingSettings>;
@@ -974,6 +1133,14 @@ export const adminApi = {
     announcement?: Partial<AnnouncementSettings>;
     registration?: Partial<RegistrationSettings>;
     legal?: Partial<LegalSettings>;
+    seo?: Partial<SeoSettings>;
+    content?: Partial<ContentSettings>;
+    tradingDefaults?: Partial<TradingDefaultsSettings>;
+    locale?: Partial<LocaleSettings>;
+    social?: Partial<SocialSettings>;
+    pwa?: Partial<PwaSettings>;
+    templates?: Partial<TemplateSettings>;
+    webhooks?: Partial<WebhookSettings>;
   }) =>
     request<{ settings: SiteSettings }>("/api/admin/settings", {
       method: "PUT",
@@ -1057,6 +1224,7 @@ export const api = {
       hasCredentials: boolean;
       clientIdMasked: string | null;
       ctraderOAuth: boolean;
+      ctraderManual: boolean;
       accounts: AccountView[];
     }>("/api/me", { token }),
 

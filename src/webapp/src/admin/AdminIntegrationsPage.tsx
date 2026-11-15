@@ -5,15 +5,18 @@ import {
   Check,
   Copy,
   FlaskConical,
+  KeyRound,
   Mail,
   Plug,
   Save,
   Send,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 import {
   adminApi,
+  type AdminApiKey,
   type AdminIntegrationsResponse,
   type CallbackCandidates,
   type IntegrationFieldState,
@@ -310,7 +313,7 @@ function ProviderCard({
             icon={<FlaskConical className="h-3.5 w-3.5" />}
             onClickAsync={onTest}
           >
-            Test
+            {provider === "ctrader" ? "Check config" : "Test"}
           </Button>
           <Button
             size="sm"
@@ -345,8 +348,23 @@ function ProviderCard({
               Add one of the callback URLs below to the app's redirect URIs. It must match
               exactly; it is derived from the site URL in Site settings.
             </li>
-            <li>Save, then run the check. A pass means the URL is reachable, not that cTrader approval is complete.</li>
+            <li>
+              Use a cTrader account that can access the Open API, and wait for cTrader to approve
+              the app before expecting real accounts.
+            </li>
+            <li>
+              Save, then run Configuration check. A pass means the authorize endpoint is reachable
+              and the fields are shaped correctly; it does not prove that cTrader approval is
+              complete or that a user account is enabled for API access.
+            </li>
           </ol>
+          <p className="rounded-lg border border-hairline bg-surface px-2.5 py-2 text-[11px] leading-relaxed text-fg-muted">
+            Troubleshooting: redirect_uri_mismatch means the registered callback differs by even
+            one character; invalid_client means the ID/secret pair is wrong; an authorization
+            failure usually means the app or account is not approved for Open API yet. If you
+            rotate the Client ID or secret, existing user sessions can stop working and each user
+            must reconnect.
+          </p>
           <div className="space-y-1.5 pt-1">
             <CallbackRow label="Recommended" value={callbacks.primary} />
             <CallbackRow label="Alternate" value={callbacks.api} />
@@ -458,6 +476,13 @@ function ProviderCard({
         </div>
       )}
 
+      {provider === "ctrader" && state.updatedAt && (
+        <p className="rounded-lg border border-hairline bg-soft px-2.5 py-2 text-[11px] leading-relaxed text-fg-muted">
+          Rotating the Client ID or secret invalidates the app pair users connected with. Ask
+          affected users to reconnect after you save a new pair.
+        </p>
+      )}
+
       {state.updatedAt && (
         <p className="text-[11px] text-fg-faint">
           Last saved {formatLocalDateTime(state.updatedAt)}
@@ -482,6 +507,10 @@ export default function AdminIntegrationsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<IntegrationProvider | null>(null);
+  const [apiKeys, setApiKeys] = useState<AdminApiKey[]>([]);
+  const [keyLabel, setKeyLabel] = useState("");
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [keyBusy, setKeyBusy] = useState(false);
 
   function applyIntegrations(integrations: IntegrationState[]) {
     const nextDrafts: Drafts = {};
@@ -514,6 +543,49 @@ export default function AdminIntegrationsPage({
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    adminApi
+      .apiKeys()
+      .then((response) => {
+        if (alive) setApiKeys(response.keys);
+      })
+      .catch(() => {
+        // The integrations page still works if key listing fails.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function createKey() {
+    setKeyBusy(true);
+    setError(null);
+    try {
+      const created = await adminApi.createApiKey(keyLabel);
+      setApiKeys((current) => [created.record, ...current]);
+      setNewKey(created.key);
+      setKeyLabel("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create API key");
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function revokeKey(id: string) {
+    setKeyBusy(true);
+    setError(null);
+    try {
+      await adminApi.revokeApiKey(id);
+      setApiKeys((current) => current.filter((key) => key.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to revoke API key");
+    } finally {
+      setKeyBusy(false);
+    }
+  }
 
   function updateIntegrationState(integration: IntegrationState) {
     setData((current) => {
@@ -660,6 +732,77 @@ export default function AdminIntegrationsPage({
             />
           );
         })}
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Admin API keys</h2>
+              <p className="text-xs text-fg-muted">
+                Use a key in the <code className="font-mono">X-API-Key</code> header for
+                automation. Keys have full admin access, so keep them secret.
+              </p>
+            </div>
+          </div>
+          {newKey && (
+            <Flash tone="success">
+              <div className="space-y-1">
+                <p>Copy this key now. It will not be shown again.</p>
+                <code className="block break-all rounded-md bg-canvas px-2 py-1 font-mono text-[11px]">
+                  {newKey}
+                </code>
+              </div>
+            </Flash>
+          )}
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-[180px] flex-1 space-y-1">
+              <span className="text-xs font-medium text-fg-muted">Label</span>
+              <input
+                className={inputCls}
+                value={keyLabel}
+                onChange={(event) => setKeyLabel(event.target.value)}
+                placeholder="Reporting job"
+                maxLength={80}
+              />
+            </label>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!keyLabel.trim() || keyBusy}
+              onClickAsync={createKey}
+            >
+              Create key
+            </Button>
+          </div>
+          {apiKeys.length > 0 ? (
+            <div className="divide-y divide-hairline">
+              {apiKeys.map((key) => (
+                <div key={key.id} className="flex items-center gap-2 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-fg">{key.label}</div>
+                    <div className="text-[11px] text-fg-faint">
+                      <code className="font-mono">{key.prefix}…</code> · created{" "}
+                      {formatLocalDateTime(key.createdAt)}
+                      {key.lastUsedAt ? ` · last used ${formatLocalDateTime(key.lastUsedAt)}` : ""}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Trash2 className="h-3.5 w-3.5" />}
+                    disabled={keyBusy}
+                    onClick={() => void revokeKey(key.id)}
+                    aria-label={`Revoke ${key.label}`}
+                  >
+                    Revoke
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-fg-faint">No keys yet.</p>
+          )}
+        </Card>
 
         <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
           Saving here overrides the server environment. Clear a field to fall back to it again.

@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 import { User, type UserRole } from "./db";
+import { verifyApiKey } from "./apiKeys";
 
 const BCRYPT_ROUNDS = 10;
 const JWT_TTL = "7d";
@@ -122,8 +123,32 @@ export async function authRequired(
  * than baked into the JWT, so promoting or demoting a user takes effect at once
  * and existing tokens stay valid.
  */
+function headerValue(req: Request, name: string): string {
+  if (typeof (req as any).get === "function") {
+    const value = (req as any).get(name);
+    return typeof value === "string" ? value : "";
+  }
+  const raw = req.headers?.[name.toLowerCase()];
+  if (Array.isArray(raw)) return String(raw[0] ?? "");
+  return typeof raw === "string" ? raw : "";
+}
+
 export async function adminRequired(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
+    const apiKey = headerValue(req, "x-api-key").trim();
+    if (apiKey) {
+      const record = await verifyApiKey(apiKey);
+      if (!record) {
+        res.status(401).json({ error: "invalid API key" });
+        return;
+      }
+      req.userId = record.id;
+      req.username = `api:${record.label}`;
+      req.role = "admin";
+      req.tokenVersion = 0;
+      next();
+      return;
+    }
     const session = await sessionFromRequest(req);
     if (!session) {
       res.status(401).json({ error: "invalid or expired token" });

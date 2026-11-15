@@ -109,3 +109,53 @@ export function adminInviteEmail(input: {
     ),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Admin-editable copy
+// ---------------------------------------------------------------------------
+
+export type TemplateVars = Record<string, string | number | null | undefined>;
+
+/** Replace {{name}} placeholders; unknown placeholders are left untouched. */
+export function renderTemplate(template: string, vars: TemplateVars): string {
+  return template.replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (match, key: string) => {
+    if (!(key in vars)) return match;
+    const value = vars[key];
+    return value == null ? "" : String(value);
+  });
+}
+
+function textLayout(brand: string, body: string): string {
+  const safeBrand = escapeHtml(brand);
+  const paragraphs = escapeHtml(body)
+    .split(/\n{2,}/)
+    .map((part) => `<p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:#334155">${part.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+  return `<!doctype html>
+<html><body style="margin:0;padding:24px;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td align="center">
+      <table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px">
+        <tr><td style="padding:28px">
+          <p style="margin:0 0 20px;font-size:14px;font-weight:700;color:#0f766e">${safeBrand}</p>
+          ${paragraphs}
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+/** Build an email from an admin-stored subject and body. */
+export function renderEmailTemplate(
+  template: { subject: string; body: string },
+  vars: TemplateVars
+): EmailContent {
+  const brand = String(vars.brand ?? "");
+  const text = renderTemplate(template.body, vars).trim();
+  return {
+    subject: renderTemplate(template.subject, vars).trim(),
+    text,
+    html: textLayout(brand, text),
+  };
+}

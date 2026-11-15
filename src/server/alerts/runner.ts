@@ -11,6 +11,7 @@
 
 import { signalPrices } from "../signals/prices";
 import { enqueueAlertTriggered } from "../telegram/notify";
+import { queueWebhook } from "../webhooks";
 import { listActiveAlerts, markTriggered, touchAlerts } from "./store";
 import { conditionMet } from "./validate";
 
@@ -57,6 +58,15 @@ export async function runAlertCheckOnce(now: Date = new Date()): Promise<AlertRu
         `[alerts] could not queue Telegram delivery: ${err instanceof Error ? err.message : String(err)}`
       );
     }
+    queueWebhook("alert.triggered", {
+      id: view.id,
+      userId: item.userId,
+      symbol: view.symbol,
+      condition: view.condition,
+      level: view.level,
+      triggeredPrice: view.triggeredPrice,
+      triggeredAt: view.triggeredAt,
+    });
   }
 
   return { active: active.length, priced: seen.length, triggered };

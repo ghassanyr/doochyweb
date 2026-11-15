@@ -53,6 +53,10 @@ const credentialsSchema = new mongoose.Schema({
   accessToken: { type: String, required: true },
   refreshToken: { type: String, required: true },
   accounts: { type: [{ ctid: Number, login: Number, broker: String, isLive: Boolean, nickname: String, color: String }], default: [] },
+  lastOkAt: { type: Date, default: null },
+  lastError: { type: String, default: null },
+  lastErrorAt: { type: Date, default: null },
+  reauthRequired: { type: Boolean, default: false },
   updatedAt: { type: Date, default: Date.now },
 });
 
@@ -65,6 +69,16 @@ export interface StoredCredentials {
   accessToken: string;
   refreshToken: string;
   accounts: StoredAccount[];
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  reauthRequired: boolean;
+}
+
+function iso(value: unknown): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
 export async function loadCredentials(userId: string): Promise<StoredCredentials | null> {
@@ -76,6 +90,10 @@ export async function loadCredentials(userId: string): Promise<StoredCredentials
     accessToken: doc.accessToken,
     refreshToken: doc.refreshToken,
     accounts: (doc.accounts || []) as StoredAccount[],
+    lastOkAt: iso(doc.lastOkAt),
+    lastError: typeof doc.lastError === "string" && doc.lastError ? doc.lastError : null,
+    lastErrorAt: iso(doc.lastErrorAt),
+    reauthRequired: doc.reauthRequired === true,
   };
 }
 
@@ -108,4 +126,33 @@ export async function saveCredentials(
     Object.keys($unset).length > 0 ? { $set, $unset } : { $set },
     { upsert: true }
   );
+}
+
+/** Record the latest connection outcome without touching tokens or app fields. */
+export async function recordCredentialHealth(
+  userId: string,
+  outcome: { ok: boolean; error?: unknown; reauthRequired?: boolean }
+): Promise<void> {
+  const now = new Date();
+  if (outcome.ok) {
+    await Credentials.updateOne(
+      { userId: new mongoose.Types.ObjectId(userId) },
+      { $set: { lastOkAt: now, lastError: null, lastErrorAt: null, reauthRequired: false } }
+    ).exec();
+    return;
+  }
+  const message =
+    outcome.error instanceof Error
+      ? outcome.error.message
+      : String(outcome.error ?? "cTrader connection failed");
+  await Credentials.updateOne(
+    { userId: new mongoose.Types.ObjectId(userId) },
+    {
+      $set: {
+        lastError: message.slice(0, 500),
+        lastErrorAt: now,
+        reauthRequired: outcome.reauthRequired === true,
+      },
+    }
+  ).exec();
 }

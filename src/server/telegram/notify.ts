@@ -13,11 +13,15 @@ import type { SignalView } from "../signals/types";
 import { TelegramApiError, sendMessage } from "./client";
 import { loadTelegramConfig, type TelegramConfig } from "./config";
 import {
+  alertTemplateVars,
   buildAlertTriggeredMessage,
   buildPublishedMessage,
   buildTestMessage,
+  publishedTemplateVars,
+  renderTelegramTemplate,
   signalButtonUrl,
 } from "./messages";
+import { getSiteSettings } from "../settings/store";
 import { TelegramDelivery, TelegramLink } from "./store";
 
 const MAX_ATTEMPTS = 5;
@@ -59,7 +63,14 @@ export async function enqueueSignalPublished(
   if (!links.length) return 0;
 
   const signalId = new mongoose.Types.ObjectId(signal.id);
-  const text = buildPublishedMessage(signal);
+  const settings = await getSiteSettings();
+  const template = settings.templates.telegram.signalPublished;
+  const text = template.trim()
+    ? renderTelegramTemplate(template, {
+        ...publishedTemplateVars(signal),
+        brand: config.brandName,
+      })
+    : buildPublishedMessage(signal);
   const buttonUrl = signalButtonUrl(config.baseUrl, signal.id);
 
   let queued = 0;
@@ -112,6 +123,14 @@ export async function enqueueAlertTriggered(
     .exec();
   if (!link || !(link as any).notificationsEnabled) return 0;
 
+  const settings = await getSiteSettings();
+  const template = settings.templates.telegram.alertTriggered;
+  const alertText = template.trim()
+    ? renderTelegramTemplate(template, {
+        ...alertTemplateVars(alert),
+        brand: config.brandName,
+      })
+    : buildAlertTriggeredMessage(alert);
   const result = await TelegramDelivery.updateOne(
     { signalId: null, event: `alert:${alert.id}`, chatId: link.chatId },
     {
@@ -119,7 +138,7 @@ export async function enqueueAlertTriggered(
         signalId: null,
         event: `alert:${alert.id}`,
         chatId: link.chatId,
-        text: buildAlertTriggeredMessage(alert),
+        text: alertText,
         buttonUrl: null,
         status: "pending",
         attempts: 0,
@@ -140,11 +159,15 @@ export async function enqueueTest(chatId: string, now: Date = new Date()): Promi
   if (!config.enabled) {
     throw new Error("Telegram notifications are not configured");
   }
+  const settings = await getSiteSettings();
+  const template = settings.templates.telegram.test;
   await TelegramDelivery.create({
     signalId: null,
     event: `test:${randomUUID()}`,
     chatId,
-    text: buildTestMessage(config.brandName),
+    text: template.trim()
+      ? renderTelegramTemplate(template, { brand: config.brandName })
+      : buildTestMessage(config.brandName),
     buttonUrl: null,
     status: "pending",
     attempts: 0,

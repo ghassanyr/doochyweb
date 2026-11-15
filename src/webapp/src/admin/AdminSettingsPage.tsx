@@ -4,16 +4,23 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Clock,
+  FileText,
   Globe,
+  Mail,
   Megaphone,
   Navigation,
   Palette,
   RotateCcw,
   Save,
+  Search,
+  Share2,
   ShieldCheck,
+  Smartphone,
   Type,
   Upload,
   UserPlus,
+  Webhook,
   Wrench,
 } from "lucide-react";
 
@@ -22,17 +29,27 @@ import {
   type AnnouncementSettings,
   type AnnouncementTone,
   type BrandingSettings,
+  type ContentSettings,
+  type DateFormat,
   type LandingKey,
   type LegalSettings,
+  type LocaleSettings,
   type MaintenanceSettings,
   type ModuleAccess,
   type ModuleSettings,
   type NavigationSettings,
+  type NumberFormat,
+  type PwaSettings,
   type RegistrationMode,
   type RegistrationSettings,
+  type SeoSettings,
   type SiteAddressSettings,
   type SiteSettings,
+  type SocialSettings,
+  type TemplateSettings,
   type ThemeSettings,
+  type TradingDefaultsSettings,
+  type WebhookSettings,
 } from "../api";
 import { FadeRise } from "../components/motion";
 import { Button, Card, Flash, Skeleton, inputCls } from "../components/ui";
@@ -54,7 +71,7 @@ const MAX_LOGO_KB = 200;
 const MAX_LOGO_BYTES = MAX_LOGO_KB * 1024;
 const LOGO_URL_LIMIT = 350_000;
 
-type ColorKey = Exclude<keyof ThemeSettings, "mode">;
+type ColorKey = Exclude<keyof ThemeSettings, "mode" | "font" | "density" | "radius">;
 
 const COLOR_GROUPS: { title: string; fields: { key: ColorKey; label: string }[] }[] = [
   {
@@ -97,6 +114,7 @@ const compactInput =
 const ACCESS_OPTIONS: { value: ModuleAccess; label: string }[] = [
   { value: "public", label: "Public" },
   { value: "signed-in", label: "Signed-in only" },
+  { value: "admin", label: "Admins only" },
 ];
 
 const LANDING_OPTIONS: { value: LandingKey; label: string }[] = [
@@ -117,6 +135,47 @@ const TONE_OPTIONS: { value: AnnouncementTone; label: string }[] = [
   { value: "success", label: "Success" },
   { value: "warning", label: "Warning" },
   { value: "danger", label: "Danger" },
+];
+
+const ANALYTICS_OPTIONS = [
+  { value: "none" as const, label: "Disabled" },
+  { value: "plausible" as const, label: "Plausible" },
+  { value: "umami" as const, label: "Umami" },
+  { value: "google" as const, label: "Google Analytics" },
+];
+
+const FONT_OPTIONS = [
+  { value: "inter" as const, label: "Inter (bundled)" },
+  { value: "system" as const, label: "System UI" },
+  { value: "serif" as const, label: "Serif" },
+];
+
+const DENSITY_OPTIONS = [
+  { value: "compact" as const, label: "Compact" },
+  { value: "comfortable" as const, label: "Comfortable" },
+  { value: "spacious" as const, label: "Spacious" },
+];
+
+const DATE_FORMAT_OPTIONS: { value: DateFormat; label: string }[] = [
+  { value: "locale", label: "Follow locale" },
+  { value: "iso", label: "2026-11-15" },
+  { value: "dmy", label: "15/11/2026" },
+  { value: "mdy", label: "11/15/2026" },
+];
+
+const NUMBER_FORMAT_OPTIONS: { value: NumberFormat; label: string }[] = [
+  { value: "locale", label: "Follow locale" },
+  { value: "comma-dot", label: "1,234.56" },
+  { value: "dot-comma", label: "1.234,56" },
+];
+
+const EMPTY_FIELD_OPTIONS: { key: keyof ContentSettings["emptyStates"]; label: string }[] = [
+  { key: "analysis", label: "Analysis" },
+  { key: "signals", label: "Signals" },
+  { key: "breakouts", label: "Breakouts" },
+  { key: "trading", label: "Trading" },
+  { key: "alerts", label: "Alerts" },
+  { key: "briefing", label: "Briefing" },
 ];
 
 function TextField({
@@ -156,6 +215,45 @@ function TextField({
           maxLength={maxLength}
         />
       )}
+      {hint && <span className="block text-[11px] text-fg-faint">{hint}</span>}
+    </label>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  hint,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  step?: number;
+  hint?: string;
+  suffix?: string;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs font-medium text-fg-muted">{label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          className={inputCls}
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        {suffix && <span className="text-xs text-fg-muted">{suffix}</span>}
+      </div>
       {hint && <span className="block text-[11px] text-fg-faint">{hint}</span>}
     </label>
   );
@@ -290,9 +388,18 @@ export default function AdminSettingsPage({
   const [announcement, setAnnouncement] = useState<AnnouncementSettings | null>(null);
   const [registration, setRegistration] = useState<RegistrationSettings | null>(null);
   const [legal, setLegal] = useState<LegalSettings | null>(null);
+  const [seo, setSeo] = useState<SeoSettings | null>(null);
+  const [content, setContent] = useState<ContentSettings | null>(null);
+  const [tradingDefaults, setTradingDefaults] = useState<TradingDefaultsSettings | null>(null);
+  const [locale, setLocale] = useState<LocaleSettings | null>(null);
+  const [social, setSocial] = useState<SocialSettings | null>(null);
+  const [pwa, setPwa] = useState<PwaSettings | null>(null);
+  const [templates, setTemplates] = useState<TemplateSettings | null>(null);
+  const [webhooks, setWebhooks] = useState<WebhookSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [webhookTest, setWebhookTest] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   // Re-apply the live theme (including the visitor's mode preference) when the
   // editor unmounts without a save so a preview never leaks onto the app.
@@ -314,6 +421,14 @@ export default function AdminSettingsPage({
         setAnnouncement(settings.announcement);
         setRegistration(settings.registration);
         setLegal(settings.legal);
+        setSeo(settings.seo);
+        setContent(settings.content);
+        setTradingDefaults(settings.tradingDefaults);
+        setLocale(settings.locale);
+        setSocial(settings.social);
+        setPwa(settings.pwa);
+        setTemplates(settings.templates);
+        setWebhooks(settings.webhooks);
       })
       .catch((err) => {
         if (alive) setError(err instanceof Error ? err.message : "Failed to load site settings");
@@ -354,7 +469,15 @@ export default function AdminSettingsPage({
       !maintenance ||
       !announcement ||
       !registration ||
-      !legal
+      !legal ||
+      !seo ||
+      !content ||
+      !tradingDefaults ||
+      !locale ||
+      !social ||
+      !pwa ||
+      !templates ||
+      !webhooks
     ) {
       return false;
     }
@@ -366,9 +489,35 @@ export default function AdminSettingsPage({
       JSON.stringify(maintenance) !== JSON.stringify(loaded.maintenance) ||
       JSON.stringify(announcement) !== JSON.stringify(loaded.announcement) ||
       JSON.stringify(registration) !== JSON.stringify(loaded.registration) ||
-      JSON.stringify(legal) !== JSON.stringify(loaded.legal)
+      JSON.stringify(legal) !== JSON.stringify(loaded.legal) ||
+      JSON.stringify(seo) !== JSON.stringify(loaded.seo) ||
+      JSON.stringify(content) !== JSON.stringify(loaded.content) ||
+      JSON.stringify(tradingDefaults) !== JSON.stringify(loaded.tradingDefaults) ||
+      JSON.stringify(locale) !== JSON.stringify(loaded.locale) ||
+      JSON.stringify(social) !== JSON.stringify(loaded.social) ||
+      JSON.stringify(pwa) !== JSON.stringify(loaded.pwa) ||
+      JSON.stringify(templates) !== JSON.stringify(loaded.templates) ||
+      JSON.stringify(webhooks) !== JSON.stringify(loaded.webhooks)
     );
-  }, [loaded, site, branding, theme, navigation, maintenance, announcement, registration, legal]);
+  }, [
+    loaded,
+    site,
+    branding,
+    theme,
+    navigation,
+    maintenance,
+    announcement,
+    registration,
+    legal,
+    seo,
+    content,
+    tradingDefaults,
+    locale,
+    social,
+    pwa,
+    templates,
+    webhooks,
+  ]);
 
   function reset() {
     if (!loaded) return;
@@ -380,6 +529,14 @@ export default function AdminSettingsPage({
     setAnnouncement(loaded.announcement);
     setRegistration(loaded.registration);
     setLegal(loaded.legal);
+    setSeo(loaded.seo);
+    setContent(loaded.content);
+    setTradingDefaults(loaded.tradingDefaults);
+    setLocale(loaded.locale);
+    setSocial(loaded.social);
+    setPwa(loaded.pwa);
+    setTemplates(loaded.templates);
+    setWebhooks(loaded.webhooks);
     applyTheme(loaded.theme);
     setSaved(false);
     setError(null);
@@ -394,7 +551,15 @@ export default function AdminSettingsPage({
       !maintenance ||
       !announcement ||
       !registration ||
-      !legal
+      !legal ||
+      !seo ||
+      !content ||
+      !tradingDefaults ||
+      !locale ||
+      !social ||
+      !pwa ||
+      !templates ||
+      !webhooks
     ) {
       return;
     }
@@ -410,6 +575,14 @@ export default function AdminSettingsPage({
         announcement,
         registration,
         legal,
+        seo,
+        content,
+        tradingDefaults,
+        locale,
+        social,
+        pwa,
+        templates,
+        webhooks,
       });
       setLoaded(settings);
       setSite(settings.site);
@@ -420,6 +593,14 @@ export default function AdminSettingsPage({
       setAnnouncement(settings.announcement);
       setRegistration(settings.registration);
       setLegal(settings.legal);
+      setSeo(settings.seo);
+      setContent(settings.content);
+      setTradingDefaults(settings.tradingDefaults);
+      setLocale(settings.locale);
+      setSocial(settings.social);
+      setPwa(settings.pwa);
+      setTemplates(settings.templates);
+      setWebhooks(settings.webhooks);
       // Push the saved values into the provider so the header, title and
       // palette update without a reload.
       setConfig({
@@ -477,7 +658,15 @@ export default function AdminSettingsPage({
     !maintenance ||
     !announcement ||
     !registration ||
-    !legal
+    !legal ||
+    !seo ||
+    !content ||
+    !tradingDefaults ||
+    !locale ||
+    !social ||
+    !pwa ||
+    !templates ||
+    !webhooks
   ) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-3">
@@ -831,6 +1020,494 @@ export default function AdminSettingsPage({
 
         <Card className="space-y-4 p-4">
           <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">SEO and analytics</h2>
+              <p className="text-xs text-fg-muted">
+                Search metadata, link previews and optional, consent-aware analytics.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Page title"
+              value={seo.title}
+              onChange={(title) => setSeo({ ...seo, title })}
+              placeholder={branding.name || "Your product"}
+              hint="Empty falls back to the product name."
+              maxLength={120}
+            />
+            <TextField
+              label="Canonical URL"
+              value={seo.canonicalUrl}
+              onChange={(canonicalUrl) => setSeo({ ...seo, canonicalUrl })}
+              placeholder="https://example.com"
+              hint="Empty uses the public base URL."
+              maxLength={500}
+            />
+          </div>
+          <TextField
+            label="Meta description"
+            value={seo.description}
+            onChange={(description) => setSeo({ ...seo, description })}
+            placeholder={branding.description || "A short description for search and social."}
+            hint="Leave empty to reuse the branding description."
+            textarea
+            maxLength={300}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Social preview image"
+              value={seo.ogImageUrl}
+              onChange={(ogImageUrl) => setSeo({ ...seo, ogImageUrl })}
+              placeholder="/doochy-mark-512.png"
+              maxLength={500}
+            />
+            <TextField
+              label="Keywords"
+              value={seo.keywords}
+              onChange={(keywords) => setSeo({ ...seo, keywords })}
+              placeholder="market analysis, trading journal"
+              hint="Comma-separated; a weak ranking hint in modern search."
+              maxLength={300}
+            />
+          </div>
+          <Toggle
+            checked={seo.noindex}
+            onChange={(noindex) => setSeo({ ...seo, noindex })}
+            label="Hide this deployment from search engines"
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SelectField
+              label="Analytics provider"
+              value={seo.analyticsProvider}
+              onChange={(analyticsProvider) => setSeo({ ...seo, analyticsProvider })}
+              options={ANALYTICS_OPTIONS}
+            />
+            <TextField
+              label="Site id or measurement id"
+              value={seo.analyticsSiteId}
+              onChange={(analyticsSiteId) => setSeo({ ...seo, analyticsSiteId })}
+              placeholder="example.com or G-XXXXXXX"
+              hint="Required when analytics is enabled."
+              maxLength={200}
+            />
+          </div>
+          {seo.analyticsProvider !== "none" && (
+            <>
+              <TextField
+                label="Script URL (optional)"
+                value={seo.analyticsScriptUrl}
+                onChange={(analyticsScriptUrl) => setSeo({ ...seo, analyticsScriptUrl })}
+                placeholder="Provider default"
+                hint="Use a self-hosted or custom analytics script."
+                maxLength={500}
+              />
+              <Toggle
+                checked={seo.analyticsRequireConsent}
+                onChange={(analyticsRequireConsent) =>
+                  setSeo({ ...seo, analyticsRequireConsent })
+                }
+                label="Load analytics only after the cookie notice is accepted"
+              />
+            </>
+          )}
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Content</h2>
+              <p className="text-xs text-fg-muted">
+                Hero, feature and login copy, plus the message shown in empty lists.
+              </p>
+            </div>
+          </div>
+          <TextField
+            label="Hero title"
+            value={content.heroTitle}
+            onChange={(heroTitle) => setContent({ ...content, heroTitle })}
+            hint="Line breaks are preserved on the home page."
+            textarea
+            maxLength={300}
+          />
+          <TextField
+            label="Hero supporting copy"
+            value={content.heroBody}
+            onChange={(heroBody) => setContent({ ...content, heroBody })}
+            placeholder={branding.description}
+            hint="Empty falls back to the branding description."
+            textarea
+            maxLength={1000}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Features title"
+              value={content.featuresTitle}
+              onChange={(featuresTitle) => setContent({ ...content, featuresTitle })}
+              placeholder="Everything in one workspace"
+              maxLength={120}
+            />
+            <TextField
+              label="Features copy"
+              value={content.featuresBody}
+              onChange={(featuresBody) => setContent({ ...content, featuresBody })}
+              maxLength={500}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Login intro"
+              value={content.loginIntro}
+              onChange={(loginIntro) => setContent({ ...content, loginIntro })}
+              placeholder="Welcome back."
+              textarea
+              maxLength={500}
+            />
+            <TextField
+              label="Register intro"
+              value={content.registerIntro}
+              onChange={(registerIntro) => setContent({ ...content, registerIntro })}
+              placeholder="Create your account."
+              textarea
+              maxLength={500}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {EMPTY_FIELD_OPTIONS.map((field) => (
+              <TextField
+                key={field.key}
+                label={`${field.label} empty state`}
+                value={content.emptyStates[field.key]}
+                onChange={(value) =>
+                  setContent({
+                    ...content,
+                    emptyStates: { ...content.emptyStates, [field.key]: value },
+                  })
+                }
+                maxLength={300}
+              />
+            ))}
+          </div>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">
+                Defaults, locale and formats
+              </h2>
+              <p className="text-xs text-fg-muted">
+                Starting values for tickets and signals, plus how dates, numbers and money are
+                shown.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SelectField
+              label="Default order type"
+              value={tradingDefaults.defaultOrderType}
+              onChange={(defaultOrderType) =>
+                setTradingDefaults({ ...tradingDefaults, defaultOrderType })
+              }
+              options={[
+                { value: "MARKET", label: "Market" },
+                { value: "LIMIT", label: "Limit" },
+              ]}
+            />
+            <NumberField
+              label="Suggested risk per trade"
+              value={tradingDefaults.defaultRiskPercent}
+              onChange={(defaultRiskPercent) =>
+                setTradingDefaults({ ...tradingDefaults, defaultRiskPercent })
+              }
+              min={0}
+              max={100}
+              step={0.1}
+              suffix="%"
+            />
+            <NumberField
+              label="Signal expiry"
+              value={tradingDefaults.signalExpiryHours}
+              onChange={(signalExpiryHours) =>
+                setTradingDefaults({ ...tradingDefaults, signalExpiryHours })
+              }
+              min={0}
+              max={720}
+              suffix="hours"
+              hint="0 means signals never expire."
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Locale"
+              value={locale.locale}
+              onChange={(value) => setLocale({ ...locale, locale: value })}
+              placeholder="en-GB"
+              hint="Empty follows each browser."
+              maxLength={35}
+            />
+            <TextField
+              label="Timezone"
+              value={locale.timezone}
+              onChange={(timezone) => setLocale({ ...locale, timezone })}
+              placeholder="Europe/London"
+              hint="IANA zone. Empty follows each browser."
+              maxLength={80}
+            />
+            <TextField
+              label="Currency"
+              value={locale.currency}
+              onChange={(currency) => setLocale({ ...locale, currency })}
+              placeholder="USD"
+              hint="Three-letter ISO code used for display defaults."
+              maxLength={3}
+            />
+            <SelectField
+              label="Date format"
+              value={locale.dateFormat}
+              onChange={(dateFormat) => setLocale({ ...locale, dateFormat })}
+              options={DATE_FORMAT_OPTIONS}
+            />
+            <SelectField
+              label="Number format"
+              value={locale.numberFormat}
+              onChange={(numberFormat) => setLocale({ ...locale, numberFormat })}
+              options={NUMBER_FORMAT_OPTIONS}
+            />
+          </div>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Share2 className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Social links</h2>
+              <p className="text-xs text-fg-muted">
+                Optional links shown in the footer. Leave a field empty to hide it.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(["x", "telegram", "discord", "youtube", "linkedin", "github"] as const).map(
+              (key) => (
+                <TextField
+                  key={key}
+                  label={key === "x" ? "X / Twitter" : key[0].toUpperCase() + key.slice(1)}
+                  value={social[key]}
+                  onChange={(value) => setSocial({ ...social, [key]: value })}
+                  placeholder={`https://${key}.com/...`}
+                  maxLength={500}
+                />
+              )
+            )}
+          </div>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Installable app</h2>
+              <p className="text-xs text-fg-muted">
+                Web app manifest details for adding the site to a home screen.
+              </p>
+            </div>
+          </div>
+          <Toggle
+            checked={pwa.enabled}
+            onChange={(enabled) => setPwa({ ...pwa, enabled })}
+            label="Offer an installable web app manifest"
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Short name"
+              value={pwa.shortName}
+              onChange={(shortName) => setPwa({ ...pwa, shortName })}
+              placeholder={branding.name || "Doochy"}
+              hint="Shown under the home-screen icon."
+              maxLength={30}
+            />
+            <SelectField
+              label="Display"
+              value={pwa.display}
+              onChange={(display) => setPwa({ ...pwa, display })}
+              options={[
+                { value: "standalone", label: "Standalone window" },
+                { value: "browser", label: "Browser tab" },
+              ]}
+            />
+            <TextField
+              label="Theme colour"
+              value={pwa.themeColor}
+              onChange={(themeColor) => setPwa({ ...pwa, themeColor })}
+              placeholder="#0a0e14"
+              hint="Six-digit hex."
+              maxLength={7}
+            />
+            <TextField
+              label="Background colour"
+              value={pwa.backgroundColor}
+              onChange={(backgroundColor) => setPwa({ ...pwa, backgroundColor })}
+              placeholder="#0a0e14"
+              hint="Six-digit hex."
+              maxLength={7}
+            />
+          </div>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">
+                Email and Telegram templates
+              </h2>
+              <p className="text-xs text-fg-muted">
+                Variables: {"{{brand}}"}, {"{{username}}"}, {"{{url}}"}, {"{{expiresMinutes}}"},{" "}
+                {"{{symbol}}"}, {"{{direction}}"}, {"{{entry}}"}, {"{{target}}"}, {"{{stop}}"},{" "}
+                {"{{condition}}"}, {"{{level}}"} and {"{{price}}"}.
+              </p>
+            </div>
+          </div>
+          {(
+            [
+              ["passwordReset", "Password reset"],
+              ["verifyEmail", "Email verification"],
+              ["adminInvite", "Admin invite"],
+            ] as const
+          ).map(([key, label]) => (
+            <div key={key} className="space-y-2 rounded-lg border border-hairline bg-soft p-3">
+              <h3 className="text-xs font-semibold text-fg">{label}</h3>
+              <TextField
+                label="Subject"
+                value={templates.email[key].subject}
+                onChange={(subject) =>
+                  setTemplates({
+                    ...templates,
+                    email: {
+                      ...templates.email,
+                      [key]: { ...templates.email[key], subject },
+                    },
+                  })
+                }
+                maxLength={200}
+              />
+              <TextField
+                label="Body"
+                value={templates.email[key].body}
+                onChange={(body) =>
+                  setTemplates({
+                    ...templates,
+                    email: {
+                      ...templates.email,
+                      [key]: { ...templates.email[key], body },
+                    },
+                  })
+                }
+                textarea
+                maxLength={5000}
+              />
+            </div>
+          ))}
+          {(
+            [
+              ["signalPublished", "Published signal"],
+              ["alertTriggered", "Triggered alert"],
+              ["test", "Test message"],
+            ] as const
+          ).map(([key, label]) => (
+            <TextField
+              key={key}
+              label={`Telegram: ${label}`}
+              value={templates.telegram[key]}
+              onChange={(value) =>
+                setTemplates({ ...templates, telegram: { ...templates.telegram, [key]: value } })
+              }
+              textarea
+              maxLength={2000}
+            />
+          ))}
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Webhooks</h2>
+              <p className="text-xs text-fg-muted">
+                Signed JSON events for published signals and triggered alerts. The secret is never
+                exposed publicly.
+              </p>
+            </div>
+          </div>
+          <Toggle
+            checked={webhooks.enabled}
+            onChange={(enabled) => setWebhooks({ ...webhooks, enabled })}
+            label="Send outbound webhooks"
+          />
+          <TextField
+            label="Endpoint URL"
+            value={webhooks.url}
+            onChange={(url) => setWebhooks({ ...webhooks, url })}
+            placeholder="https://example.com/hooks/doochy"
+            hint="Required when enabled. Requests are signed with X-Doochy-Signature."
+            maxLength={500}
+          />
+          <TextField
+            label="Signing secret"
+            value={webhooks.secret}
+            onChange={(secret) => setWebhooks({ ...webhooks, secret })}
+            placeholder="Long random string"
+            hint="Used as the HMAC SHA-256 key. Leave empty to send unsigned requests."
+            maxLength={200}
+          />
+          <div className="flex flex-wrap gap-4">
+            <Toggle
+              checked={webhooks.signalPublished}
+              onChange={(signalPublished) => setWebhooks({ ...webhooks, signalPublished })}
+              label="Signal published"
+            />
+            <Toggle
+              checked={webhooks.alertTriggered}
+              onChange={(alertTriggered) => setWebhooks({ ...webhooks, alertTriggered })}
+              label="Alert triggered"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClickAsync={async () => {
+                setWebhookTest(null);
+                try {
+                  await adminApi.testWebhook();
+                  setWebhookTest("Test webhook delivered.");
+                } catch (err) {
+                  setWebhookTest(
+                    err instanceof Error ? err.message : "Webhook test failed"
+                  );
+                }
+              }}
+              disabled={!webhooks.enabled || !webhooks.url.trim()}
+            >
+              Send test webhook
+            </Button>
+            <span className="text-[11px] text-fg-faint">
+              Uses the saved configuration. Save changes first.
+            </span>
+          </div>
+          {webhookTest && (
+            <Flash tone={webhookTest === "Test webhook delivered." ? "success" : "danger"}>
+              {webhookTest}
+            </Flash>
+          )}
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
             <Palette className="h-4 w-4 text-accent" />
             <div>
               <h2 className="text-sm font-semibold tracking-tight text-fg">Theme</h2>
@@ -839,6 +1516,29 @@ export default function AdminSettingsPage({
                 is the site default; visitors can flip dark/light from the header.
               </p>
             </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SelectField
+              label="Font"
+              value={theme.font}
+              onChange={(font) => setTheme({ ...theme, font })}
+              options={FONT_OPTIONS}
+            />
+            <SelectField
+              label="Density"
+              value={theme.density}
+              onChange={(density) => setTheme({ ...theme, density })}
+              options={DENSITY_OPTIONS}
+            />
+            <NumberField
+              label="Corner radius"
+              value={theme.radius}
+              onChange={(radius) => setTheme({ ...theme, radius })}
+              min={0}
+              max={24}
+              suffix="px"
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

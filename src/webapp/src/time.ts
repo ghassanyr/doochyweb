@@ -10,6 +10,25 @@
 
 let cachedZone: string | null = null;
 
+export type DisplayDateFormat = "locale" | "iso" | "dmy" | "mdy";
+
+interface DefaultTimeOptions {
+  timeZone?: string;
+  locale?: string;
+  dateFormat?: DisplayDateFormat;
+}
+
+let defaultOptions: DefaultTimeOptions = {};
+
+/** Apply the admin locale/timezone/date format, or clear it with {}. */
+export function setDefaultTimeOptions(opts: DefaultTimeOptions): void {
+  defaultOptions = { ...opts };
+}
+
+export function getDefaultTimeOptions(): DefaultTimeOptions {
+  return { ...defaultOptions };
+}
+
 export function isValidTimeZone(zone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-GB", { timeZone: zone }).format(0);
@@ -48,6 +67,7 @@ function toDate(value: string | number | Date): Date | null {
 export interface TimeOptions {
   timeZone?: string;
   locale?: string;
+  dateFormat?: DisplayDateFormat;
 }
 
 function parts(date: Date, opts: Required<Pick<TimeOptions, "timeZone">> & Intl.DateTimeFormatOptions, locale = "en-GB"): Record<string, string> {
@@ -62,11 +82,11 @@ export function formatLocalTime(iso: string | number | Date, opts: TimeOptions =
   const date = toDate(iso);
   if (!date) return "-";
   const p = parts(date, {
-    timeZone: opts.timeZone ?? detectedTimeZone(),
+    timeZone: opts.timeZone ?? defaultOptions.timeZone ?? detectedTimeZone(),
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }, opts.locale);
+  }, opts.locale ?? defaultOptions.locale ?? "en-GB");
   return `${p.hour}:${p.minute}`;
 }
 
@@ -75,11 +95,15 @@ export function formatLocalDate(iso: string | number | Date, opts: TimeOptions =
   const date = toDate(iso);
   if (!date) return "-";
   const p = parts(date, {
-    timeZone: opts.timeZone ?? detectedTimeZone(),
+    timeZone: opts.timeZone ?? defaultOptions.timeZone ?? detectedTimeZone(),
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }, opts.locale);
+  }, opts.locale ?? defaultOptions.locale ?? "en-GB");
+  const format = opts.dateFormat ?? defaultOptions.dateFormat ?? "locale";
+  if (format === "iso") return `${p.year}-${p.month}-${p.day}`;
+  if (format === "dmy") return `${p.day}/${p.month}/${p.year}`;
+  if (format === "mdy") return `${p.month}/${p.day}/${p.year}`;
   return `${p.day} ${p.month} ${p.year}`;
 }
 
@@ -88,14 +112,14 @@ export function formatLocalDateTime(iso: string | number | Date, opts: TimeOptio
   const date = toDate(iso);
   if (!date) return "-";
   const p = parts(date, {
-    timeZone: opts.timeZone ?? detectedTimeZone(),
+    timeZone: opts.timeZone ?? defaultOptions.timeZone ?? detectedTimeZone(),
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }, opts.locale);
+  }, opts.locale ?? defaultOptions.locale ?? "en-GB");
   return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}`;
 }
 
@@ -103,9 +127,9 @@ export function formatLocalDateTime(iso: string | number | Date, opts: TimeOptio
 export function timeZoneLabel(opts: TimeOptions & { at?: string | number | Date } = {}): string {
   const date = toDate(opts.at ?? new Date());
   if (!date) return "UTC";
-  const zone = opts.timeZone ?? detectedTimeZone();
+  const zone = opts.timeZone ?? defaultOptions.timeZone ?? detectedTimeZone();
   if (zone === "UTC" || zone === "Etc/UTC") return "UTC";
-  const p = parts(date, { timeZone: zone, timeZoneName: "shortOffset" }, opts.locale);
+  const p = parts(date, { timeZone: zone, timeZoneName: "shortOffset" }, opts.locale ?? defaultOptions.locale ?? "en-GB");
   const name = p.timeZoneName ?? "UTC";
   return name === "GMT" || name === "GMT+0" ? "UTC" : name;
 }
@@ -122,11 +146,11 @@ export function localDayKey(iso: string | number | Date, opts: TimeOptions = {})
   const date = toDate(iso);
   if (!date) return "";
   const p = parts(date, {
-    timeZone: opts.timeZone ?? detectedTimeZone(),
+    timeZone: opts.timeZone ?? defaultOptions.timeZone ?? detectedTimeZone(),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }, opts.locale);
+  }, opts.locale ?? defaultOptions.locale ?? "en-GB");
   return `${p.year}-${p.month}-${p.day}`;
 }
 
@@ -148,13 +172,13 @@ export function toLocalInputValue(iso: string | number | Date | null | undefined
   const date = toDate(iso);
   if (!date) return "";
   const p = parts(date, {
-    timeZone: opts.timeZone ?? detectedTimeZone(),
+    timeZone: opts.timeZone ?? defaultOptions.timeZone ?? detectedTimeZone(),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }, opts.locale);
+  }, opts.locale ?? defaultOptions.locale ?? "en-GB");
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }

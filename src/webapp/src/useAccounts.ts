@@ -11,7 +11,12 @@ import { api, type AccountView, type ConnectInput, type UserRole } from "./api";
 export function useAccounts(enabled: boolean) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
-  const [me, setMe] = useState<{ username: string; role: UserRole; ctraderOAuth: boolean } | null>(null);
+  const [me, setMe] = useState<{
+    username: string;
+    role: UserRole;
+    ctraderOAuth: boolean;
+    ctraderManual: boolean;
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -24,7 +29,12 @@ export function useAccounts(enabled: boolean) {
       const res = await api.me();
       setHasCredentials(res.hasCredentials);
       setAccounts(res.accounts);
-      setMe({ username: res.username, role: res.role, ctraderOAuth: res.ctraderOAuth });
+      setMe({
+        username: res.username,
+        role: res.role,
+        ctraderOAuth: res.ctraderOAuth,
+        ctraderManual: res.ctraderManual,
+      });
       return res.accounts;
     } catch {
       setHasCredentials(false);

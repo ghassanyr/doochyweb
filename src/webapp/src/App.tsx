@@ -76,7 +76,7 @@ export default function App() {
   const { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect } =
     useAccounts(signedIn);
   const isAdmin = me?.role === "admin";
-  const { config } = useSiteConfig();
+  const { config, content } = useSiteConfig();
   const navigation = config?.navigation ?? FALLBACK_NAVIGATION;
   const maintenance = config?.maintenance ?? FALLBACK_MAINTENANCE;
   // The configured landing page applies once, to the root URL, after the
@@ -235,7 +235,14 @@ export default function App() {
     ? navigation.modules.find((module) => module.key === viewModule)?.access ??
       (SIGNED_IN_VIEWS.includes(viewModule) ? "signed-in" : "public")
     : "public";
-  const moduleLocked = !!viewModule && viewAccess === "signed-in" && !signedIn;
+  const moduleLocked =
+    !!viewModule &&
+    (viewAccess === "admin"
+      ? !isAdmin
+      : viewAccess === "signed-in"
+        ? !signedIn
+        : false);
+  const moduleAdminOnly = moduleLocked && viewAccess === "admin";
   const lockedLabel = viewModule
     ? navigation.modules.find((module) => module.key === viewModule)?.label ?? "this page"
     : "";
@@ -247,8 +254,8 @@ export default function App() {
       title={authMode === "login" ? "Sign in" : "Create account"}
       subtitle={
         authMode === "login"
-          ? "Sign in to manage your cTrader accounts"
-          : "Create an account to get started"
+          ? content.loginIntro || "Sign in to manage your cTrader accounts"
+          : content.registerIntro || "Create an account to get started"
       }
     >
       <Login
@@ -339,9 +346,13 @@ export default function App() {
           />
         ) : moduleLocked ? (
           <SignInPrompt
-            title={`Sign in to view ${lockedLabel}`}
-            body={`${lockedLabel} is available to signed-in members. Sign in to continue, or keep using the public pages.`}
-            onSignIn={openLogin}
+            title={moduleAdminOnly ? `${lockedLabel} is restricted` : `Sign in to view ${lockedLabel}`}
+            body={
+              moduleAdminOnly
+                ? `${lockedLabel} is available to administrators only.`
+                : `${lockedLabel} is available to signed-in members. Sign in to continue, or keep using the public pages.`
+            }
+            onSignIn={moduleAdminOnly ? undefined : openLogin}
           />
         ) : view === "admin" ? (
           isAdmin ? (
@@ -396,6 +407,7 @@ export default function App() {
             ) : !hasCredentials ? (
               <TradingConnect
                 oauthAvailable={me?.ctraderOAuth ?? false}
+                manualAvailable={me?.ctraderManual ?? false}
                 onConnected={handleConnected}
                 onSkip={() => handleViewChange("analysis")}
               />
@@ -418,7 +430,7 @@ function SignInPrompt({
 }: {
   title: string;
   body: string;
-  onSignIn: () => void;
+  onSignIn?: () => void;
 }) {
   return (
     <div className="mx-auto w-full max-w-lg">
@@ -428,16 +440,18 @@ function SignInPrompt({
         </div>
         <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">{title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg-muted">{body}</p>
-        <div className="mt-5 flex justify-center">
-          <Button
-            variant="primary"
-            size="lg"
-            icon={<LogIn className="h-4 w-4" />}
-            onClick={onSignIn}
-          >
-            Sign in
-          </Button>
-        </div>
+        {onSignIn && (
+          <div className="mt-5 flex justify-center">
+            <Button
+              variant="primary"
+              size="lg"
+              icon={<LogIn className="h-4 w-4" />}
+              onClick={onSignIn}
+            >
+              Sign in
+            </Button>
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -50,6 +50,48 @@ export function formatUtc(iso: string | null | undefined): string | null {
   }).format(date);
 }
 
+/** Fill an admin template, escaping each variable for Telegram HTML mode. */
+export function renderTelegramTemplate(
+  template: string,
+  vars: Record<string, string | number | null | undefined>
+): string {
+  return template.replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (match, key: string) => {
+    if (!(key in vars)) return match;
+    const value = vars[key];
+    return value == null ? "" : escapeHtml(String(value));
+  });
+}
+
+export function publishedTemplateVars(signal: SignalView): Record<string, string | number> {
+  const entry =
+    signal.entryMax != null && signal.entry != null
+      ? `${fmtPrice(signal.entry)}–${fmtPrice(signal.entryMax)}`
+      : fmtPrice(signal.entry);
+  return {
+    symbol: signal.symbol,
+    direction: signal.direction.toUpperCase(),
+    entry,
+    target: fmtPrice(signal.target),
+    target2: fmtPrice(signal.target2),
+    target3: fmtPrice(signal.target3),
+    stop: fmtPrice(signal.stop),
+    timeframe: signal.timeframe ?? "",
+    note: signal.note ?? "",
+    entryLow: fmtPrice(signal.entry),
+    entryHigh: signal.entryMax != null ? fmtPrice(signal.entryMax) : "",
+  };
+}
+
+export function alertTemplateVars(alert: AlertView): Record<string, string | number> {
+  return {
+    symbol: alert.symbol,
+    condition: alert.condition === "above" ? "rose above" : "fell below",
+    level: fmtPrice(alert.level),
+    price: fmtPrice(alert.triggeredPrice),
+    note: alert.note ?? "",
+  };
+}
+
 function truncate(value: string, max: number): string {
   const text = value.trim();
   if (text.length <= max) return text;

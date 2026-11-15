@@ -15,8 +15,10 @@ import { briefingApi, type BriefingRecord, type BriefingResponse } from "../api"
 import { FadeRise } from "../components/motion";
 import { Badge, Button, Card, Flash, Skeleton } from "../components/ui";
 import { formatLocalDateTime } from "../time";
+import { useSiteConfig } from "../siteConfig";
 
 export default function BriefingPage() {
+  const { content } = useSiteConfig();
   const [data, setData] = useState<BriefingResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,7 +93,7 @@ export default function BriefingPage() {
           </Card>
         ) : !briefing ? (
           <Card className="p-6 text-sm text-fg-muted">
-            No briefing yet. Refresh to build today's.
+            {content.emptyStates.briefing}
           </Card>
         ) : (
           <>

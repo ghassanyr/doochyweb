@@ -8,35 +8,26 @@ import { useEffect, useState } from "react";
 import { Cookie } from "lucide-react";
 
 import { Button } from "./components/ui";
+import { acknowledgeCookies, hasCookieConsent } from "./consent";
 import { FALLBACK_LEGAL, useSiteConfig } from "./siteConfig";
-
-const ACK_KEY = "doochyweb_cookie_notice_v1";
-
-function alreadyAcknowledged(): boolean {
-  try {
-    return localStorage.getItem(ACK_KEY) === "accepted";
-  } catch {
-    return false;
-  }
-}
 
 export function CookieNotice() {
   const [visible, setVisible] = useState(false);
   const { config } = useSiteConfig();
   const legal = config?.legal ?? FALLBACK_LEGAL;
+  const analytics = config?.seo.analyticsProvider ?? "none";
 
   useEffect(() => {
-    if (!alreadyAcknowledged()) setVisible(true);
+    if (!hasCookieConsent()) setVisible(true);
+    const onChange = () => setVisible(!hasCookieConsent());
+    window.addEventListener("doochyweb:consent-changed", onChange);
+    return () => window.removeEventListener("doochyweb:consent-changed", onChange);
   }, []);
 
   if (!visible) return null;
 
   function accept() {
-    try {
-      localStorage.setItem(ACK_KEY, "accepted");
-    } catch {
-      // Storage can be blocked; still dismiss for this page load.
-    }
+    acknowledgeCookies();
     setVisible(false);
   }
 
@@ -56,8 +47,10 @@ export function CookieNotice() {
           <p className="text-sm font-semibold tracking-tight">Cookies and browser storage</p>
           <p className="text-xs leading-relaxed text-fg-muted">
             This site uses essential cookies and browser storage to keep you signed in, remember
-            your preferences and secure cTrader sign-in. It does not use advertising or analytics
-            cookies.
+            your preferences and secure cTrader sign-in.
+            {analytics === "none"
+              ? " It does not use analytics or advertising cookies."
+              : " Optional analytics loads only after you accept."}
             {" "}
             See the{" "}
             <a

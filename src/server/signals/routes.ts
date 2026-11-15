@@ -28,6 +28,7 @@ import { signalPrices } from "./prices";
 import { signalPerformance } from "./performance";
 import { validateSignalInput } from "./validate";
 import { enqueueSignalPublished } from "../telegram/notify";
+import { queueWebhook } from "../webhooks";
 
 export const signalsRouter = Router();
 
@@ -125,6 +126,21 @@ signalsRouter.post("/", adminRequired, async (req: AuthedRequest, res) => {
     } catch (err) {
       console.error("[telegram] failed to enqueue publish notification:", err);
     }
+    queueWebhook("signal.published", {
+      id: signal.id,
+      symbol: signal.symbol,
+      direction: signal.direction,
+      entry: signal.entry,
+      entryMax: signal.entryMax,
+      target: signal.target,
+      target2: signal.target2,
+      target3: signal.target3,
+      stop: signal.stop,
+      timeframe: signal.timeframe,
+      note: signal.note,
+      expiresAt: signal.expiresAt,
+      createdAt: signal.createdAt,
+    });
 
     res.status(201).json({ signal });
   } catch (err) {

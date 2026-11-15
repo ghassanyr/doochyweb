@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Circle, Download, GripVertical, KeyRound, Mail, Palette, Plug, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Download, GripVertical, KeyRound, Mail, Palette, Plug, Trash2, UserPlus, X } from "lucide-react";
 
-import { adminApi, marketApi, type AdminSetupCheck, type AdminUser, type UserRole } from "../api";
+import { adminApi, marketApi, type AdminCtraderHealth, type AdminSetupCheck, type AdminUser, type UserRole } from "../api";
 import { ConfirmModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
 import { RouteLink } from "../components/RouteLink";
@@ -40,7 +40,13 @@ export default function AdminPage({
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
 
   const [checks, setChecks] = useState<AdminSetupCheck[]>([]);
+  const [ctraderHealth, setCtraderHealth] = useState<AdminCtraderHealth | null>(null);
   const [registrationMode, setRegistrationMode] = useState<string | null>(null);
+  const [buildInfo, setBuildInfo] = useState<{
+    version: string;
+    nodeVersion: string;
+    settingsUpdatedAt: string | null;
+  } | null>(null);
   const [checksLoading, setChecksLoading] = useState(true);
   const [newUsername, setNewUsername] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -93,6 +99,11 @@ export default function AdminPage({
       const res = await adminApi.status();
       setChecks(res.checks);
       setRegistrationMode(res.registrationMode);
+      setBuildInfo({
+        version: res.version,
+        nodeVersion: res.nodeVersion,
+        settingsUpdatedAt: res.settingsUpdatedAt,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load setup status");
     } finally {
@@ -100,10 +111,19 @@ export default function AdminPage({
     }
   }, []);
 
+  const loadCtraderHealth = useCallback(async () => {
+    try {
+      setCtraderHealth(await adminApi.ctraderHealth());
+    } catch {
+      setCtraderHealth(null);
+    }
+  }, []);
+
   useEffect(() => {
     void loadUsers();
     void loadChecks();
-  }, [loadUsers, loadChecks]);
+    void loadCtraderHealth();
+  }, [loadUsers, loadChecks, loadCtraderHealth]);
 
   const add = useCallback(
     async (raw: string) => {
@@ -329,6 +349,81 @@ export default function AdminPage({
                 </div>
               ))}
             </div>
+          )}
+        </Card>
+
+        <Card className="space-y-3 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold tracking-tight text-fg">cTrader connections</h2>
+              <p className="mt-0.5 text-xs text-fg-muted">
+                Broker health reported by each user's latest connection attempt. Tokens and app
+                secrets are never shown.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClickAsync={loadCtraderHealth}
+              disabled={!ctraderHealth}
+            >
+              Refresh
+            </Button>
+          </div>
+          {!ctraderHealth ? (
+            <p className="text-xs text-fg-faint">Connection health is unavailable.</p>
+          ) : ctraderHealth.connections.length === 0 ? (
+            <p className="text-xs text-fg-muted">No user has connected cTrader yet.</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge tone="muted">{ctraderHealth.summary.connected} connected</Badge>
+                {ctraderHealth.summary.failing > 0 && (
+                  <Badge tone="danger">{ctraderHealth.summary.failing} failing</Badge>
+                )}
+                {ctraderHealth.summary.reauthRequired > 0 && (
+                  <Badge tone="danger">
+                    {ctraderHealth.summary.reauthRequired} need reconnecting
+                  </Badge>
+                )}
+              </div>
+              <div className="divide-y divide-hairline">
+                {ctraderHealth.connections.map((row) => (
+                  <div key={row.userId} className="flex flex-wrap items-start gap-2 py-2.5">
+                    {row.lastError ? (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+                    ) : (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-fg">{row.username}</span>
+                        <Badge tone="muted">{row.mode === "manual" ? "User app" : "Platform app"}</Badge>
+                        {row.reauthRequired && <Badge tone="danger">Reconnect</Badge>}
+                        {row.accounts.length > 0 && (
+                          <span className="text-[11px] text-fg-faint">
+                            {row.accounts.length} account{row.accounts.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </div>
+                      {row.lastError ? (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-danger">{row.lastError}</p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-fg-muted">
+                          Last successful connection
+                          {row.lastOkAt ? ` ${formatLocalDateTime(row.lastOkAt)}` : " not recorded"}.
+                        </p>
+                      )}
+                      {row.lastErrorAt && (
+                        <p className="text-[11px] text-fg-faint">
+                          Failed {formatLocalDateTime(row.lastErrorAt)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </Card>
 

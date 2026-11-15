@@ -24,6 +24,8 @@ import {
 } from "../signals/signalFormat";
 import type { Signal } from "../signals/types";
 
+const FALLBACK_HERO_TITLE = "Read the market.\nTrack published setups.\nPractice the pattern.";
+
 const FEATURES: { view: ViewKey; title: string; description: string; icon: ReactNode }[] = [
   {
     view: "analysis",
@@ -66,7 +68,7 @@ export default function HomePage({
   onNavigate: (view: ViewKey) => void;
 }) {
   const [latest, setLatest] = useState<LatestSignal>({ status: "loading" });
-  const { branding } = useSiteConfig();
+  const { branding, content } = useSiteConfig();
 
   useEffect(() => {
     let alive = true;
@@ -93,12 +95,14 @@ export default function HomePage({
               Market workspace
             </div>
             <h1 className="mt-4 max-w-2xl text-4xl font-bold leading-[1.08] tracking-tight text-fg sm:text-5xl">
-              <span className="block">Read the market.</span>
-              <span className="block">Track published setups.</span>
-              <span className="block">Practice the pattern.</span>
+              {(content.heroTitle || FALLBACK_HERO_TITLE).split("\n").map((line, index) => (
+                <span key={index} className="block">
+                  {line}
+                </span>
+              ))}
             </h1>
             <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-fg-muted">
-              {branding.description || FALLBACK_BRANDING.description}
+              {content.heroBody || branding.description || FALLBACK_BRANDING.description}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-2">
               <RouteLink
@@ -131,6 +135,19 @@ export default function HomePage({
 
           <LatestSignalCard latest={latest} onNavigate={onNavigate} />
         </section>
+
+        {(content.featuresTitle || content.featuresBody) && (
+          <div className="mb-3 mt-4 max-w-2xl">
+            {content.featuresTitle && (
+              <h2 className="text-xl font-semibold tracking-tight text-fg">
+                {content.featuresTitle}
+              </h2>
+            )}
+            {content.featuresBody && (
+              <p className="mt-1 text-sm leading-relaxed text-fg-muted">{content.featuresBody}</p>
+            )}
+          </div>
+        )}
 
         <Stagger className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((feature) => (

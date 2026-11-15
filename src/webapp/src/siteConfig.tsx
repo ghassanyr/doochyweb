@@ -25,17 +25,26 @@ import {
   configApi,
   type AnnouncementSettings,
   type BrandingSettings,
+  type ContentSettings,
+  type LocaleSettings,
   type MaintenanceSettings,
   type LegalSettings,
   type ModuleSettings,
   type NavigationSettings,
   type PublicRegistrationSettings,
+  type PwaSettings,
+  type SeoSettings,
   type SiteAddressSettings,
   type SiteConfig,
+  type SocialSettings,
   type ThemeMode,
   type ThemeSettings,
+  type TradingDefaultsSettings,
 } from "./api";
 import { monogramDataUrl } from "./brandMark";
+import { CONSENT_CHANGED_EVENT, hasCookieConsent } from "./consent";
+import { setLocaleSettings } from "./format";
+import { setDefaultTimeOptions } from "./time";
 
 export const FALLBACK_SITE: SiteAddressSettings = {
   publicBaseUrl: "",
@@ -92,6 +101,9 @@ export function brandMarkUrl(
 
 export const FALLBACK_THEME: ThemeSettings = {
   mode: "dark",
+  font: "inter",
+  density: "comfortable",
+  radius: 10,
   accent: "#14b8a6",
   accentHover: "#16c7b3",
   accentDeep: "#107a70",
@@ -113,6 +125,9 @@ export const FALLBACK_THEME: ThemeSettings = {
 /** Built-in light palette, also offered as a starting point in the editor. */
 export const LIGHT_THEME: ThemeSettings = {
   mode: "light",
+  font: "inter",
+  density: "comfortable",
+  radius: 10,
   accent: "#0f766e",
   accentHover: "#0d9488",
   accentDeep: "#115e59",
@@ -166,7 +181,68 @@ export const FALLBACK_ANNOUNCEMENT: AnnouncementSettings = {
   endsAt: null,
 };
 
-type ColorKey = Exclude<keyof ThemeSettings, "mode">;
+export const FALLBACK_SEO: SeoSettings = {
+  title: "",
+  description: "",
+  canonicalUrl: "",
+  ogImageUrl: "",
+  keywords: "",
+  noindex: false,
+  analyticsProvider: "none",
+  analyticsScriptUrl: "",
+  analyticsSiteId: "",
+  analyticsRequireConsent: true,
+};
+
+export const FALLBACK_CONTENT: ContentSettings = {
+  heroTitle: "Read the market.\nTrack published setups.\nPractice the pattern.",
+  heroBody: "",
+  featuresTitle: "",
+  featuresBody: "",
+  loginIntro: "",
+  registerIntro: "",
+  emptyStates: {
+    analysis: "Your watchlist is empty.",
+    signals: "No signals yet. Published signals appear here.",
+    breakouts: "No breakouts yet. The first check runs shortly after the server starts.",
+    trading: "Connect a cTrader account to see balances, positions and orders here.",
+    alerts: "No alerts yet. Create one to be notified when price reaches your level.",
+    briefing: "No briefing has been generated yet.",
+  },
+};
+
+export const FALLBACK_TRADING_DEFAULTS: TradingDefaultsSettings = {
+  defaultOrderType: "MARKET",
+  defaultRiskPercent: 1,
+  signalExpiryHours: 0,
+};
+
+export const FALLBACK_LOCALE: LocaleSettings = {
+  locale: "",
+  timezone: "",
+  currency: "USD",
+  dateFormat: "locale",
+  numberFormat: "locale",
+};
+
+export const FALLBACK_SOCIAL: SocialSettings = {
+  x: "",
+  telegram: "",
+  discord: "",
+  youtube: "",
+  linkedin: "",
+  github: "",
+};
+
+export const FALLBACK_PWA: PwaSettings = {
+  enabled: true,
+  shortName: "",
+  themeColor: "#0a0e14",
+  backgroundColor: "#0a0e14",
+  display: "standalone",
+};
+
+type ColorKey = Exclude<keyof ThemeSettings, "mode" | "font" | "density" | "radius">;
 
 // Maps the stored hex values to the RGB-triplet variables in index.css.
 const THEME_VARS: Record<ColorKey, string> = {
@@ -204,6 +280,20 @@ export function applyTheme(theme: ThemeSettings): void {
     const triplet = hexToRgbTriplet(theme[key]);
     if (triplet) root.style.setProperty(cssVar, triplet);
   }
+  root.style.setProperty("--radius", `${theme.radius}px`);
+  root.style.setProperty(
+    "--density",
+    theme.density === "compact" ? "0.85" : theme.density === "spacious" ? "1.15" : "1"
+  );
+  root.style.setProperty(
+    "--font-ui",
+    theme.font === "serif"
+      ? 'Georgia, "Times New Roman", serif'
+      : theme.font === "system"
+        ? 'system-ui, -apple-system, "Segoe UI", sans-serif'
+        : 'Inter, ui-sans-serif, system-ui, sans-serif'
+  );
+  root.dataset.density = theme.density;
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && hexToRgbTriplet(theme.canvas)) meta.setAttribute("content", theme.canvas);
 }
@@ -215,18 +305,6 @@ function setMeta(selector: string, content: string): void {
 
 function applyBranding(branding: BrandingSettings, theme: ThemeSettings): void {
   if (typeof document === "undefined") return;
-  const name = branding.name.trim() || FALLBACK_BRANDING.name;
-  const description = branding.description.trim() || FALLBACK_BRANDING.description;
-  document.title = name;
-  setMeta('meta[name="description"]', description);
-  setMeta('meta[name="application-name"]', name);
-  setMeta('meta[name="apple-mobile-web-app-title"]', name);
-  setMeta('meta[property="og:title"]', name);
-  setMeta('meta[property="og:site_name"]', name);
-  setMeta('meta[property="og:description"]', description);
-  setMeta('meta[name="twitter:title"]', name);
-  setMeta('meta[name="twitter:description"]', description);
-
   for (const link of document.querySelectorAll<HTMLLinkElement>(
     'link[rel="icon"], link[rel="apple-touch-icon"]'
   )) {
@@ -265,9 +343,165 @@ function readStoredMode(): ThemeMode | null {
   }
 }
 
+function upsertMeta(attr: "name" | "property", key: string, content: string): void {
+  if (typeof document === "undefined") return;
+  let meta = document.querySelector(`meta[${attr}="${key}"]`);
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute(attr, key);
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute("content", content);
+}
+
+function upsertLink(rel: string, href: string, extra: Record<string, string> = {}): void {
+  if (typeof document === "undefined") return;
+  let link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = rel;
+    document.head.appendChild(link);
+  }
+  link.href = href;
+  for (const [key, value] of Object.entries(extra)) link.setAttribute(key, value);
+}
+
+function removeLink(rel: string): void {
+  document.querySelector(`link[rel="${rel}"]`)?.remove();
+}
+
+function applySeo(
+  seo: SeoSettings,
+  branding: BrandingSettings,
+  pwa: PwaSettings,
+  baseUrl: string
+): void {
+  if (typeof document === "undefined") return;
+  const name = branding.name.trim() || FALLBACK_BRANDING.name;
+  const title = seo.title.trim() || name;
+  const description =
+    seo.description.trim() ||
+    branding.description.trim() ||
+    FALLBACK_BRANDING.description;
+  document.title = title;
+  setMeta('meta[name="description"]', description);
+  setMeta('meta[name="application-name"]', name);
+  setMeta('meta[name="apple-mobile-web-app-title"]', name);
+  setMeta('meta[property="og:title"]', title);
+  setMeta('meta[property="og:site_name"]', name);
+  setMeta('meta[property="og:description"]', description);
+  setMeta('meta[name="twitter:title"]', title);
+  setMeta('meta[name="twitter:description"]', description);
+  setMeta('meta[name="twitter:card"]', seo.ogImageUrl ? "summary_large_image" : "summary");
+  if (seo.keywords.trim()) setMeta('meta[name="keywords"]', seo.keywords.trim());
+  upsertMeta("name", "robots", seo.noindex ? "noindex, nofollow" : "index, follow");
+
+  const canonical = seo.canonicalUrl.trim() || baseUrl;
+  if (canonical) {
+    upsertLink("canonical", canonical);
+    setMeta('meta[property="og:url"]', canonical);
+  } else {
+    removeLink("canonical");
+  }
+  const image = seo.ogImageUrl.trim();
+  if (image) {
+    const absolute = new URL(image, baseUrl || window.location.origin).toString();
+    setMeta('meta[property="og:image"]', absolute);
+    setMeta('meta[name="twitter:image"]', absolute);
+  }
+
+  const themeColor = pwa.themeColor || FALLBACK_PWA.themeColor;
+  setMeta('meta[name="theme-color"]', themeColor);
+  setMeta('meta[name="apple-mobile-web-app-capable"]', "yes");
+  setMeta('meta[name="apple-mobile-web-app-status-bar-style"]', "default");
+
+  if (pwa.enabled) {
+    const manifest = {
+      name,
+      short_name: pwa.shortName.trim() || name,
+      description,
+      start_url: "/",
+      scope: "/",
+      display: pwa.display,
+      background_color: pwa.backgroundColor,
+      theme_color: themeColor,
+      icons: [
+        { src: brandMarkUrl(branding, FALLBACK_THEME, 192), sizes: "192x192", type: "image/png" },
+        {
+          src: brandMarkUrl(branding, FALLBACK_THEME, 512),
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any maskable",
+        },
+      ],
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" })
+    );
+    upsertLink("manifest", url);
+  } else {
+    removeLink("manifest");
+  }
+}
+
+function removeAnalytics(): void {
+  document.getElementById("doochy-analytics")?.remove();
+  document.getElementById("doochy-analytics-inline")?.remove();
+}
+
+function applyAnalytics(seo: SeoSettings, consent: boolean): void {
+  if (typeof document === "undefined") return;
+  if (seo.analyticsProvider === "none") {
+    removeAnalytics();
+    return;
+  }
+  if (seo.analyticsRequireConsent && !consent) {
+    removeAnalytics();
+    return;
+  }
+  if (seo.analyticsProvider !== "google" && !seo.analyticsSiteId.trim()) return;
+  if (seo.analyticsProvider === "google" && !seo.analyticsSiteId.trim()) return;
+  const signature = [seo.analyticsProvider, seo.analyticsSiteId, seo.analyticsScriptUrl].join("|");
+  const existing = document.getElementById("doochy-analytics");
+  if (existing?.getAttribute("data-signature") === signature) return;
+  removeAnalytics();
+
+  const script = document.createElement("script");
+  script.id = "doochy-analytics";
+  script.async = true;
+  script.defer = true;
+  script.setAttribute("data-signature", signature);
+  if (seo.analyticsProvider === "plausible") {
+    script.src = seo.analyticsScriptUrl.trim() || "https://plausible.io/js/script.js";
+    script.setAttribute("data-domain", seo.analyticsSiteId.trim());
+  } else if (seo.analyticsProvider === "umami") {
+    script.src = seo.analyticsScriptUrl.trim() || "https://analytics.umami.is/script.js";
+    script.setAttribute("data-website-id", seo.analyticsSiteId.trim());
+  } else {
+    script.src =
+      seo.analyticsScriptUrl.trim() ||
+      `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
+        seo.analyticsSiteId.trim()
+      )}`;
+    const inline = document.createElement("script");
+    inline.id = "doochy-analytics-inline";
+    inline.textContent = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config',${JSON.stringify(
+      seo.analyticsSiteId.trim()
+    )});`;
+    document.head.appendChild(inline);
+  }
+  document.head.appendChild(script);
+}
+
 interface SiteConfigContextValue {
   config: SiteConfig | null;
   branding: BrandingSettings;
+  seo: SeoSettings;
+  content: ContentSettings;
+  tradingDefaults: TradingDefaultsSettings;
+  locale: LocaleSettings;
+  social: SocialSettings;
+  pwa: PwaSettings;
   /** The palette currently painted, after the visitor's mode preference. */
   theme: ThemeSettings;
   mode: ThemeMode;
@@ -291,14 +525,49 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
     [config, activeMode]
   );
   const branding = config?.branding ?? FALLBACK_BRANDING;
+  const seo = config?.seo ?? FALLBACK_SEO;
+  const content = config?.content ?? FALLBACK_CONTENT;
+  const tradingDefaults = config?.tradingDefaults ?? FALLBACK_TRADING_DEFAULTS;
+  const locale = config?.locale ?? FALLBACK_LOCALE;
+  const social = config?.social ?? FALLBACK_SOCIAL;
+  const pwa = config?.pwa ?? FALLBACK_PWA;
+  const [consent, setConsent] = useState(hasCookieConsent);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
   useEffect(() => {
+    setLocaleSettings(locale);
+    setDefaultTimeOptions({
+      timeZone: locale.timezone.trim() || undefined,
+      locale: locale.locale.trim() || undefined,
+      dateFormat: locale.dateFormat,
+    });
+  }, [locale]);
+
+  useEffect(() => {
     applyBranding(branding, theme);
   }, [branding, theme]);
+
+  useEffect(() => {
+    const base =
+      config?.seo.canonicalUrl.trim() ||
+      config?.site.publicBaseUrl.trim() ||
+      window.location.origin;
+    applySeo(seo, branding, pwa, base);
+  }, [seo, branding, pwa, config?.seo.canonicalUrl, config?.site.publicBaseUrl]);
+
+  useEffect(() => {
+    applyAnalytics(seo, consent);
+    const onChange = () => setConsent(hasCookieConsent());
+    window.addEventListener(CONSENT_CHANGED_EVENT, onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener(CONSENT_CHANGED_EVENT, onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, [seo, consent]);
 
   const setConfig = useCallback((next: SiteConfig) => {
     setConfigState(next);
@@ -332,6 +601,12 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
     () => ({
       config,
       branding,
+      seo,
+      content,
+      tradingDefaults,
+      locale,
+      social,
+      pwa,
       theme,
       mode: activeMode,
       toggleMode,
@@ -339,7 +614,22 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
       refresh,
       setConfig,
     }),
-    [config, branding, theme, activeMode, toggleMode, restoreTheme, refresh, setConfig]
+    [
+      config,
+      branding,
+      seo,
+      content,
+      tradingDefaults,
+      locale,
+      social,
+      pwa,
+      theme,
+      activeMode,
+      toggleMode,
+      restoreTheme,
+      refresh,
+      setConfig,
+    ]
   );
 
   return <SiteConfigContext.Provider value={value}>{children}</SiteConfigContext.Provider>;

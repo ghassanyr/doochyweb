@@ -18,6 +18,7 @@ import { SESSION_LABEL, fmtCaptureTime, relativeTime } from "./captures";
 import { BreakoutCard, BreakoutCardSkeleton } from "./BreakoutCard";
 import { BreakoutNoteModal } from "./BreakoutNoteModal";
 import type { Breakout, BreakoutRunStatus } from "./types";
+import { useSiteConfig } from "../siteConfig";
 
 const TYPE_KEY = "doochyweb_breakouts_types";
 const LIVE_N = 20;
@@ -105,6 +106,7 @@ function GridMessage({ children }: { children: ReactNode }) {
 }
 
 export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) => void }) {
+  const { content } = useSiteConfig();
   // The type selection is remembered between visits, so it is read once, up front.
   const [filters, setFilters] = useState<Filters>(() => ({
     types: loadTypeSelection(typeof window !== "undefined" ? window.localStorage : undefined, TYPE_KEY),
@@ -280,7 +282,7 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
                 ? "Could not load breakouts."
                 : lastRun
                   ? `No breakouts match these filters. The last check covered ${lastRun.evaluated} symbols.`
-                  : "No breakouts yet. The first check runs shortly after the server starts."}
+                  : content.emptyStates.breakouts}
             </GridMessage>
           ) : (
             live.map((b) => (

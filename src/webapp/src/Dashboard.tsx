@@ -5,6 +5,7 @@ import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
 import JournalTab from "./journal/JournalPage";
 import SimulationTab from "./simulation/SimulationTab";
+import { formatNumber, formatDisplayDate } from "./format";
 import { Card, accountColorHex } from "./components/ui";
 import { FadeRise } from "./components/motion";
 import { useSiteConfig } from "./siteConfig";
@@ -231,7 +232,7 @@ function accountTitle(a: AccountView): string {
 
 export function fmtMoney(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return "-";
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatNumber(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function fmtPrice(n: number | null | undefined, digits?: number): string {
@@ -240,7 +241,7 @@ export function fmtPrice(n: number | null | undefined, digits?: number): string 
   // long trailing zeros (e.g. 75,000.000), while tiny ones keep precision.
   const cap = n >= 1_000 ? 2 : n >= 100 ? 3 : 4;
   const d = Math.min(digits ?? cap, cap, 5);
-  return n.toLocaleString(undefined, {
+  return formatNumber(n, {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
   });
@@ -248,15 +249,13 @@ export function fmtPrice(n: number | null | undefined, digits?: number): string 
 
 export function fmtLots(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return "-";
-  return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return formatNumber(n, { maximumFractionDigits: 4 });
 }
 
 export function fmtTime(ts: number | null): string {
   if (!ts) return "-";
-  return new Date(ts).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
+  return `${formatDisplayDate(ts)} ${new Date(ts).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
-  });
+  })}`;
 }

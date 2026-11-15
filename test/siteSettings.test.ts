@@ -70,12 +70,18 @@ describe("site settings defaults", () => {
     assert.deepEqual(Object.keys(config).sort(), [
       "announcement",
       "branding",
+      "content",
       "legal",
+      "locale",
       "maintenance",
       "navigation",
+      "pwa",
       "registration",
+      "seo",
       "site",
+      "social",
       "theme",
+      "tradingDefaults",
       "version",
     ]);
     assert.equal("updatedBy" in config, false);

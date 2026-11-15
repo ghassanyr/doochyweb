@@ -12,9 +12,11 @@ import { sendEmail } from "./transport";
 import {
   adminInviteEmail,
   passwordResetEmail,
+  renderEmailTemplate,
   verifyEmailEmail,
   type EmailContent,
 } from "./templates";
+import type { SiteSettings } from "../settings/types";
 
 export const ACCOUNT_TOKEN_TTL_MINUTES = 45;
 const TTL_MS = ACCOUNT_TOKEN_TTL_MINUTES * 60_000;
@@ -35,11 +37,13 @@ function requestOrigin(req: Request): string | null {
   return `${proto === "https" ? "https" : "http"}://${host}`;
 }
 
-async function context(req: Request): Promise<{ base: string; brand: string }> {
+async function context(
+  req: Request
+): Promise<{ base: string; brand: string; settings: SiteSettings }> {
   const settings = await getSiteSettings();
   const base = publicBaseUrlFor(settings, process.env, requestOrigin(req));
   if (!base) throw new AccountEmailLinkError();
-  return { base, brand: settings.branding.name || DEFAULT_BRANDING.name };
+  return { base, brand: settings.branding.name || DEFAULT_BRANDING.name, settings };
 }
 
 function link(base: string, path: string, token: string): string {
@@ -58,16 +62,21 @@ export async function sendPasswordReset(userId: string, req: Request): Promise<v
   const user = await userFor(userId);
   const to = typeof user?.email === "string" ? user.email.trim() : "";
   if (!to) return;
-  const { base, brand } = await context(req);
+  const { base, brand, settings } = await context(req);
   const token = await createAuthToken(userId, "password_reset", TTL_MS);
+  const url = link(base, "/reset-password", token);
   try {
+    const custom = settings.templates.email.passwordReset;
     await deliver(
       to,
-      passwordResetEmail({
-        brand,
-        url: link(base, "/reset-password", token),
-        expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
-      })
+      custom.body.trim()
+        ? renderEmailTemplate(custom, {
+            brand,
+            url,
+            username: String((await userFor(userId))?.username ?? ""),
+            expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
+          })
+        : passwordResetEmail({ brand, url, expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES })
     );
   } catch (err) {
     await revokeAuthTokens(userId, "password_reset").catch(() => {});
@@ -79,16 +88,21 @@ export async function sendVerification(userId: string, req: Request): Promise<vo
   const user = await userFor(userId);
   const to = typeof user?.email === "string" ? user.email.trim() : "";
   if (!to) throw new Error("This account has no email address.");
-  const { base, brand } = await context(req);
+  const { base, brand, settings } = await context(req);
   const token = await createAuthToken(userId, "email_verification", TTL_MS);
+  const url = link(base, "/verify-email", token);
   try {
+    const custom = settings.templates.email.verifyEmail;
     await deliver(
       to,
-      verifyEmailEmail({
-        brand,
-        url: link(base, "/verify-email", token),
-        expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
-      })
+      custom.body.trim()
+        ? renderEmailTemplate(custom, {
+            brand,
+            url,
+            username: String(user.username ?? ""),
+            expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
+          })
+        : verifyEmailEmail({ brand, url, expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES })
     );
   } catch (err) {
     await revokeAuthTokens(userId, "email_verification").catch(() => {});
@@ -100,17 +114,27 @@ export async function sendAdminInvite(userId: string, req: Request): Promise<voi
   const user = await userFor(userId);
   const to = typeof user?.email === "string" ? user.email.trim() : "";
   if (!to) throw new Error("This account has no email address.");
-  const { base, brand } = await context(req);
+  const { base, brand, settings } = await context(req);
   const token = await createAuthToken(userId, "admin_invite", TTL_MS);
+  const url = link(base, "/accept-invite", token);
+  const username = String(user.username ?? "");
   try {
+    const custom = settings.templates.email.adminInvite;
     await deliver(
       to,
-      adminInviteEmail({
-        brand,
-        url: link(base, "/accept-invite", token),
-        username: String(user.username ?? ""),
-        expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
-      })
+      custom.body.trim()
+        ? renderEmailTemplate(custom, {
+            brand,
+            url,
+            username,
+            expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
+          })
+        : adminInviteEmail({
+            brand,
+            url,
+            username,
+            expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
+          })
     );
   } catch (err) {
     await revokeAuthTokens(userId, "admin_invite").catch(() => {});

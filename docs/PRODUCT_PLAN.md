@@ -1,6 +1,6 @@
 # Product readiness plan
 
-Status snapshot: 2026-11-15, HEAD `692d6d0`.
+Status snapshot: 2026-11-15, working tree on top of HEAD `f14f060`.
 Sources: the original buyer-readiness plan (P0/P1/P2) and the cTrader fresh-buyer audit.
 
 The separate Trade AI feature backlog lives in `update.md`; it is not part of this plan.
@@ -8,9 +8,9 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 ## Current state
 
 - P0 is complete. The setup checklist now covers backups and the generic AI provider, and backups have retention, status, per-user export and secure-deletion guidance.
-- P1 is partly done through white-label metadata, favicons, branding copy and some market defaults.
-- P2 has not started.
-- Last verified: `pnpm typecheck`, `pnpm test` with 818 tests, and `pnpm build` all pass.
+- P1 is complete: metadata, content copy, defaults, locale/formats, roles, templates and theme extras are implemented.
+- P2 is complete: PWA metadata, social links, webhooks, API keys and deployment version information are implemented.
+- Last verified: `pnpm typecheck`, `pnpm test` with 820 tests, and `pnpm build` all pass.
 
 ## P0: needed for a sellable self-hosted product
 
@@ -29,36 +29,38 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 
 | Item | Status | What remains |
 | --- | --- | --- |
-| SEO/social | Partial | Title, description, OG/Twitter title and description, and dynamic favicons are done. Add an admin-configurable OG image, per-page canonical links, robots.txt/sitemap support, and optional analytics IDs with consent handling. |
-| Content editor | Partial | Product name, tagline, description, footer text and registration message are editable. Hero, feature, empty-state and login copy beyond those fields are still hardcoded. |
-| Defaults | Partial | Shared watchlist and Analysis defaults for timeframe, refresh interval and strong ratio exist. Missing central defaults for signal expiry, risk sizing and order preferences. |
-| Locale, timezone, currency, date/number formats | Open | Date formatting exists, but locale, timezone, currency and number/date formats are not admin-configurable. |
-| Role-based module access | Open | Access is still only public or signed-in. Add roles and per-module access beyond the current binary gate. |
-| Email templates and notification copy | Open | Email subjects and bodies, plus Telegram notification copy, are hardcoded. Add editable templates with variables, preview and test send. |
-| Theme extras | Open | Palette editing is done. Font family, border radius and density controls are not implemented. |
+| SEO/social | Done | Admin fields cover title, description, canonical URL, OG image, keywords, noindex, analytics provider/ID/consent, robots.txt, sitemap and a dynamic manifest. |
+| Content editor | Done | Hero, features, login/register intros and module empty states are editable. |
+| Defaults | Done | Shared watchlist and Analysis defaults plus default order type, risk percent, signal expiry and market timeframe. |
+| Locale, timezone, currency, date/number formats | Done | Locale, timezone, currency, date format and number format are admin-configurable and applied to shared formatters. |
+| Role-based module access | Done | Modules support public, signed-in and admin access, enforced on the server and reflected in navigation. |
+| Email templates and notification copy | Done | Email and Telegram templates are editable with variables, fall back to defaults, and use the existing test-send paths. |
+| Theme extras | Done | Font family, border radius and density sit alongside palette editing. |
 
 ## P2
 
-- PWA manifest, install icons and related metadata.
+All done.
+
+- PWA manifest, install icons, theme/background colours and display mode.
 - Social links beyond the single website URL.
-- Webhooks and API keys.
-- Version and update information for the deployment.
+- Signed outbound webhooks for signal and alert events.
+- Admin API keys for automation, with one-time secret display and revocation.
+- Deployment version and runtime information in the admin panel.
 
 ## cTrader fresh-buyer audit
 
 | Gap | Status | What remains |
 | --- | --- | --- |
-| 1. Test result wording is misleading | Partial | The UI now says the check proves reachability, but the button is still called Test and the integration card still says Ready based on configuration. Add a real end-to-end verification, or rename the state to Config check and Configuration complete. |
-| 2. End users see the developer form | Partial | Unconfigured deployments now show "Trading is not configured; contact the admin". The own-app manual flow is still reachable by ordinary users when OAuth is available; it should sit behind an explicit admin toggle. |
+| 1. Test result wording is misleading | Partial | The UI says the check proves reachability. A true end-to-end trading verification is not implemented. |
+| 2. End users see the developer form | Done | The manual own-app flow is gated by `CTRADER_ALLOW_MANUAL` and exposed only when enabled. |
 | 3. No setup status on the admin dashboard | Done | The admin setup checklist now reports cTrader readiness. |
-| 4. External app registration underspecified | Partial | A basic cTrader setup checklist exists. It still needs account/approval prerequisites and troubleshooting guidance for rejected or unapproved apps. |
+| 4. External app registration underspecified | Done | Guidance covers account/approval prerequisites, rejected apps, connectivity-only checks and troubleshooting. |
 | 5. Duplicate base URLs | Done | cTrader and Telegram use the canonical site URL. |
-| 6. Credential rotation risk | Open | Changing the platform Client ID or secret has no warning or migration guidance for existing users whose stored tokens may break. |
-| 7. Manual and OAuth flows lack a product policy | Partial | OAuth is the primary flow, but manual mode is not controlled by an admin policy. |
-| 8. No admin visibility into failed user connections | Open | There is no aggregate connection-health warning or per-user cTrader last-failure/reauth status. |
+| 6. Credential rotation risk | Done | The admin integration card warns that rotating the platform client breaks existing tokens and documents the reauthorisation path. |
+| 7. Manual and OAuth flows lack a product policy | Done | OAuth is the primary flow; manual mode is controlled by `CTRADER_ALLOW_MANUAL`. |
+| 8. No admin visibility into failed user connections | Done | Admin connection health shows counts and per-user last failure, token and reauthorisation state. |
 
 ## Suggested order
 
-1. Finish the cTrader operator experience: admin manual-mode toggle, rotation warning, connection health.
-2. P1: canonical links and OG image, email templates, roles, locale/currency settings, theme extras.
-3. P2: PWA, social links, webhooks/API keys, version/update info.
+1. Add a real end-to-end cTrader verification if the connection check is not enough for buyers.
+2. Commit the completed cTrader/P1/P2 work.

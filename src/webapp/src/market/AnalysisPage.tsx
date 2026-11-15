@@ -14,6 +14,7 @@ import { applyOrder } from "./order";
 import { SymbolSearch } from "./SymbolSearch";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes";
 import type { CatalogEntry, MarketResult, MarketSettings, SymbolType } from "./types";
+import { useSiteConfig } from "../siteConfig";
 
 export default function AnalysisPage({
   canRefresh,
@@ -24,6 +25,7 @@ export default function AnalysisPage({
   /** Only admins can change the shared watchlist. */
   canManageWatchlist: boolean;
 }) {
+  const { content: siteContent } = useSiteConfig();
   const [config, setConfig] = useState<{
     timeframes: { id: string; label: string }[];
     settings: MarketSettings;
@@ -397,7 +399,7 @@ export default function AnalysisPage({
           </div>
         ) : results.length === 0 ? (
           <Card className="p-8 text-center">
-            <div className="text-sm text-fg-muted">Your watchlist is empty.</div>
+            <div className="text-sm text-fg-muted">{siteContent.emptyStates.analysis}</div>
             <div className="mt-1 text-xs text-fg-faint">Add a market above to start analysing.</div>
           </Card>
         ) : visibleResults.length === 0 ? (

@@ -37,3 +37,19 @@ export async function ctraderAppCredentials(
   const resolved = await resolveIntegration("ctrader", env);
   return ctraderAppCredentialsFrom(resolved.values);
 }
+
+/**
+ * Whether users may connect with their own Open API app and pasted tokens.
+ * This is an admin policy, not a credential: it defaults to off so a normal
+ * deployment only exposes the platform-owned cTrader sign-in flow.
+ */
+export async function ctraderManualAvailable(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<boolean> {
+  try {
+    const resolved = await resolveIntegration("ctrader", env);
+    return resolved.values.allowManual === true || resolved.values.allowManual === "true";
+  } catch {
+    return false;
+  }
+}

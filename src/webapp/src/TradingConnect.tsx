@@ -5,6 +5,7 @@ import type { ConnectInput } from "./api";
 import ConnectPanel from "./ConnectPanel";
 import { Button, Card } from "./components/ui";
 import { FadeRise } from "./components/motion";
+import { useSiteConfig } from "./siteConfig";
 
 // Shown on the Trading tab when the signed-in user has no cTrader credentials.
 // Connecting is an explicit choice here: registration no longer drops people
@@ -13,18 +14,22 @@ export default function TradingConnect({
   onConnected,
   onSkip,
   oauthAvailable = false,
+  manualAvailable = false,
 }: {
   onConnected: (creds: ConnectInput) => Promise<void>;
   onSkip: () => void;
   oauthAvailable?: boolean;
+  manualAvailable?: boolean;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const { content } = useSiteConfig();
 
   if (showForm) {
     return (
       <ConnectPanel
         variant="inline"
         oauthAvailable={oauthAvailable}
+        manualAvailable={manualAvailable}
         onConnected={onConnected}
         onCancel={() => setShowForm(false)}
       />
@@ -42,8 +47,7 @@ export default function TradingConnect({
             No trading account connected
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-            Connect a cTrader OpenAPI account to see balances, positions and orders here. You can
-            connect now, or skip and set it up later from the Trading tab.
+            {content.emptyStates.trading}
           </p>
           <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
             <Button

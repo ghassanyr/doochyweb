@@ -10,29 +10,45 @@ import mongoose from "mongoose";
 import {
   DEFAULT_ANNOUNCEMENT,
   DEFAULT_BRANDING,
+  DEFAULT_CONTENT,
   DEFAULT_LEGAL,
+  DEFAULT_LOCALE,
   DEFAULT_MAINTENANCE,
   DEFAULT_MODULES,
   DEFAULT_NAVIGATION,
+  DEFAULT_PWA,
   DEFAULT_REGISTRATION,
+  DEFAULT_SEO,
   DEFAULT_SITE,
+  DEFAULT_SOCIAL,
+  DEFAULT_TEMPLATES,
   DEFAULT_THEME,
+  DEFAULT_TRADING_DEFAULTS,
+  DEFAULT_WEBHOOKS,
   MODULE_KEYS,
 } from "./defaults";
 import type {
   AnnouncementSettings,
   AnnouncementTone,
+  ContentSettings,
   LandingKey,
   LegalSettings,
+  LocaleSettings,
   MaintenanceSettings,
   ModuleKey,
   ModuleSettings,
   NavigationSettings,
+  PwaSettings,
   RegistrationMode,
   RegistrationSettings,
+  SeoSettings,
   SiteAddressSettings,
   SiteConfig,
   SiteSettings,
+  SocialSettings,
+  TemplateSettings,
+  TradingDefaultsSettings,
+  WebhookSettings,
 } from "./types";
 import {
   normalizeAnnouncement,
@@ -40,9 +56,17 @@ import {
   normalizeLegal,
   normalizeMaintenance,
   normalizeNavigation,
+  normalizeContent,
+  normalizeLocale,
+  normalizePwa,
   normalizeRegistration,
+  normalizeSeo,
   normalizeSite,
+  normalizeSocial,
+  normalizeTemplates,
   normalizeTheme,
+  normalizeTradingDefaults,
+  normalizeWebhooks,
 } from "./validate";
 
 const brandingSchema = new mongoose.Schema(
@@ -61,6 +85,13 @@ const brandingSchema = new mongoose.Schema(
 const themeSchema = new mongoose.Schema(
   {
     mode: { type: String, enum: ["dark", "light"], default: DEFAULT_THEME.mode },
+    font: { type: String, enum: ["inter", "system", "serif"], default: DEFAULT_THEME.font },
+    density: {
+      type: String,
+      enum: ["compact", "comfortable", "spacious"],
+      default: DEFAULT_THEME.density,
+    },
+    radius: { type: Number, default: DEFAULT_THEME.radius },
     accent: { type: String, default: DEFAULT_THEME.accent },
     accentHover: { type: String, default: DEFAULT_THEME.accentHover },
     accentDeep: { type: String, default: DEFAULT_THEME.accentDeep },
@@ -119,7 +150,7 @@ const moduleSchema = new mongoose.Schema(
     key: { type: String, enum: MODULE_KEYS, required: true },
     label: { type: String, required: true },
     hidden: { type: Boolean, default: false },
-    access: { type: String, enum: ["public", "signed-in"], default: "public" },
+    access: { type: String, enum: ["public", "signed-in", "admin"], default: "public" },
   },
   { _id: false }
 );
@@ -178,6 +209,161 @@ const announcementSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const seoSchema = new mongoose.Schema(
+  {
+    title: { type: String, default: DEFAULT_SEO.title },
+    description: { type: String, default: DEFAULT_SEO.description },
+    canonicalUrl: { type: String, default: DEFAULT_SEO.canonicalUrl },
+    ogImageUrl: { type: String, default: DEFAULT_SEO.ogImageUrl },
+    keywords: { type: String, default: DEFAULT_SEO.keywords },
+    noindex: { type: Boolean, default: DEFAULT_SEO.noindex },
+    analyticsProvider: {
+      type: String,
+      enum: ["none", "plausible", "umami", "google"],
+      default: DEFAULT_SEO.analyticsProvider,
+    },
+    analyticsScriptUrl: { type: String, default: DEFAULT_SEO.analyticsScriptUrl },
+    analyticsSiteId: { type: String, default: DEFAULT_SEO.analyticsSiteId },
+    analyticsRequireConsent: {
+      type: Boolean,
+      default: DEFAULT_SEO.analyticsRequireConsent,
+    },
+  },
+  { _id: false }
+);
+
+const contentSchema = new mongoose.Schema(
+  {
+    heroTitle: { type: String, default: DEFAULT_CONTENT.heroTitle },
+    heroBody: { type: String, default: DEFAULT_CONTENT.heroBody },
+    featuresTitle: { type: String, default: DEFAULT_CONTENT.featuresTitle },
+    featuresBody: { type: String, default: DEFAULT_CONTENT.featuresBody },
+    loginIntro: { type: String, default: DEFAULT_CONTENT.loginIntro },
+    registerIntro: { type: String, default: DEFAULT_CONTENT.registerIntro },
+    emptyStates: {
+      analysis: { type: String, default: DEFAULT_CONTENT.emptyStates.analysis },
+      signals: { type: String, default: DEFAULT_CONTENT.emptyStates.signals },
+      breakouts: { type: String, default: DEFAULT_CONTENT.emptyStates.breakouts },
+      trading: { type: String, default: DEFAULT_CONTENT.emptyStates.trading },
+      alerts: { type: String, default: DEFAULT_CONTENT.emptyStates.alerts },
+      briefing: { type: String, default: DEFAULT_CONTENT.emptyStates.briefing },
+    },
+  },
+  { _id: false }
+);
+
+const tradingDefaultsSchema = new mongoose.Schema(
+  {
+    defaultOrderType: {
+      type: String,
+      enum: ["MARKET", "LIMIT"],
+      default: DEFAULT_TRADING_DEFAULTS.defaultOrderType,
+    },
+    defaultRiskPercent: {
+      type: Number,
+      default: DEFAULT_TRADING_DEFAULTS.defaultRiskPercent,
+    },
+    signalExpiryHours: {
+      type: Number,
+      default: DEFAULT_TRADING_DEFAULTS.signalExpiryHours,
+    },
+  },
+  { _id: false }
+);
+
+const localeSchema = new mongoose.Schema(
+  {
+    locale: { type: String, default: DEFAULT_LOCALE.locale },
+    timezone: { type: String, default: DEFAULT_LOCALE.timezone },
+    currency: { type: String, default: DEFAULT_LOCALE.currency },
+    dateFormat: {
+      type: String,
+      enum: ["locale", "iso", "dmy", "mdy"],
+      default: DEFAULT_LOCALE.dateFormat,
+    },
+    numberFormat: {
+      type: String,
+      enum: ["locale", "comma-dot", "dot-comma"],
+      default: DEFAULT_LOCALE.numberFormat,
+    },
+  },
+  { _id: false }
+);
+
+const socialSchema = new mongoose.Schema(
+  {
+    x: { type: String, default: DEFAULT_SOCIAL.x },
+    telegram: { type: String, default: DEFAULT_SOCIAL.telegram },
+    discord: { type: String, default: DEFAULT_SOCIAL.discord },
+    youtube: { type: String, default: DEFAULT_SOCIAL.youtube },
+    linkedin: { type: String, default: DEFAULT_SOCIAL.linkedin },
+    github: { type: String, default: DEFAULT_SOCIAL.github },
+  },
+  { _id: false }
+);
+
+const pwaSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: DEFAULT_PWA.enabled },
+    shortName: { type: String, default: DEFAULT_PWA.shortName },
+    themeColor: { type: String, default: DEFAULT_PWA.themeColor },
+    backgroundColor: { type: String, default: DEFAULT_PWA.backgroundColor },
+    display: {
+      type: String,
+      enum: ["standalone", "browser"],
+      default: DEFAULT_PWA.display,
+    },
+  },
+  { _id: false }
+);
+
+const emailTemplateSchema = new mongoose.Schema(
+  { subject: { type: String, default: "" }, body: { type: String, default: "" } },
+  { _id: false }
+);
+
+const templatesSchema = new mongoose.Schema(
+  {
+    email: {
+      passwordReset: {
+        type: emailTemplateSchema,
+        default: () => ({ ...DEFAULT_TEMPLATES.email.passwordReset }),
+      },
+      verifyEmail: {
+        type: emailTemplateSchema,
+        default: () => ({ ...DEFAULT_TEMPLATES.email.verifyEmail }),
+      },
+      adminInvite: {
+        type: emailTemplateSchema,
+        default: () => ({ ...DEFAULT_TEMPLATES.email.adminInvite }),
+      },
+    },
+    telegram: {
+      signalPublished: {
+        type: String,
+        default: DEFAULT_TEMPLATES.telegram.signalPublished,
+      },
+      alertTriggered: {
+        type: String,
+        default: DEFAULT_TEMPLATES.telegram.alertTriggered,
+      },
+      test: { type: String, default: DEFAULT_TEMPLATES.telegram.test },
+    },
+  },
+  { _id: false }
+);
+
+const webhooksSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: DEFAULT_WEBHOOKS.enabled },
+    url: { type: String, default: DEFAULT_WEBHOOKS.url },
+    secret: { type: String, default: DEFAULT_WEBHOOKS.secret },
+    signalPublished: { type: Boolean, default: DEFAULT_WEBHOOKS.signalPublished },
+    alertTriggered: { type: Boolean, default: DEFAULT_WEBHOOKS.alertTriggered },
+  },
+  { _id: false }
+);
+
 const siteSettingsSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, default: "site" },
@@ -195,6 +381,33 @@ const siteSettingsSchema = new mongoose.Schema(
     announcement: { type: announcementSchema, default: () => ({ ...DEFAULT_ANNOUNCEMENT }) },
     registration: { type: registrationSchema, default: () => ({ ...DEFAULT_REGISTRATION }) },
     legal: { type: legalSchema, default: () => ({ ...DEFAULT_LEGAL }) },
+    seo: { type: seoSchema, default: () => ({ ...DEFAULT_SEO }) },
+    content: {
+      type: contentSchema,
+      default: () => ({
+        ...DEFAULT_CONTENT,
+        emptyStates: { ...DEFAULT_CONTENT.emptyStates },
+      }),
+    },
+    tradingDefaults: {
+      type: tradingDefaultsSchema,
+      default: () => ({ ...DEFAULT_TRADING_DEFAULTS }),
+    },
+    locale: { type: localeSchema, default: () => ({ ...DEFAULT_LOCALE }) },
+    social: { type: socialSchema, default: () => ({ ...DEFAULT_SOCIAL }) },
+    pwa: { type: pwaSchema, default: () => ({ ...DEFAULT_PWA }) },
+    templates: {
+      type: templatesSchema,
+      default: () => ({
+        email: {
+          passwordReset: { ...DEFAULT_TEMPLATES.email.passwordReset },
+          verifyEmail: { ...DEFAULT_TEMPLATES.email.verifyEmail },
+          adminInvite: { ...DEFAULT_TEMPLATES.email.adminInvite },
+        },
+        telegram: { ...DEFAULT_TEMPLATES.telegram },
+      }),
+    },
+    webhooks: { type: webhooksSchema, default: () => ({ ...DEFAULT_WEBHOOKS }) },
     updatedBy: { type: String, default: null },
   },
   { timestamps: true }
@@ -287,7 +500,14 @@ export function mergeModules(
       label:
         typeof row.label === "string" && row.label.trim() ? row.label.trim() : fallback.label,
       hidden: row.hidden === true,
-      access: key === "trading" ? "signed-in" : row.access === "signed-in" ? "signed-in" : "public",
+      access:
+        key === "trading"
+          ? "signed-in"
+          : row.access === "admin"
+            ? "admin"
+            : row.access === "signed-in"
+              ? "signed-in"
+              : "public",
     });
   }
 
@@ -363,6 +583,37 @@ export function mergeSiteSettings(doc: any): SiteSettings {
     announcement: mergeAnnouncement(doc?.announcement),
     registration: mergeRegistration(doc?.registration),
     legal: mergeLegal(doc?.legal),
+    seo: { ...DEFAULT_SEO, ...(doc?.seo ?? {}) },
+    content: {
+      ...DEFAULT_CONTENT,
+      ...(doc?.content ?? {}),
+      emptyStates: {
+        ...DEFAULT_CONTENT.emptyStates,
+        ...(doc?.content?.emptyStates ?? {}),
+      },
+    },
+    tradingDefaults: { ...DEFAULT_TRADING_DEFAULTS, ...(doc?.tradingDefaults ?? {}) },
+    locale: { ...DEFAULT_LOCALE, ...(doc?.locale ?? {}) },
+    social: { ...DEFAULT_SOCIAL, ...(doc?.social ?? {}) },
+    pwa: { ...DEFAULT_PWA, ...(doc?.pwa ?? {}) },
+    templates: {
+      email: {
+        passwordReset: {
+          ...DEFAULT_TEMPLATES.email.passwordReset,
+          ...(doc?.templates?.email?.passwordReset ?? {}),
+        },
+        verifyEmail: {
+          ...DEFAULT_TEMPLATES.email.verifyEmail,
+          ...(doc?.templates?.email?.verifyEmail ?? {}),
+        },
+        adminInvite: {
+          ...DEFAULT_TEMPLATES.email.adminInvite,
+          ...(doc?.templates?.email?.adminInvite ?? {}),
+        },
+      },
+      telegram: { ...DEFAULT_TEMPLATES.telegram, ...(doc?.templates?.telegram ?? {}) },
+    },
+    webhooks: { ...DEFAULT_WEBHOOKS, ...(doc?.webhooks ?? {}) },
     version: updatedAt,
     updatedAt,
     updatedBy: typeof doc?.updatedBy === "string" ? doc.updatedBy : null,
@@ -396,6 +647,14 @@ export async function saveSiteSettings(
     announcement?: unknown;
     registration?: unknown;
     legal?: unknown;
+    seo?: unknown;
+    content?: unknown;
+    tradingDefaults?: unknown;
+    locale?: unknown;
+    social?: unknown;
+    pwa?: unknown;
+    templates?: unknown;
+    webhooks?: unknown;
   },
   updatedBy: string
 ): Promise<SiteSettings> {
@@ -410,6 +669,17 @@ export async function saveSiteSettings(
   const announcement = normalizeAnnouncement(patch.announcement, current.announcement);
   const registration = normalizeRegistration(patch.registration, current.registration);
   const legal = normalizeLegal(patch.legal, current.legal);
+  const seo = normalizeSeo(patch.seo, current.seo);
+  const content = normalizeContent(patch.content, current.content);
+  const tradingDefaults = normalizeTradingDefaults(
+    patch.tradingDefaults,
+    current.tradingDefaults
+  );
+  const locale = normalizeLocale(patch.locale, current.locale);
+  const social = normalizeSocial(patch.social, current.social);
+  const pwa = normalizePwa(patch.pwa, current.pwa);
+  const templates = normalizeTemplates(patch.templates, current.templates);
+  const webhooks = normalizeWebhooks(patch.webhooks, current.webhooks);
 
   const doc = await SiteSettingsModel.findOneAndUpdate(
     { key: "site" },
@@ -423,6 +693,14 @@ export async function saveSiteSettings(
         announcement,
         registration,
         legal,
+        seo,
+        content,
+        tradingDefaults,
+        locale,
+        social,
+        pwa,
+        templates,
+        webhooks,
         updatedBy,
       },
     },
@@ -452,6 +730,12 @@ export function publicSiteConfig(settings: SiteSettings): SiteConfig {
       requireEmailVerification: settings.registration.requireEmailVerification,
     },
     legal: settings.legal,
+    seo: settings.seo,
+    content: settings.content,
+    tradingDefaults: settings.tradingDefaults,
+    locale: settings.locale,
+    social: settings.social,
+    pwa: settings.pwa,
     version: settings.version,
   };
 }

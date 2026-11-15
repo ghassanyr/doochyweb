@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
 import { configuredAdminUsernames, setRole } from "../src/server/admin/roles";
+import { ApiKey } from "../src/server/apiKeys";
 import { adminRequired, signToken } from "../src/server/auth";
 import { User } from "../src/server/db";
 import { registrationDecision } from "../src/server/registrationPolicy";
@@ -23,6 +24,7 @@ const originals = {
   findOne: User.findOne,
   countDocuments: User.countDocuments,
   updateOne: User.updateOne,
+  findOneAndUpdate: ApiKey.findOneAndUpdate,
 };
 
 afterEach(() => {
@@ -30,6 +32,7 @@ afterEach(() => {
   (User as any).findOne = originals.findOne;
   (User as any).countDocuments = originals.countDocuments;
   (User as any).updateOne = originals.updateOne;
+  (ApiKey as any).findOneAndUpdate = originals.findOneAndUpdate;
 });
 
 // --- Express stubs --------------------------------------------------------
@@ -49,14 +52,19 @@ function mockRes() {
   return { res, captured };
 }
 
-function requestWith(token?: string) {
-  return { headers: token ? { authorization: `Bearer ${token}` } : {} } as any;
+function requestWith(token?: string, headers: Record<string, string> = {}) {
+  return {
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+  } as any;
 }
 
-async function runAdmin(token?: string) {
+async function runAdmin(token?: string, headers: Record<string, string> = {}) {
   const { res, captured } = mockRes();
   let nextCalled = false;
-  const req = requestWith(token);
+  const req = requestWith(token, headers);
   await adminRequired(req, res, () => {
     nextCalled = true;
   });
@@ -104,6 +112,26 @@ describe("adminRequired", () => {
     assert.equal(captured.status, null);
     assert.equal(req.userId, USER_ID);
     assert.equal(req.role, "admin");
+  });
+
+  test("accepts a valid admin API key", async () => {
+    (ApiKey as any).findOneAndUpdate = () =>
+      leanQuery({ _id: USER_ID, label: "Reporting", prefix: "dky_abcdef", createdAt: new Date() });
+    const { req, captured, nextCalled } = await runAdmin(undefined, {
+      "x-api-key": "dky_valid",
+    });
+    assert.equal(nextCalled, true);
+    assert.equal(captured.status, null);
+    assert.equal(req.role, "admin");
+    assert.equal(req.username, "api:Reporting");
+  });
+
+  test("rejects an unknown or revoked API key", async () => {
+    (ApiKey as any).findOneAndUpdate = () => leanQuery(null);
+    const { captured, nextCalled } = await runAdmin(undefined, { "x-api-key": "dky_missing" });
+    assert.equal(captured.status, 401);
+    assert.equal(captured.body.error, "invalid API key");
+    assert.equal(nextCalled, false);
   });
 
   test("returns 500 when the role lookup fails", async () => {

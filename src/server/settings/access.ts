@@ -6,7 +6,7 @@
 
 import type { NextFunction, Response } from "express";
 
-import { sessionFromRequest, tokenUserId, type AuthedRequest } from "../auth";
+import { sessionFromRequest, type AuthedRequest } from "../auth";
 import { getSiteSettings } from "./store";
 import type { ModuleKey } from "./types";
 
@@ -28,8 +28,13 @@ export function moduleGate(key: ModuleKey) {
         next();
         return;
       }
-      if (!(await tokenUserId(req))) {
+      const session = await sessionFromRequest(req);
+      if (!session) {
         signInRequired(res);
+        return;
+      }
+      if (module.access === "admin" && session.role !== "admin") {
+        res.status(403).json({ error: "administrator access required for this module" });
         return;
       }
       next();
@@ -52,12 +57,19 @@ export async function marketGate(
     const settings = await getSiteSettings();
     const access = (key: ModuleKey) =>
       settings.navigation.modules.find((item) => item.key === key)?.access ?? "public";
-    if (
-      access("analysis") === "signed-in" &&
-      access("breakouts") === "signed-in" &&
-      !(await tokenUserId(req))
-    ) {
+    const analysis = access("analysis");
+    const breakouts = access("breakouts");
+    if (analysis === "public" || breakouts === "public") {
+      next();
+      return;
+    }
+    const session = await sessionFromRequest(req);
+    if (!session) {
       signInRequired(res);
+      return;
+    }
+    if ((analysis === "admin" || breakouts === "admin") && session.role !== "admin") {
+      res.status(403).json({ error: "administrator access required for this module" });
       return;
     }
     next();

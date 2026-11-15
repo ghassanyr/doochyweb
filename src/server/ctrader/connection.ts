@@ -1,5 +1,5 @@
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
-import { loadCredentials, saveCredentials } from "../db";
+import { loadCredentials, recordCredentialHealth, saveCredentials } from "../db";
 import { ctraderAppCredentials } from "./appConfig";
 
 // Per-user, per-environment socket pool. One process-level map of UserSockets,
@@ -263,6 +263,10 @@ export class UserSockets {
     return job;
   }
 
+  private health(ok: boolean, error?: unknown, reauthRequired = false): void {
+    void recordCredentialHealth(this.userId, { ok, error, reauthRequired }).catch(() => {});
+  }
+
   private async openChannel(env: CtraderEnv): Promise<Channel> {
     const c = await this.creds();
     const app = await this.appCredentials(c);
@@ -271,8 +275,14 @@ export class UserSockets {
     if (ch?.healthy) return ch;
     ch?.close();
     ch = new Channel(env);
-    await ch.open(app.clientId, app.clientSecret);
+    try {
+      await ch.open(app.clientId, app.clientSecret);
+    } catch (err) {
+      this.health(false, err);
+      throw err;
+    }
     if (env === "demo") this.demo = ch; else this.live = ch;
+    this.health(true);
     return ch;
   }
 
@@ -383,11 +393,21 @@ export class UserSockets {
       return await ch.send(name, data, opts?.clientMsgId);
     } catch (err: any) {
       if (!isTokenError(err)) throw err;
-      if (!mayRotate) throw new Error(marketTokenMessage(err));
-      await this.rotateTokens();
-      if (opts?.ctid != null) await this.ensureAccountAuthed(env, opts.ctid, true);
-      const ch = await this.channel(env);
-      return await ch.send(name, data, opts?.clientMsgId);
+      if (!mayRotate) {
+        this.health(false, err, true);
+        throw new Error(marketTokenMessage(err));
+      }
+      try {
+        await this.rotateTokens();
+        if (opts?.ctid != null) await this.ensureAccountAuthed(env, opts.ctid, true);
+        const ch = await this.channel(env);
+        const result = await ch.send(name, data, opts?.clientMsgId);
+        this.health(true);
+        return result;
+      } catch (retryErr) {
+        this.health(false, retryErr, isTokenError(retryErr));
+        throw retryErr;
+      }
     }
   }
 
@@ -408,10 +428,19 @@ export class UserSockets {
         return;
       }
       if (isTokenError(err)) {
-        if (!mayRotate) throw new Error(marketTokenMessage(err));
-        await this.rotateTokens();
-        await this.ensureAccountAuthed(env, ctid, true);
-        return;
+        if (!mayRotate) {
+          this.health(false, err, true);
+          throw new Error(marketTokenMessage(err));
+        }
+        try {
+          await this.rotateTokens();
+          await this.ensureAccountAuthed(env, ctid, true);
+          this.health(true);
+          return;
+        } catch (retryErr) {
+          this.health(false, retryErr, isTokenError(retryErr));
+          throw retryErr;
+        }
       }
       throw err;
     }

@@ -19,6 +19,7 @@ export default function ConnectPanel({
   storedClientId,
   variant = "fullscreen",
   oauthAvailable = false,
+  manualAvailable = false,
 }: {
   onConnected: (creds: ConnectInput) => Promise<void>;
   onCancel?: () => void;
@@ -29,6 +30,8 @@ export default function ConnectPanel({
   variant?: "fullscreen" | "inline";
   /** Show the one-click cTrader consent flow instead of the credential form. */
   oauthAvailable?: boolean;
+  /** Admin policy: allow users to paste credentials from their own Open API app. */
+  manualAvailable?: boolean;
 }) {
   const hasStored = Boolean(storedClientId);
   const [clientId, setClientId] = useState("");
@@ -39,12 +42,12 @@ export default function ConnectPanel({
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAppFields, setShowAppFields] = useState(false);
-  const [showManual, setShowManual] = useState(!oauthAvailable && hasStored);
+  const [showManual, setShowManual] = useState(manualAvailable && !oauthAvailable);
 
   // Availability arrives with /api/me, which may settle after this panel mounts.
   useEffect(() => {
-    setShowManual(!oauthAvailable && hasStored);
-  }, [oauthAvailable, hasStored]);
+    setShowManual(manualAvailable && !oauthAvailable);
+  }, [manualAvailable, oauthAvailable]);
 
   const appReady = hasStored || (clientId && clientSecret);
   const ready = appReady && accessToken && refreshToken;
@@ -75,7 +78,7 @@ export default function ConnectPanel({
     }
   }
 
-  if (!oauthAvailable && !hasStored) {
+  if (!oauthAvailable && !manualAvailable) {
     return (
       <div
         className={
@@ -91,8 +94,9 @@ export default function ConnectPanel({
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">Trading is not configured</h1>
             <p className="text-sm leading-relaxed text-fg-muted">
-              This deployment does not have a cTrader OpenAPI app yet. Ask the administrator to
-              configure cTrader in Admin → Integrations before connecting an account.
+              cTrader sign-in is not available, and user-owned apps are disabled. Ask the
+              administrator to configure cTrader in Admin → Integrations before connecting an
+              account.
             </p>
             {onCancel && (
               <Button variant="secondary" onClick={onCancel}>
@@ -154,22 +158,24 @@ export default function ConnectPanel({
                   Continue with cTrader
                 </Button>
                 {error && <Flash tone="danger">{error}</Flash>}
-                <div className="text-center">
-                  <button
-                    type="button"
-                    className="text-xs text-fg-faint underline-offset-2 transition hover:text-fg hover:underline"
-                    onClick={() => {
-                      setShowManual(true);
-                      setError(null);
-                    }}
-                  >
-                    Use my own cTrader OpenAPI app
-                  </button>
-                </div>
+                {manualAvailable && (
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      className="text-xs text-fg-faint underline-offset-2 transition hover:text-fg hover:underline"
+                      onClick={() => {
+                        setShowManual(true);
+                        setError(null);
+                      }}
+                    >
+                      Use my own cTrader OpenAPI app
+                    </button>
+                  </div>
+                )}
               </>
             )}
 
-            {showManual && oauthAvailable && (
+            {showManual && oauthAvailable && manualAvailable && (
               <div className="text-center">
                 <button
                   type="button"
@@ -184,7 +190,7 @@ export default function ConnectPanel({
               </div>
             )}
 
-            {showManual && hasStored && (
+            {showManual && manualAvailable && hasStored && (
               <div className="rounded-lg border border-hairline bg-soft px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -209,7 +215,7 @@ export default function ConnectPanel({
               </div>
             )}
 
-            {showManual && (
+            {showManual && manualAvailable && (
               <>
             {(!hasStored || showAppFields) && (
               <>

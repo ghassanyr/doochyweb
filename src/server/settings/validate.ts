@@ -10,18 +10,30 @@ import type {
   AnnouncementSettings,
   AnnouncementTone,
   BrandingSettings,
+  ContentSettings,
+  DateFormat,
   LandingKey,
   LegalSettings,
+  LocaleSettings,
   MaintenanceSettings,
   ModuleAccess,
   ModuleKey,
   ModuleSettings,
   NavigationSettings,
+  NumberFormat,
+  PwaSettings,
   RegistrationMode,
   RegistrationSettings,
+  SeoSettings,
   SiteAddressSettings,
+  SocialSettings,
+  TemplateSettings,
+  ThemeDensity,
+  ThemeFont,
   ThemeMode,
   ThemeSettings,
+  TradingDefaultsSettings,
+  WebhookSettings,
 } from "./types";
 
 export class SettingsValidationError extends Error {
@@ -150,6 +162,30 @@ export function normalizeTheme(patch: unknown, base: ThemeSettings): ThemeSettin
       throw new SettingsValidationError("mode must be dark or light");
     }
     next.mode = mode as ThemeMode;
+  }
+
+  if (source.font !== undefined) {
+    const font = source.font;
+    if (font !== "inter" && font !== "system" && font !== "serif") {
+      throw new SettingsValidationError("font must be inter, system or serif");
+    }
+    next.font = font as ThemeFont;
+  }
+
+  if (source.density !== undefined) {
+    const density = source.density;
+    if (density !== "compact" && density !== "comfortable" && density !== "spacious") {
+      throw new SettingsValidationError("density must be compact, comfortable or spacious");
+    }
+    next.density = density as ThemeDensity;
+  }
+
+  if (source.radius !== undefined) {
+    const radius = typeof source.radius === "number" ? source.radius : Number.NaN;
+    if (!Number.isInteger(radius) || radius < 0 || radius > 24) {
+      throw new SettingsValidationError("radius must be a whole number from 0 to 24");
+    }
+    next.radius = radius;
   }
 
   for (const key of THEME_COLOR_KEYS) {
@@ -338,8 +374,8 @@ export function normalizeModules(patch: unknown, base: ModuleSettings[]): Module
 
     let access: ModuleAccess = current.access;
     if (source.access !== undefined) {
-      if (source.access !== "public" && source.access !== "signed-in") {
-        throw new SettingsValidationError("module access must be public or signed-in");
+      if (source.access !== "public" && source.access !== "signed-in" && source.access !== "admin") {
+        throw new SettingsValidationError("module access must be public, signed-in or admin");
       }
       access = source.access;
     }
@@ -423,5 +459,247 @@ export function normalizeAnnouncement(
     dismissible: readBoolean(source, "dismissible", base.dismissible),
     startsAt,
     endsAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// SEO, content, trading defaults, locale, social, PWA, templates and webhooks
+// ---------------------------------------------------------------------------
+
+function readNumber(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  if (!(key in source) || source[key] === undefined) return fallback;
+  const raw = source[key];
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < min || raw > max) {
+    throw new SettingsValidationError(`${key} must be a number from ${min} to ${max}`);
+  }
+  return raw;
+}
+
+function checkHttp(value: string, key: string, allowPath = false): string {
+  if (!value) return value;
+  if ((allowPath && value.startsWith("/")) || HTTP_URL.test(value)) return value;
+  throw new SettingsValidationError(`${key} must be an http(s) URL${allowPath ? " or start with /" : ""}`);
+}
+
+const ANALYTICS_PROVIDERS = ["none", "plausible", "umami", "google"] as const;
+
+export function normalizeSeo(patch: unknown, base: SeoSettings): SeoSettings {
+  const source = plainObject(patch);
+  let analyticsProvider = base.analyticsProvider;
+  if (source.analyticsProvider !== undefined) {
+    if (
+      typeof source.analyticsProvider !== "string" ||
+      !(ANALYTICS_PROVIDERS as readonly string[]).includes(source.analyticsProvider)
+    ) {
+      throw new SettingsValidationError("analyticsProvider must be none, plausible, umami or google");
+    }
+    analyticsProvider = source.analyticsProvider as SeoSettings["analyticsProvider"];
+  }
+  const canonicalUrl = checkHttp(
+    readString(source, "canonicalUrl", base.canonicalUrl, 500),
+    "canonicalUrl"
+  );
+  const ogImageUrl = checkHttp(
+    readString(source, "ogImageUrl", base.ogImageUrl, 500),
+    "ogImageUrl",
+    true
+  );
+  const analyticsScriptUrl = checkHttp(
+    readString(source, "analyticsScriptUrl", base.analyticsScriptUrl, 500),
+    "analyticsScriptUrl",
+    true
+  );
+  return {
+    title: readString(source, "title", base.title, 120),
+    description: readString(source, "description", base.description, 300),
+    canonicalUrl,
+    ogImageUrl,
+    keywords: readString(source, "keywords", base.keywords, 300),
+    noindex: readBoolean(source, "noindex", base.noindex),
+    analyticsProvider,
+    analyticsScriptUrl,
+    analyticsSiteId: readString(source, "analyticsSiteId", base.analyticsSiteId, 200),
+    analyticsRequireConsent: readBoolean(
+      source,
+      "analyticsRequireConsent",
+      base.analyticsRequireConsent
+    ),
+  };
+}
+
+export function normalizeContent(patch: unknown, base: ContentSettings): ContentSettings {
+  const source = plainObject(patch);
+  const empty = plainObject(source.emptyStates);
+  return {
+    heroTitle: readString(source, "heroTitle", base.heroTitle, 300),
+    heroBody: readString(source, "heroBody", base.heroBody, 1000),
+    featuresTitle: readString(source, "featuresTitle", base.featuresTitle, 120),
+    featuresBody: readString(source, "featuresBody", base.featuresBody, 500),
+    loginIntro: readString(source, "loginIntro", base.loginIntro, 500),
+    registerIntro: readString(source, "registerIntro", base.registerIntro, 500),
+    emptyStates: {
+      analysis: readString(empty, "analysis", base.emptyStates.analysis, 300),
+      signals: readString(empty, "signals", base.emptyStates.signals, 300),
+      breakouts: readString(empty, "breakouts", base.emptyStates.breakouts, 300),
+      trading: readString(empty, "trading", base.emptyStates.trading, 300),
+      alerts: readString(empty, "alerts", base.emptyStates.alerts, 300),
+      briefing: readString(empty, "briefing", base.emptyStates.briefing, 300),
+    },
+  };
+}
+
+export function normalizeTradingDefaults(
+  patch: unknown,
+  base: TradingDefaultsSettings
+): TradingDefaultsSettings {
+  const source = plainObject(patch);
+  let defaultOrderType = base.defaultOrderType;
+  if (source.defaultOrderType !== undefined) {
+    if (source.defaultOrderType !== "MARKET" && source.defaultOrderType !== "LIMIT") {
+      throw new SettingsValidationError("defaultOrderType must be MARKET or LIMIT");
+    }
+    defaultOrderType = source.defaultOrderType;
+  }
+  return {
+    defaultOrderType,
+    defaultRiskPercent: readNumber(
+      source,
+      "defaultRiskPercent",
+      base.defaultRiskPercent,
+      0,
+      100
+    ),
+    signalExpiryHours: Math.round(
+      readNumber(source, "signalExpiryHours", base.signalExpiryHours, 0, 720)
+    ),
+  };
+}
+
+const DATE_FORMATS: readonly DateFormat[] = ["locale", "iso", "dmy", "mdy"];
+const NUMBER_FORMATS: readonly NumberFormat[] = ["locale", "comma-dot", "dot-comma"];
+
+export function normalizeLocale(patch: unknown, base: LocaleSettings): LocaleSettings {
+  const source = plainObject(patch);
+  const locale = readString(source, "locale", base.locale, 35);
+  if (locale && !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(locale)) {
+    throw new SettingsValidationError("locale must look like en or en-GB");
+  }
+  const timezone = readString(source, "timezone", base.timezone, 80);
+  if (timezone) {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: timezone }).format(new Date());
+    } catch {
+      throw new SettingsValidationError("timezone must be a valid IANA zone such as Europe/London");
+    }
+  }
+  const currency = readString(source, "currency", base.currency, 3).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new SettingsValidationError("currency must be a three-letter ISO code");
+  }
+  let dateFormat = base.dateFormat;
+  if (source.dateFormat !== undefined) {
+    if (typeof source.dateFormat !== "string" || !(DATE_FORMATS as readonly string[]).includes(source.dateFormat)) {
+      throw new SettingsValidationError("dateFormat must be locale, iso, dmy or mdy");
+    }
+    dateFormat = source.dateFormat as DateFormat;
+  }
+  let numberFormat = base.numberFormat;
+  if (source.numberFormat !== undefined) {
+    if (
+      typeof source.numberFormat !== "string" ||
+      !(NUMBER_FORMATS as readonly string[]).includes(source.numberFormat)
+    ) {
+      throw new SettingsValidationError("numberFormat must be locale, comma-dot or dot-comma");
+    }
+    numberFormat = source.numberFormat as NumberFormat;
+  }
+  return { locale, timezone, currency, dateFormat, numberFormat };
+}
+
+const SOCIAL_KEYS = ["x", "telegram", "discord", "youtube", "linkedin", "github"] as const;
+
+export function normalizeSocial(patch: unknown, base: SocialSettings): SocialSettings {
+  const source = plainObject(patch);
+  const next = { ...base };
+  for (const key of SOCIAL_KEYS) {
+    next[key] = checkHttp(readString(source, key, base[key], 500), key);
+  }
+  return next;
+}
+
+export function normalizePwa(patch: unknown, base: PwaSettings): PwaSettings {
+  const source = plainObject(patch);
+  const themeColor = readString(source, "themeColor", base.themeColor, 7);
+  const backgroundColor = readString(source, "backgroundColor", base.backgroundColor, 7);
+  if (!HEX.test(themeColor) || !HEX.test(backgroundColor)) {
+    throw new SettingsValidationError("PWA colours must be 6-digit hex values");
+  }
+  let display = base.display;
+  if (source.display !== undefined) {
+    if (source.display !== "standalone" && source.display !== "browser") {
+      throw new SettingsValidationError("PWA display must be standalone or browser");
+    }
+    display = source.display;
+  }
+  return {
+    enabled: readBoolean(source, "enabled", base.enabled),
+    shortName: readString(source, "shortName", base.shortName, 30),
+    themeColor: themeColor.toLowerCase(),
+    backgroundColor: backgroundColor.toLowerCase(),
+    display,
+  };
+}
+
+function normalizeEmailTemplate(
+  patch: unknown,
+  base: { subject: string; body: string }
+): { subject: string; body: string } {
+  const source = plainObject(patch);
+  return {
+    subject: readString(source, "subject", base.subject, 200),
+    body: readString(source, "body", base.body, 5000),
+  };
+}
+
+export function normalizeTemplates(patch: unknown, base: TemplateSettings): TemplateSettings {
+  const source = plainObject(patch);
+  const email = plainObject(source.email);
+  const telegram = plainObject(source.telegram);
+  return {
+    email: {
+      passwordReset: normalizeEmailTemplate(email.passwordReset, base.email.passwordReset),
+      verifyEmail: normalizeEmailTemplate(email.verifyEmail, base.email.verifyEmail),
+      adminInvite: normalizeEmailTemplate(email.adminInvite, base.email.adminInvite),
+    },
+    telegram: {
+      signalPublished: readString(
+        telegram,
+        "signalPublished",
+        base.telegram.signalPublished,
+        2000
+      ),
+      alertTriggered: readString(telegram, "alertTriggered", base.telegram.alertTriggered, 2000),
+      test: readString(telegram, "test", base.telegram.test, 500),
+    },
+  };
+}
+
+export function normalizeWebhooks(patch: unknown, base: WebhookSettings): WebhookSettings {
+  const source = plainObject(patch);
+  const enabled = readBoolean(source, "enabled", base.enabled);
+  const url = checkHttp(readString(source, "url", base.url, 500), "webhook url");
+  if (enabled && !url) throw new SettingsValidationError("webhook URL is required when enabled");
+  return {
+    enabled,
+    url,
+    secret: readString(source, "secret", base.secret, 200),
+    signalPublished: readBoolean(source, "signalPublished", base.signalPublished),
+    alertTriggered: readBoolean(source, "alertTriggered", base.alertTriggered),
   };
 }

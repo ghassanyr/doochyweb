@@ -55,6 +55,14 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         ],
         hint: "trading is required for positions and orders; accounts is view-only.",
       },
+      {
+        key: "allowManual",
+        label: "Allow user-owned cTrader apps",
+        kind: "boolean",
+        env: "CTRADER_ALLOW_MANUAL",
+        defaultValue: false,
+        hint: "Off by default. Keep it off unless users must register their own Open API app and paste tokens instead of using cTrader sign-in.",
+      },
     ],
   },
   telegram: {

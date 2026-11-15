@@ -14,6 +14,7 @@ import { FadeRise } from "../components/motion";
 import { Badge, Button, Card, Flash, inputCls, Skeleton } from "../components/ui";
 import type { CatalogEntry } from "../market/types";
 import { formatLocalDateTime } from "../time";
+import { useSiteConfig } from "../siteConfig";
 
 interface WatchRow {
   symbol: string;
@@ -21,6 +22,7 @@ interface WatchRow {
 }
 
 export default function AlertsPage() {
+  const { content } = useSiteConfig();
   const [alerts, setAlerts] = useState<AlertView[]>([]);
   const [counts, setCounts] = useState<AlertCounts | null>(null);
   const [watchlist, setWatchlist] = useState<WatchRow[]>([]);
@@ -354,7 +356,7 @@ export default function AlertsPage() {
             </div>
           ) : alerts.length === 0 ? (
             <div className="p-6">
-              <p className="text-sm font-medium text-fg">No alerts yet</p>
+              <p className="text-sm font-medium text-fg">{content.emptyStates.alerts}</p>
               <p className="mt-1 text-[12.5px] leading-relaxed text-fg-muted">
                 Add a level above and it will be checked every minute, even while this page is closed.
               </p>
