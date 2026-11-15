@@ -1050,7 +1050,7 @@ export interface AiProviderOption {
   keyHint: string;
   docsUrl: string | null;
   models: readonly string[];
-  defaultModel: string;
+  defaultModel: string | null;
 }
 
 export interface AiModelsResult {

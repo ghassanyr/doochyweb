@@ -99,7 +99,7 @@ Telegram uses long polling only, so it needs no inbound route or webhook.
 
 ### AI provider
 
-AI features are optional and configured under **Admin → Integrations**. Pick OpenAI, OpenRouter, Groq, NVIDIA or a local Ollama server, or enter any other OpenAI-compatible endpoint with **Custom**. The page links to the provider key page, fills in the endpoint and recommended model, can load the models the endpoint advertises, and tests the connection before you save. Ollama needs no API key. The key is encrypted at rest and never returned to the browser.
+AI features are optional and configured under **Admin → Integrations**. Pick OpenAI, OpenRouter, Groq, NVIDIA or a local Ollama server, or enter any other OpenAI-compatible endpoint with **Custom**. The page links to the provider key page, fills in the endpoint and, when available, a recommended model, loads the models the endpoint advertises, and tests the connection before you save. Ollama needs no API key. The key is encrypted at rest and never returned to the browser.
 
 ### Webhooks
 

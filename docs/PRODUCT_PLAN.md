@@ -10,7 +10,7 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 - P0 is complete. The setup checklist now covers backups and guided AI provider setup, and backups have retention, status, per-user export and secure-deletion guidance.
 - P1 is complete: metadata, content copy, defaults, locale/formats, roles, templates and theme extras are implemented.
 - P2 is complete: PWA metadata, social links, webhooks and deployment version information are implemented.
-- Last verified: `pnpm typecheck`, `pnpm test` with 825 tests, and `pnpm build` all pass.
+- Last verified: `pnpm typecheck`, `pnpm test` with 828 tests, and `pnpm build` all pass.
 
 ## P0: needed for a sellable self-hosted product
 

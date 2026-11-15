@@ -13,6 +13,7 @@
 // A mismatch is an error (it cannot work), not a warning. Scope `accounts` is
 // only a warning because the connection still works, but trading actions fail.
 
+import { aiDefaultModel, aiProviderKeyRequired } from "../ai/providers";
 import type { IntegrationFieldState, IntegrationProvider } from "./types";
 import { providerSmtpIssues, validateSmtpSetup } from "./smtpSetup";
 
@@ -151,11 +152,14 @@ function validateAiSetup(
   const selectedProvider = text(values.provider) || "openai";
   const baseUrl = text(values.baseUrl);
   const hasKey = keyConfigured ?? text(values.apiKey).length > 0;
-  if (selectedProvider !== "ollama" && !hasKey) {
+  if (aiProviderKeyRequired(selectedProvider) && !hasKey) {
     errors.push("Add an API key for this provider.");
   }
   if (selectedProvider === "custom" && !baseUrl) {
     errors.push("API base URL is required when Provider is Custom.");
+  }
+  if (!text(values.model) && !aiDefaultModel(selectedProvider)) {
+    errors.push("Choose a model for this provider.");
   }
   return { errors, warnings: [] };
 }

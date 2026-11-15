@@ -145,6 +145,17 @@ describe("providerIssuesFromValues", () => {
     const issues = providerIssuesFromValues("ai", { provider: "custom", apiKey: "sk-test" });
     assert.equal(issues.errors.some((error) => /base URL/.test(error)), true);
   });
+
+  test("requires an explicit model when the provider has no default", () => {
+    const missing = providerIssuesFromValues("ai", { provider: "nvidia", apiKey: "nv-test" });
+    assert.equal(missing.errors.some((error) => /Choose a model/.test(error)), true);
+    const chosen = providerIssuesFromValues("ai", {
+      provider: "nvidia",
+      apiKey: "nv-test",
+      model: "meta/llama-3.3-70b-instruct",
+    });
+    assert.deepEqual(chosen.errors, []);
+  });
 });
 
 describe("describeIntegration cross-field state", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Plug,
   RefreshCw,
   Save,
+  Search,
   Send,
   Sparkles,
 } from "lucide-react";
@@ -25,6 +26,7 @@ import {
   type IntegrationState,
   type IntegrationTestResult,
 } from "../api";
+import { AnimatedModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
 import { Badge, Button, Card, Flash, Skeleton, inputCls } from "../components/ui";
 import type { ViewKey } from "../routing";
@@ -237,6 +239,117 @@ function CallbackRow({ label, value }: { label: string; value: string | null }) 
   );
 }
 
+function ModelPickerModal({
+  open,
+  onClose,
+  providerLabel,
+  models,
+  selected,
+  loading,
+  notice,
+  onRefresh,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  providerLabel: string;
+  models: string[];
+  selected: string;
+  loading: boolean;
+  notice: { ok: boolean; message: string } | null;
+  onRefresh: () => Promise<void>;
+  onSelect: (model: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (open) setQuery("");
+  }, [open]);
+
+  const needle = query.trim().toLowerCase();
+  const filtered = needle
+    ? models.filter((model) => model.toLowerCase().includes(needle))
+    : models;
+
+  return (
+    <AnimatedModal
+      open={open}
+      onClose={onClose}
+      title="Choose a model"
+      subtitle={`${providerLabel} returned ${models.length} ${models.length === 1 ? "model" : "models"}.`}
+      size="lg"
+      actions={
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<RefreshCw className="h-3.5 w-3.5" />}
+          onClickAsync={onRefresh}
+          disabled={loading}
+        >
+          Refresh
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        <label className="block space-y-1">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+            <Search className="h-3.5 w-3.5" />
+            Search models
+          </span>
+          <input
+            className={inputCls}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter by name"
+            autoFocus
+            spellCheck={false}
+          />
+        </label>
+
+        <div className="max-h-[52vh] space-y-1 overflow-y-auto pr-1">
+          {filtered.map((model) => {
+            const active = selected === model;
+            return (
+              <button
+                key={model}
+                type="button"
+                onClick={() => onSelect(model)}
+                className={
+                  "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition " +
+                  (active
+                    ? "border-accent bg-accent-soft text-accent"
+                    : "border-hairline bg-soft text-fg hover:border-hairline-strong hover:bg-surface-hover")
+                }
+              >
+                <span className="min-w-0 break-all font-mono text-xs">{model}</span>
+                {active && <Check className="h-4 w-4 shrink-0" />}
+              </button>
+            );
+          })}
+          {!loading && filtered.length === 0 && (
+            <p className="rounded-lg border border-hairline bg-soft px-3 py-4 text-center text-xs text-fg-faint">
+              {models.length === 0
+                ? "No models loaded yet. Use Refresh to fetch the provider list."
+                : "No models match that search."}
+            </p>
+          )}
+          {loading && (
+            <p className="rounded-lg border border-hairline bg-soft px-3 py-4 text-center text-xs text-fg-faint">
+              Loading models...
+            </p>
+          )}
+        </div>
+
+        {notice && (
+          <p className={`text-[11px] ${notice.ok ? "text-success" : "text-danger"}`}>
+            {notice.message}
+          </p>
+        )}
+      </div>
+    </AnimatedModal>
+  );
+}
+
 function AiProviderCard({
   state,
   draft,
@@ -268,9 +381,14 @@ function AiProviderCard({
   const info = aiProviders.find((entry) => entry.value === currentProvider) ?? null;
   const isCustom = currentProvider === "custom";
   const keyRequired = info?.keyRequired ?? true;
+  const apiKeyValue = (draft.values.apiKey ?? "").trim();
   const [editEndpoint, setEditEndpoint] = useState(false);
   const [loadedModels, setLoadedModels] = useState<string[] | null>(null);
   const [modelNotice, setModelNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const modelRequest = useRef(0);
+  const previousApiKey = useRef(apiKeyValue);
   const baseUrlValue = (draft.values.baseUrl ?? "").trim();
   const customEndpoint =
     isCustom ||
@@ -293,8 +411,7 @@ function AiProviderCard({
   function chooseProvider(value: string) {
     const nextInfo = aiProviders.find((entry) => entry.value === value) ?? null;
     const currentModel = (draft.values.model ?? "").trim();
-    const stillDefault = !currentModel || currentModel === info?.defaultModel;
-    const nextModel = stillDefault ? nextInfo?.defaultModel ?? currentModel : currentModel;
+    const nextModel = nextInfo ? nextInfo.defaultModel ?? "" : currentModel;
     onDraftChange({
       ...draft,
       cleared: draft.cleared.filter((key) => key !== "baseUrl" && key !== "model"),
@@ -310,19 +427,40 @@ function AiProviderCard({
     setModelNotice(null);
   }
 
-  async function loadModels() {
+  async function loadModels(openPicker = true) {
+    const request = ++modelRequest.current;
+    setLoadingModels(true);
     setModelNotice(null);
     try {
       const result = await adminApi.aiModels(patch);
-      if (result.ok) setLoadedModels(result.models);
+      if (request !== modelRequest.current) return;
+      if (result.ok) {
+        setLoadedModels(result.models);
+        if (openPicker) setModelPickerOpen(true);
+      }
       setModelNotice({ ok: result.ok, message: result.message });
     } catch (err) {
+      if (request !== modelRequest.current) return;
       setModelNotice({
         ok: false,
         message: err instanceof Error ? err.message : "Could not load models.",
       });
+    } finally {
+      if (request === modelRequest.current) setLoadingModels(false);
     }
   }
+
+  useEffect(() => {
+    const previous = previousApiKey.current;
+    previousApiKey.current = apiKeyValue;
+    if (!apiKeyValue || apiKeyValue === previous) return;
+    setLoadedModels(null);
+    setModelNotice(null);
+    const timer = setTimeout(() => {
+      void loadModels(true);
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [apiKeyValue, currentProvider, baseUrlValue]);
 
   function usePresetEndpoint() {
     onDraftChange({
@@ -467,9 +605,13 @@ function AiProviderCard({
             <Field
               field={{
                 ...modelField,
-                placeholder: info?.defaultModel ?? modelField.placeholder ?? suggestions[0] ?? "",
+                placeholder: info
+                  ? info.defaultModel ?? "Choose a model"
+                  : modelField.placeholder ?? suggestions[0] ?? "",
                 hint: info
-                  ? `Recommended: ${info.defaultModel}. Leave empty to use it.`
+                  ? info.defaultModel
+                    ? `Recommended: ${info.defaultModel}. Leave empty to use it.`
+                    : "Choose a model from the provider list."
                   : modelField.hint,
               }}
               draft={draft}
@@ -489,18 +631,31 @@ function AiProviderCard({
           <div className="flex flex-wrap items-center gap-2 self-end pb-1">
             <Button
               size="sm"
-              variant="ghost"
-              icon={<RefreshCw className="h-3.5 w-3.5" />}
-              onClickAsync={loadModels}
+              variant="secondary"
+              icon={<Search className="h-3.5 w-3.5" />}
+              onClick={() => {
+                if (loadedModels && loadedModels.length > 0) {
+                  setModelPickerOpen(true);
+                } else {
+                  void loadModels(true);
+                }
+              }}
               disabled={
-                (keyRequired && !(draft.values.apiKey ?? "").trim() && !keyField?.configured) ||
+                loadingModels ||
+                (keyRequired && !apiKeyValue && !keyField?.configured) ||
                 (isCustom && !baseUrlValue)
               }
             >
-              Load models
+              {loadingModels
+                ? "Loading models..."
+                : loadedModels && loadedModels.length > 0
+                  ? "Choose model"
+                  : "Load models"}
             </Button>
             <span className="text-[11px] text-fg-faint">
-              Uses the saved key or the unsaved key above.
+              {loadedModels
+                ? `${loadedModels.length} models loaded.`
+                : "Fetches the provider model list automatically after the key is entered."}
             </span>
           </div>
         </div>
@@ -590,6 +745,25 @@ function AiProviderCard({
           {state.updatedBy ? ` by ${state.updatedBy}` : ""}.
         </p>
       )}
+
+      <ModelPickerModal
+        open={modelPickerOpen}
+        onClose={() => setModelPickerOpen(false)}
+        providerLabel={info?.label ?? "Provider"}
+        models={loadedModels ?? []}
+        selected={(draft.values.model ?? "").trim()}
+        loading={loadingModels}
+        notice={modelNotice}
+        onRefresh={() => loadModels(false)}
+        onSelect={(model) => {
+          onDraftChange({
+            ...draft,
+            cleared: draft.cleared.filter((key) => key !== "model"),
+            values: { ...draft.values, model },
+          });
+          setModelPickerOpen(false);
+        }}
+      />
     </Card>
   );
 }

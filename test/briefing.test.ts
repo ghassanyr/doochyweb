@@ -234,7 +234,11 @@ describe("aiConfigFromValues", () => {
   });
 
   test("resolves the NVIDIA preset base URL", () => {
-    const config = aiConfigFromValues({ apiKey: "nv-test", provider: "nvidia" });
+    const config = aiConfigFromValues({
+      apiKey: "nv-test",
+      provider: "nvidia",
+      model: "meta/llama-3.3-70b-instruct",
+    });
     assert.equal(config?.baseUrl, "https://integrate.api.nvidia.com/v1");
   });
 
@@ -243,6 +247,16 @@ describe("aiConfigFromValues", () => {
     assert.equal(groq?.model, "llama-3.1-8b-instant");
     const openrouter = aiConfigFromValues({ apiKey: "sk-or", provider: "openrouter" });
     assert.equal(openrouter?.model, "openai/gpt-4o-mini");
+  });
+
+  test("requires an explicit model for a provider without a default", () => {
+    assert.equal(aiConfigFromValues({ apiKey: "nv-test", provider: "nvidia" }), null);
+    const nvidia = aiConfigFromValues({
+      apiKey: "nv-test",
+      provider: "nvidia",
+      model: "meta/llama-3.3-70b-instruct",
+    });
+    assert.equal(nvidia?.model, "meta/llama-3.3-70b-instruct");
   });
 
   test("allows Ollama without an API key", () => {
@@ -269,6 +283,22 @@ describe("listAiModels", () => {
       const result = await listAiModels({ provider: "openai", apiKey: "sk-test" });
       assert.equal(result.ok, true);
       assert.deepEqual(result.models, ["a-model", "b-model"]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("lists models before a model has been selected", async () => {
+    const original = globalThis.fetch;
+    (globalThis as any).fetch = async () =>
+      new Response(JSON.stringify({ data: [{ id: "meta/llama-3.3-70b-instruct" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    try {
+      const result = await listAiModels({ provider: "nvidia", apiKey: "nv-test" });
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.models, ["meta/llama-3.3-70b-instruct"]);
     } finally {
       globalThis.fetch = original;
     }
