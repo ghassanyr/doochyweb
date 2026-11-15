@@ -186,6 +186,15 @@ started, `later` means deliberately deferred, `skip` means not planned.
   `AI_BASE_URL`, `AI_MODEL`) as a bootstrap fallback. The key is encrypted at
   rest, never returned to the browser and never logged.
 - The provider card has a Test button that makes one tiny completion.
+- The model field opens the model picker. It is read only for preset providers
+  and editable only for Custom, where any model name may be typed.
+- NVIDIA's `GET /v1/models` returns the whole hosted catalog, not the subset the
+  key can invoke, so many listed models fail with HTTP 404 "Not found for
+  account". The picker now hides non-chat endpoints, probes each remaining
+  candidate with a small chat completion, and lists only the models that answer
+  for that key. Results are cached for ten minutes and a refresh continues from
+  the models that were not checked yet. Reasoning models that put their answer
+  in `reasoning_content` no longer surface as an empty reply.
 
 ## Verification
 

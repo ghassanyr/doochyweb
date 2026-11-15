@@ -1057,6 +1057,10 @@ export interface AiModelsResult {
   ok: boolean;
   models: string[];
   message: string;
+  total?: number;
+  available?: number;
+  unavailable?: number;
+  unknown?: number;
 }
 
 export interface AdminIntegrationsResponse {

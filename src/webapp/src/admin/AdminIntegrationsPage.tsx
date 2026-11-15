@@ -243,6 +243,7 @@ function ModelPickerModal({
   open,
   onClose,
   providerLabel,
+  defaultModel,
   models,
   selected,
   loading,
@@ -253,6 +254,7 @@ function ModelPickerModal({
   open: boolean;
   onClose: () => void;
   providerLabel: string;
+  defaultModel?: string;
   models: string[];
   selected: string;
   loading: boolean;
@@ -276,7 +278,7 @@ function ModelPickerModal({
       open={open}
       onClose={onClose}
       title="Choose a model"
-      subtitle={`${providerLabel} returned ${models.length} ${models.length === 1 ? "model" : "models"}.`}
+      subtitle={`${providerLabel} returned ${models.length} usable ${models.length === 1 ? "model" : "models"}. Only models this key can actually use are listed.`}
       size="lg"
       actions={
         <Button
@@ -307,6 +309,26 @@ function ModelPickerModal({
         </label>
 
         <div className="max-h-[52vh] space-y-1 overflow-y-auto pr-1">
+          {defaultModel && (
+            <button
+              type="button"
+              onClick={() => onSelect("")}
+              className={
+                "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition " +
+                (!selected
+                  ? "border-accent bg-accent-soft text-accent"
+                  : "border-hairline bg-soft text-fg hover:border-hairline-strong hover:bg-surface-hover")
+              }
+            >
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold">Use the recommended model</span>
+                <span className="block break-all font-mono text-[11px] text-fg-faint">
+                  {defaultModel}
+                </span>
+              </span>
+              {!selected && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+          )}
           {filtered.map((model) => {
             const active = selected === model;
             return (
@@ -329,13 +351,13 @@ function ModelPickerModal({
           {!loading && filtered.length === 0 && (
             <p className="rounded-lg border border-hairline bg-soft px-3 py-4 text-center text-xs text-fg-faint">
               {models.length === 0
-                ? "No models loaded yet. Use Refresh to fetch the provider list."
+                ? "No models loaded yet. Use Refresh to check the provider list."
                 : "No models match that search."}
             </p>
           )}
           {loading && (
             <p className="rounded-lg border border-hairline bg-soft px-3 py-4 text-center text-xs text-fg-faint">
-              Loading models...
+              Checking which models this key can use...
             </p>
           )}
         </div>
@@ -395,6 +417,7 @@ function AiProviderCard({
     editEndpoint ||
     (!!info && baseUrlValue !== "" && baseUrlValue !== info.baseUrl);
   const suggestions = loadedModels ?? info?.models ?? [];
+  const displayModel = (draft.values.model ?? "").trim() || info?.defaultModel || "";
   const statusLabel = !state.ready
     ? "Needs setup"
     : state.lastTestOk === true
@@ -601,18 +624,61 @@ function AiProviderCard({
 
       <div className="space-y-2">
         <div className="grid gap-3 sm:grid-cols-2">
-          {modelField && (
+          {modelField && !isCustom && (
+            <div className="space-y-1 sm:col-span-2">
+              <span className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-fg-muted">
+                {modelField.label}
+                {modelField.required && <span className="text-danger">*</span>}
+                <span className="font-normal text-fg-faint">
+                  (
+                  {draft.cleared.includes("model")
+                    ? "will be removed"
+                    : SOURCE_LABEL[modelField.source] ?? modelField.source}
+                  )
+                </span>
+                {(draft.values.model ?? "") !== (baseline.model ?? "") && (
+                  <span className="text-accent">changed</span>
+                )}
+              </span>
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  if (loadedModels && loadedModels.length > 0) {
+                    setModelPickerOpen(true);
+                  } else {
+                    void loadModels(true);
+                  }
+                }}
+                disabled={
+                  loadingModels || (keyRequired && !apiKeyValue && !keyField?.configured)
+                }
+                className={`${inputCls} flex items-center justify-between gap-2 text-left`}
+              >
+                <span
+                  className={`min-w-0 truncate font-mono text-xs ${
+                    displayModel ? "text-fg" : "text-fg-faint"
+                  }`}
+                >
+                  {displayModel || "Choose a model"}
+                </span>
+                <Search className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
+              </button>
+              <span className="block text-[11px] text-fg-faint">
+                {loadingModels
+                  ? "Checking which models this key can use..."
+                  : info?.defaultModel
+                    ? `Recommended: ${info.defaultModel}. Click to choose another.`
+                    : "Click to open the model picker."}
+              </span>
+            </div>
+          )}
+          {modelField && isCustom && (
             <Field
               field={{
                 ...modelField,
-                placeholder: info
-                  ? info.defaultModel ?? "Choose a model"
-                  : modelField.placeholder ?? suggestions[0] ?? "",
-                hint: info
-                  ? info.defaultModel
-                    ? `Recommended: ${info.defaultModel}. Leave empty to use it.`
-                    : "Choose a model from the provider list."
-                  : modelField.hint,
+                placeholder: modelField.placeholder ?? suggestions[0] ?? "",
+                hint: modelField.hint,
               }}
               draft={draft}
               baseline={baseline}
@@ -628,36 +694,38 @@ function AiProviderCard({
               onClear={() => undefined}
             />
           )}
-          <div className="flex flex-wrap items-center gap-2 self-end pb-1">
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<Search className="h-3.5 w-3.5" />}
-              onClick={() => {
-                if (loadedModels && loadedModels.length > 0) {
-                  setModelPickerOpen(true);
-                } else {
-                  void loadModels(true);
+          {isCustom && (
+            <div className="flex flex-wrap items-center gap-2 self-end pb-1">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Search className="h-3.5 w-3.5" />}
+                onClick={() => {
+                  if (loadedModels && loadedModels.length > 0) {
+                    setModelPickerOpen(true);
+                  } else {
+                    void loadModels(true);
+                  }
+                }}
+                disabled={
+                  loadingModels ||
+                  (keyRequired && !apiKeyValue && !keyField?.configured) ||
+                  !baseUrlValue
                 }
-              }}
-              disabled={
-                loadingModels ||
-                (keyRequired && !apiKeyValue && !keyField?.configured) ||
-                (isCustom && !baseUrlValue)
-              }
-            >
-              {loadingModels
-                ? "Loading models..."
-                : loadedModels && loadedModels.length > 0
-                  ? "Choose model"
-                  : "Load models"}
-            </Button>
-            <span className="text-[11px] text-fg-faint">
-              {loadedModels
-                ? `${loadedModels.length} models loaded.`
-                : "Fetches the provider model list automatically after the key is entered."}
-            </span>
-          </div>
+              >
+                {loadingModels
+                  ? "Checking models..."
+                  : loadedModels && loadedModels.length > 0
+                    ? "Choose model"
+                    : "Load models"}
+              </Button>
+              <span className="text-[11px] text-fg-faint">
+                {loadedModels
+                  ? `${loadedModels.length} usable models loaded.`
+                  : "Loads the models this key can use automatically after the key is entered."}
+              </span>
+            </div>
+          )}
         </div>
         {modelNotice && (
           <p className={`text-[11px] ${modelNotice.ok ? "text-success" : "text-danger"}`}>
@@ -750,6 +818,7 @@ function AiProviderCard({
         open={modelPickerOpen}
         onClose={() => setModelPickerOpen(false)}
         providerLabel={info?.label ?? "Provider"}
+        defaultModel={info?.defaultModel ?? undefined}
         models={loadedModels ?? []}
         selected={(draft.values.model ?? "").trim()}
         loading={loadingModels}

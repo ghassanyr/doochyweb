@@ -13,6 +13,11 @@
 import { resolveIntegration } from "../integrations/store";
 
 import {
+  checkModelAvailability,
+  isChatCapableModelId,
+  isNvidiaEndpoint,
+} from "./availability";
+import {
   DEFAULT_AI_BASE_URL,
   aiDefaultModel,
   aiProviderKeyRequired,
@@ -20,6 +25,7 @@ import {
 } from "./providers";
 
 export * from "./providers";
+export * from "./availability";
 
 export interface AiConfig {
   apiKey: string;
@@ -156,8 +162,27 @@ export async function aiChat(
     }
 
     const data: any = await res.json().catch(() => null);
-    const text = data?.choices?.[0]?.message?.content;
-    if (typeof text !== "string" || !text.trim()) {
+    const message = data?.choices?.[0]?.message;
+    const rawContent = message?.content;
+    const content = Array.isArray(rawContent)
+      ? rawContent
+          .map((part: any) =>
+            typeof part === "string" ? part : typeof part?.text === "string" ? part.text : ""
+          )
+          .join("")
+      : rawContent;
+    // Reasoning models can return an empty visible reply while placing their
+    // output in reasoning_content. That is still a usable answer, so fall back
+    // to it instead of reporting an empty reply.
+    const reasoning =
+      typeof message?.reasoning_content === "string" ? message.reasoning_content : "";
+    const text =
+      typeof content === "string" && content.trim()
+        ? content
+        : reasoning.trim()
+          ? reasoning
+          : "";
+    if (!text.trim()) {
       throw new AiError("AI provider returned an empty reply");
     }
     return { text: text.trim(), model: String(data?.model || config.model) };
@@ -206,7 +231,7 @@ export async function testAi(values: Record<string, string | number | boolean>):
     const reply = await aiChat(
       config,
       [{ role: "user", content: "Reply with the single word: ok" }],
-      { maxTokens: 8, temperature: 0, timeoutMs: 15_000 }
+      { maxTokens: 32, temperature: 0, timeoutMs: 20_000 }
     );
     return {
       ok: true,
@@ -221,9 +246,23 @@ export interface AiModelsResult {
   ok: boolean;
   models: string[];
   message: string;
+  /** Catalog size before any chat filter or availability check. */
+  total?: number;
+  /** Models confirmed usable by the supplied key. */
+  available?: number;
+  /** Chat models the key cannot use. */
+  unavailable?: number;
+  /** Chat models not checked yet, for example because of the probe budget. */
+  unknown?: number;
 }
 
-/** Load the model IDs the configured endpoint advertises. */
+/**
+ * Load the model IDs the configured endpoint advertises.
+ *
+ * Most providers already return only the models a key can use. NVIDIA's hosted
+ * endpoint returns the entire catalog regardless of the key's entitlements, so
+ * its chat-capable entries are probed and only the usable ones are returned.
+ */
 export async function listAiModels(
   values: Record<string, string | number | boolean>
 ): Promise<AiModelsResult> {
@@ -259,11 +298,65 @@ export async function listAiModels(
       .map((row: any) => (typeof row === "string" ? row : row?.id ?? row?.name))
       .filter((value: unknown): value is string => typeof value === "string" && !!value.trim())
       .map((value: string) => value.trim());
-    const models = [...new Set<string>(ids)].sort((a, b) => a.localeCompare(b)).slice(0, 200);
-    if (models.length === 0) {
+    const catalog = [...new Set<string>(ids)].sort((a, b) => a.localeCompare(b));
+    if (catalog.length === 0) {
       return { ok: false, models: [], message: "The provider returned no models. Enter the model name manually." };
     }
-    return { ok: true, models, message: `Found ${models.length} models.` };
+
+    const provider = String(values.provider ?? "openai");
+    const nvidia = provider === "nvidia" || isNvidiaEndpoint(config.baseUrl);
+    if (!nvidia) {
+      const models = catalog.slice(0, 200);
+      return { ok: true, models, message: `Found ${models.length} models.` };
+    }
+
+    const label = "NVIDIA";
+    const candidates = catalog.filter(isChatCapableModelId).slice(0, 200);
+    if (candidates.length === 0) {
+      return {
+        ok: false,
+        models: [],
+        message: `The provider returned ${catalog.length} models, but none look like chat models. Enter the model name manually.`,
+      };
+    }
+
+    const availability = await checkModelAvailability(config, candidates);
+    if (availability.authError) {
+      return { ok: false, models: [], message: availability.authError };
+    }
+
+    const models = availability.available;
+    const skipped = catalog.length - candidates.length;
+    const counts = {
+      total: catalog.length,
+      available: models.length,
+      unavailable: availability.unavailable.length,
+      unknown: availability.unknown.length,
+    };
+
+    if (models.length === 0) {
+      const message =
+        availability.unknown.length > 0
+          ? `${label} returned ${catalog.length} models. None are confirmed yet and ${availability.unknown.length} are still unchecked. Use Refresh to check more.`
+          : `${label} returned ${catalog.length} models. None of the ${candidates.length} chat models are available to this key.`;
+      return { ok: false, models: [], message, ...counts };
+    }
+
+    const parts = [
+      `${label} returned ${catalog.length} models.`,
+      `${models.length} ${models.length === 1 ? "chat model is" : "chat models are"} available to this key.`,
+    ];
+    if (availability.unavailable.length > 0) {
+      parts.push(`${availability.unavailable.length} not available.`);
+    }
+    if (availability.unknown.length > 0) {
+      parts.push(`${availability.unknown.length} still unchecked; use Refresh to check more.`);
+    }
+    if (skipped > 0) {
+      parts.push(`${skipped} non-chat ${skipped === 1 ? "model is" : "models are"} hidden.`);
+    }
+
+    return { ok: true, models, message: parts.join(" "), ...counts };
   } catch (err) {
     if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
       return { ok: false, models: [], message: "The provider timed out while loading models." };

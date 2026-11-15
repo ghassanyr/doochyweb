@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { beforeEach, describe, test } from "node:test";
 
 import {
   briefingDateKey,
@@ -12,9 +12,12 @@ import {
 import {
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_MODEL,
+  aiChat,
   aiConfigFromValues,
+  isChatCapableModelId,
   listAiModels,
   normalizeBaseUrl,
+  resetModelAvailabilityCache,
 } from "../src/server/ai/client";
 import type { Candle } from "../src/server/market/types";
 import type { SignalView } from "../src/server/signals/types";
@@ -271,7 +274,25 @@ describe("aiConfigFromValues", () => {
   });
 });
 
+describe("isChatCapableModelId", () => {
+  test("keeps chat models and drops utility endpoints", () => {
+    assert.equal(isChatCapableModelId("meta/llama-3.3-70b-instruct"), true);
+    assert.equal(isChatCapableModelId("nvidia/nemotron-3-ultra-550b-a55b"), true);
+    assert.equal(isChatCapableModelId("nvidia/nemotron-3.5-super-vl-120b-a12b"), true);
+    assert.equal(isChatCapableModelId("nvidia/nv-embedqa-e5-v5"), false);
+    assert.equal(
+      isChatCapableModelId("nvidia/llama-3.1-nemotron-safety-guard-8b-v3"),
+      false
+    );
+    assert.equal(isChatCapableModelId("nvidia/riva-translate-4b-instruct-v2"), false);
+    assert.equal(isChatCapableModelId("black-forest-labs/flux.1-dev"), false);
+    assert.equal(isChatCapableModelId("meta/codellama-70b"), false);
+  });
+});
+
 describe("listAiModels", () => {
+  beforeEach(() => resetModelAvailabilityCache());
+
   test("loads, de-duplicates and sorts advertised models", async () => {
     const original = globalThis.fetch;
     (globalThis as any).fetch = async () =>
@@ -304,6 +325,102 @@ describe("listAiModels", () => {
     }
   });
 
+  test("keeps only NVIDIA chat models the key can use", async () => {
+    const original = globalThis.fetch;
+    const probed: string[] = [];
+    (globalThis as any).fetch = async (input: any, init?: any) => {
+      const url = String(input);
+      if (url.endsWith("/models")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              { id: "meta/llama-3.3-70b-instruct" },
+              { id: "01-ai/yi-large" },
+              { id: "nvidia/nv-embedqa-e5-v5" },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      probed.push(body.model);
+      if (body.model === "meta/llama-3.3-70b-instruct") {
+        return new Response(JSON.stringify({ choices: [{ message: { content: "hi" } }] }), {
+          status: 200,
+        });
+      }
+      return new Response(
+        JSON.stringify({ status: 404, detail: "Function not found for account" }),
+        { status: 404 }
+      );
+    };
+    try {
+      const result = await listAiModels({
+        provider: "nvidia",
+        apiKey: "nv-test-availability",
+      });
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.models, ["meta/llama-3.3-70b-instruct"]);
+      assert.equal(result.total, 3);
+      assert.equal(result.available, 1);
+      assert.equal(result.unavailable, 1);
+      assert.equal(result.unknown, 0);
+      assert.deepEqual(probed.sort(), ["01-ai/yi-large", "meta/llama-3.3-70b-instruct"]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("reports a rejected NVIDIA key instead of an empty list", async () => {
+    const original = globalThis.fetch;
+    (globalThis as any).fetch = async (input: any) => {
+      const url = String(input);
+      if (url.endsWith("/models")) {
+        return new Response(
+          JSON.stringify({ data: [{ id: "meta/llama-3.3-70b-instruct" }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 401 });
+    };
+    try {
+      const result = await listAiModels({ provider: "nvidia", apiKey: "nv-test-auth" });
+      assert.equal(result.ok, false);
+      assert.match(result.message, /401/);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("reuses confirmed NVIDIA availability between loads", async () => {
+    const original = globalThis.fetch;
+    let probes = 0;
+    (globalThis as any).fetch = async (input: any) => {
+      const url = String(input);
+      if (url.endsWith("/models")) {
+        return new Response(
+          JSON.stringify({ data: [{ id: "meta/llama-3.3-70b-instruct" }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      probes++;
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), {
+        status: 200,
+      });
+    };
+    try {
+      const values = { provider: "nvidia", apiKey: "nv-test-cache" };
+      const first = await listAiModels(values);
+      assert.equal(first.ok, true);
+      assert.equal(probes, 1);
+      const second = await listAiModels(values);
+      assert.equal(second.ok, true);
+      assert.equal(probes, 1);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   test("does not call the network without a required key", async () => {
     const original = globalThis.fetch;
     let called = false;
@@ -315,6 +432,33 @@ describe("listAiModels", () => {
       const result = await listAiModels({ provider: "openai" });
       assert.equal(result.ok, false);
       assert.equal(called, false);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
+describe("aiChat", () => {
+  test("uses reasoning_content when the visible content is empty", async () => {
+    const original = globalThis.fetch;
+    (globalThis as any).fetch = async () =>
+      new Response(
+        JSON.stringify({
+          model: "nvidia/nemotron-3.5-super-vl-120b-a12b",
+          choices: [{ message: { content: "", reasoning_content: "ok" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    try {
+      const reply = await aiChat(
+        {
+          apiKey: "nv-test",
+          baseUrl: "https://integrate.api.nvidia.com/v1",
+          model: "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        },
+        [{ role: "user", content: "hi" }]
+      );
+      assert.equal(reply.text, "ok");
     } finally {
       globalThis.fetch = original;
     }
