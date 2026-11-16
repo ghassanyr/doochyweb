@@ -6,7 +6,7 @@
 // reopening the page later in the day shows the same numbers the prose was
 // written about.
 
-export const BRIEFING_SNAPSHOT_VERSION = 2;
+export const BRIEFING_SNAPSHOT_VERSION = 3;
 
 export type BriefingFocusSession = "asia" | "london" | "newyork";
 
@@ -17,6 +17,8 @@ export interface BriefingSessionRow {
   label: string;
   status: BriefingSessionStatus;
   nextChange: string | null;
+  /** Absolute UTC time of the next open or close, for the live countdown. */
+  nextChangeAt: string | null;
 }
 
 export interface BriefingQuote {

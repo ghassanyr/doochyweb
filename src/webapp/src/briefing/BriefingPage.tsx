@@ -28,7 +28,7 @@ import {
 import { FadeRise } from "../components/motion";
 import { Badge, Button, Card, Flash, Skeleton } from "../components/ui";
 import { formatNumber } from "../format";
-import { formatLocalDate, formatLocalDateTime } from "../time";
+import { formatLocalDate, formatLocalDateTime, formatCountdown } from "../time";
 import { useSiteConfig } from "../siteConfig";
 
 const FOCUS_OPTIONS: { key: BriefingFocusSession; label: string }[] = [
@@ -277,13 +277,36 @@ function BriefingHero({ briefing }: { briefing: BriefingRecord }) {
       )}
       <div className="mt-4 flex flex-wrap gap-2">
         {briefing.snapshot.sessions.map((session) => (
-          <Badge key={session.key} tone={session.status === "open" ? "success" : "muted"}>
-            {session.label} {session.status}
-            {session.nextChange ? `, ${session.nextChange}` : ""}
-          </Badge>
+          <div key={session.key} className="flex items-center gap-1.5">
+            <Badge tone={session.status === "open" ? "success" : "muted"}>
+              {session.label} {session.status}
+              {session.nextChange ? `, ${session.nextChange}` : ""}
+            </Badge>
+            <SessionCountdown at={session.nextChangeAt} />
+          </div>
         ))}
       </div>
     </Card>
+  );
+}
+
+function SessionCountdown({ at }: { at: string | null }) {
+  const target = at ? new Date(at).getTime() : NaN;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!Number.isFinite(target)) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [target]);
+
+  if (!Number.isFinite(target)) return null;
+  const label = formatCountdown(target - now);
+  return (
+    <span className="rounded-md border border-hairline bg-soft px-2 py-0.5 text-xs font-medium tabular-nums text-fg-faint">
+      {label ? `in ${label}` : "now"}
+    </span>
   );
 }
 

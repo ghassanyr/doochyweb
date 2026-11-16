@@ -65,6 +65,20 @@ function clock(minutes: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")} UTC`;
 }
 
+/** The UTC instant a session closes on the day of `now`. */
+function windowEnd(key: BriefingFocusSession, now: Date): Date {
+  const { end } = SESSION_WINDOWS[key];
+  return new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      Math.floor(end / 60),
+      end % 60
+    )
+  );
+}
+
 function dayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -114,6 +128,7 @@ export function buildSessionRows(
         label: SESSION_LABELS[key],
         status: "open" as const,
         nextChange: `closes at ${clock(window.end)}`,
+        nextChangeAt: windowEnd(key, now).toISOString(),
       };
     }
 
@@ -123,6 +138,7 @@ export function buildSessionRows(
       label: SESSION_LABELS[key],
       status: "closed" as const,
       nextChange: next ? `opens ${whenLabel(next.at, now)}` : null,
+      nextChangeAt: next ? next.at.toISOString() : null,
     };
   });
 }

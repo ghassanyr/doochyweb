@@ -213,12 +213,16 @@ describe("focus sessions", () => {
     assert.equal(rows[1].status, "open");
     assert.equal(rows[2].status, "open");
     assert.match(rows[1].nextChange ?? "", /closes at 16:30 UTC/);
+    assert.equal(rows[1].nextChangeAt, "2026-01-14T16:30:00.000Z");
+    assert.equal(rows[2].nextChangeAt, "2026-01-14T21:00:00.000Z");
+    assert.equal(rows[0].nextChangeAt, "2026-01-15T00:00:00.000Z");
   });
 
   test("closes every FX session at the weekend", () => {
     const rows = buildSessionRows(["london", "newyork"], new Date("2026-01-17T14:00:00.000Z"));
     assert.ok(rows.every((row) => row.status === "closed"));
     assert.match(rows[0].nextChange ?? "", /Monday at 08:00 UTC/);
+    assert.equal(rows[0].nextChangeAt, "2026-01-19T08:00:00.000Z");
   });
 });
 
@@ -277,7 +281,7 @@ describe("buildJournalIdeas", () => {
 describe("buildSnapshot", () => {
   test("carries the day, sessions, watchlist, signals and journal ideas", () => {
     const snapshot = builtSnapshot();
-    assert.equal(snapshot.version, 2);
+    assert.equal(snapshot.version, 3);
     assert.equal(snapshot.dateKey, "2026-01-10");
     assert.equal(snapshot.watchlist.length, 1);
     assert.equal(snapshot.signals.length, 1);

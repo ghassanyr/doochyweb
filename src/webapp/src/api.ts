@@ -710,6 +710,7 @@ export interface BriefingSessionRow {
   label: string;
   status: "open" | "closed";
   nextChange: string | null;
+  nextChangeAt: string | null;
 }
 
 export interface BriefingQuote {

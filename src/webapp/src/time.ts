@@ -182,3 +182,20 @@ export function toLocalInputValue(iso: string | number | Date | null | undefined
   }, opts.locale ?? defaultOptions.locale ?? "en-GB");
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }
+
+/**
+ * A short countdown: "2h 05m" above an hour and "12:34" below it. Returns null
+ * once the target is reached, so callers can show their own "now" label.
+ */
+export function formatCountdown(ms: number): string | null {
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const total = Math.floor(ms / 1000);
+  if (total >= 3600) {
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}

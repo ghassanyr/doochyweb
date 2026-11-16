@@ -11,6 +11,7 @@ import {
 import { resolveOutcome } from "../src/server/signals/outcome";
 import type { Candle } from "../src/server/market/types";
 import {
+  formatCountdown,
   formatLocalDate,
   formatLocalDateTime,
   formatLocalTimestamp,
@@ -420,6 +421,16 @@ describe("local time formatting", () => {
 
   test("invalid input degrades to a dash", () => {
     assert.equal(formatLocalDateTime("not a date", { timeZone: "UTC" }), "-");
+  });
+
+  test("formats a countdown above and below an hour", () => {
+    assert.equal(formatCountdown(2 * 3_600_000 + 5 * 60_000), "2h 05m");
+    assert.equal(formatCountdown(3_600_000), "1h 00m");
+    assert.equal(formatCountdown(59 * 60_000 + 59_000), "59:59");
+    assert.equal(formatCountdown(61_000), "01:01");
+    assert.equal(formatCountdown(0), null);
+    assert.equal(formatCountdown(-1_000), null);
+    assert.equal(formatCountdown(Number.NaN), null);
   });
 });
 

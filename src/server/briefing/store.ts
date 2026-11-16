@@ -117,6 +117,7 @@ function sessionRows(value: unknown): BriefingSessionRow[] {
         label: text(row.label) || key,
         status: row.status === "open" ? ("open" as const) : ("closed" as const),
         nextChange: typeof row.nextChange === "string" ? row.nextChange : null,
+        nextChangeAt: typeof row.nextChangeAt === "string" ? row.nextChangeAt : null,
       };
     })
     .filter((row): row is BriefingSessionRow => Boolean(row));
