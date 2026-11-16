@@ -9,16 +9,14 @@ import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes"
 
 export default function BreakoutsPage({
   canRefresh,
-  canManageWatchlist,
 }: {
   /** Signed-in users can force a broker read; anonymous visitors cannot. */
   canRefresh: boolean;
-  /** Only admins can change the shared watchlist. */
-  canManageWatchlist: boolean;
 }) {
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const [timeframes, setTimeframes] = useState(staticTimeframes);
   const [strongRatio, setStrongRatio] = useState(0.25);
+  const [canRemove, setCanRemove] = useState(false);
   const [detail, setDetail] = useState<{ symbol: string; timeframe: string } | null>(null);
 
   useEffect(() => {
@@ -32,6 +30,13 @@ export default function BreakoutsPage({
         setTimeframe((current) =>
           current === DEFAULT_TIMEFRAME ? c.settings.defaultTimeframe || c.defaultTimeframe : current
         );
+      })
+      .catch(() => {});
+    // Removing a symbol is only valid while the member is on their own list.
+    marketApi
+      .watchlist()
+      .then((view) => {
+        if (alive) setCanRemove(view.mode === "mine");
       })
       .catch(() => {});
     return () => {
@@ -58,7 +63,7 @@ export default function BreakoutsPage({
           strongRatio={strongRatio}
           timeframes={timeframes}
           canRefresh={canRefresh}
-          canRemove={canManageWatchlist}
+          canRemove={canRemove}
           onClose={() => setDetail(null)}
           onRemove={(symbol) => {
             void marketApi.removeSymbol(symbol).catch(() => {});

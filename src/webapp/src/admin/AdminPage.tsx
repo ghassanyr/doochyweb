@@ -58,7 +58,7 @@ export default function AdminPage({
   const [resetPassword, setResetPassword] = useState("");
 
   const loadWatchlist = useCallback(async () => {
-    const watch = await marketApi.watchlist();
+    const watch = await marketApi.siteWatchlist();
     setItems(applyOrder(watch.symbols.map((symbol) => ({ symbol })), watch.order));
   }, []);
 
@@ -66,7 +66,7 @@ export default function AdminPage({
     let alive = true;
     (async () => {
       try {
-        const [config, watch] = await Promise.all([marketApi.config(), marketApi.watchlist()]);
+        const [config, watch] = await Promise.all([marketApi.config(), marketApi.siteWatchlist()]);
         if (!alive) return;
         setCatalog(config.catalog);
         setItems(applyOrder(watch.symbols.map((symbol) => ({ symbol })), watch.order));
@@ -131,7 +131,7 @@ export default function AdminPage({
       if (!symbol) return;
       setBusy(true);
       try {
-        await marketApi.addSymbol(symbol);
+        await marketApi.addSiteSymbol(symbol);
         await loadWatchlist();
         setError(null);
       } catch (err) {
@@ -147,7 +147,7 @@ export default function AdminPage({
     async (symbol: string) => {
       setBusy(true);
       try {
-        await marketApi.removeSymbol(symbol);
+        await marketApi.removeSiteSymbol(symbol);
         await loadWatchlist();
         setError(null);
       } catch (err) {
@@ -164,7 +164,7 @@ export default function AdminPage({
       const previous = items;
       setItems(next);
       try {
-        await marketApi.saveOrder(next.map((item) => item.symbol));
+        await marketApi.saveSiteOrder(next.map((item) => item.symbol));
         setError(null);
       } catch (err) {
         // The layout is cosmetic; put the list back where it was.
@@ -429,9 +429,10 @@ export default function AdminPage({
 
         <Card className="space-y-3 p-4">
           <div>
-            <h2 className="text-base font-bold tracking-tight text-fg">Watchlist</h2>
+            <h2 className="text-base font-bold tracking-tight text-fg">Site watchlist</h2>
             <p className="mt-0.5 text-xs text-fg-muted">
-              Controls the markets every visitor sees on the Analysis page.
+              The default markets on the Analysis page. Signed-in members can switch to a
+              personal list, so changes here reach visitors who have not done that.
             </p>
           </div>
 
@@ -478,8 +479,8 @@ export default function AdminPage({
         </Card>
 
         <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
-          Drag a market to change its card order on the Analysis page. Changes apply to every
-          visitor.
+          Drag a market to change its card order on the Analysis page. This order applies to
+          visitors on the site list; a member's personal order is their own.
         </p>
 
         <Card className="space-y-3 p-4">

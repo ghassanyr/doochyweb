@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, RefreshCw, Settings2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, LogIn, RefreshCw, Settings2 } from "lucide-react";
 
-import { marketApi } from "../api";
+import { marketApi, type MarketWatchlist, type WatchlistMode } from "../api";
 import { FadeRise } from "../components/motion";
 import { Card } from "../components/ui";
 import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
@@ -17,13 +17,16 @@ import type { CatalogEntry, MarketResult, MarketSettings, SymbolType } from "./t
 import { useSiteConfig } from "../siteConfig";
 
 export default function AnalysisPage({
-  canRefresh,
-  canManageWatchlist,
+  signedIn,
+  isAdmin,
+  onSignIn,
 }: {
-  /** Signed-in users can force a broker read; anonymous visitors cannot. */
-  canRefresh: boolean;
-  /** Only admins can change the shared watchlist. */
-  canManageWatchlist: boolean;
+  /** Signed-in members can force a broker read and keep a personal watchlist. */
+  signedIn: boolean;
+  /** Only an admin can change the shared analysis sensitivity. */
+  isAdmin: boolean;
+  /** Opens the sign-in dialog for the anonymous watchlist prompt. */
+  onSignIn?: () => void;
 }) {
   const { content: siteContent } = useSiteConfig();
   const [config, setConfig] = useState<{
@@ -41,6 +44,8 @@ export default function AnalysisPage({
   const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(new Set());
   const [order, setOrder] = useState<string[]>([]);
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
+  const [mode, setMode] = useState<WatchlistMode>("site");
+  const [limit, setLimit] = useState(10);
 
   const [detail, setDetail] = useState<{ symbol: string; timeframe: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -49,6 +54,8 @@ export default function AnalysisPage({
   const settings = config?.settings;
   const strongRatio = settings?.strongRatio ?? 0.25;
   const refreshSeconds = settings?.refreshSeconds ?? 60;
+  const canRefresh = signedIn;
+  const canEdit = signedIn && mode === "mine";
 
   // Failed analyses may omit the type (an unresolvable symbol never reaches the
   // resolver), so fall back to the catalog the config request already sent.
@@ -170,7 +177,10 @@ export default function AnalysisPage({
     marketApi
       .watchlist()
       .then((r) => {
-        if (alive && Array.isArray(r.order)) setOrder(r.order);
+        if (!alive) return;
+        setMode(r.mode);
+        setLimit(r.limit);
+        if (Array.isArray(r.order)) setOrder(r.order);
       })
       .catch(() => {});
     marketApi
@@ -207,47 +217,75 @@ export default function AnalysisPage({
     return () => window.clearInterval(t);
   }, []);
 
+  const applyWatchlist = useCallback((view: MarketWatchlist) => {
+    setMode(view.mode);
+    setLimit(view.limit);
+    setOrder(view.order);
+  }, []);
+
+  const switchMode = useCallback(
+    async (next: WatchlistMode) => {
+      if (!signedIn || next === mode) return;
+      try {
+        applyWatchlist(await marketApi.setWatchlistMode(next));
+        setError(null);
+        await load();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to switch watchlists");
+      }
+    },
+    [signedIn, mode, applyWatchlist, load]
+  );
+
   const addSymbol = useCallback(
     async (raw: string) => {
       const symbol = raw.trim();
-      if (!symbol || !canManageWatchlist) return;
+      if (!symbol || !canEdit) return;
       try {
-        await marketApi.addSymbol(symbol);
+        applyWatchlist(await marketApi.addSymbol(symbol));
+        setError(null);
         await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to add market");
       }
     },
-    [load, canManageWatchlist]
+    [load, canEdit, applyWatchlist]
   );
 
   const removeSymbol = useCallback(
     async (symbol: string) => {
-      if (!canManageWatchlist) return;
+      if (!canEdit) return;
       setResults((prev) => prev.filter((r) => r.symbol !== symbol));
       try {
-        await marketApi.removeSymbol(symbol);
+        applyWatchlist(await marketApi.removeSymbol(symbol));
+        setError(null);
         await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to remove market");
+        // Put the card back if the server refused the change.
+        await load();
       }
     },
-    [load, canManageWatchlist]
+    [load, canEdit, applyWatchlist]
   );
 
   // Stable per-card handlers: the cards are memoised, so handing them a fresh
   // closure each render would defeat the memo entirely.
   const persistOrder = useCallback(
     (next: MarketResult[]) => {
+      if (!canEdit) return;
       const symbols = next.map((r) => r.symbol);
       setResults(next);
       setOrder(symbols);
-      marketApi.saveOrder(symbols).catch((err) => {
-        // Layout is cosmetic; a failed save should not disrupt the page.
-        setError(err instanceof Error ? err.message : "Failed to save layout");
-      });
+      marketApi
+        .saveOrder(symbols)
+        .then(applyWatchlist)
+        .catch((err) => {
+          // Layout is cosmetic; a failed save should not disrupt the page.
+          setError(err instanceof Error ? err.message : "Failed to save layout");
+        });
     },
-    []
+    [canEdit, applyWatchlist]
   );
 
   const openDetail = useCallback(
@@ -350,12 +388,72 @@ export default function AnalysisPage({
             })}
           </div>
 
-           {canManageWatchlist ? (
-             <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
-           ) : (
-            <p className="flex-1 self-center px-1 text-sm text-fg-faint">
+          <div className="flex flex-wrap items-center gap-2 border-t border-hairline pt-2.5">
+            <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
+              Watchlist
+            </span>
+            {signedIn ? (
+              <>
+                <div
+                  role="group"
+                  aria-label="Watchlist source"
+                  className="flex rounded-md border border-hairline p-0.5"
+                >
+                  {(
+                    [
+                      { id: "site" as const, label: "Site list" },
+                      { id: "mine" as const, label: "My watchlist" },
+                    ]
+                  ).map((option) => {
+                    const active = mode === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => void switchMode(option.id)}
+                        className={
+                          "rounded px-2.5 py-1 text-xs font-medium transition " +
+                          (active
+                            ? "bg-accent-soft text-accent"
+                            : "text-fg-muted hover:bg-surface-hover hover:text-fg")
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {mode === "mine" && (
+                  <span className="tabular-nums text-[11px] text-fg-faint">
+                    {results.length}/{limit}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-[11px] text-fg-faint">This is the site watchlist.</span>
+            )}
+            {!signedIn && onSignIn && (
+              <button
+                type="button"
+                onClick={onSignIn}
+                className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Sign in to build your own
+              </button>
+            )}
+          </div>
+
+          {canEdit ? (
+            <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
+          ) : (
+            <p className="flex-1 self-center px-1 text-xs text-fg-faint">
+              {signedIn
+                ? "The site list is curated by an admin. Switch to My watchlist to add, remove or reorder markets."
+                : ""}
             </p>
-         )}
+          )}
         </Card>
 
         <StatusLine
@@ -400,7 +498,13 @@ export default function AnalysisPage({
         ) : results.length === 0 ? (
           <Card className="p-8 text-center">
             <div className="text-sm text-fg-muted">{siteContent.emptyStates.analysis}</div>
-            <div className="mt-1 text-xs text-fg-faint">Add a market above to start analysing.</div>
+            <div className="mt-1 text-xs text-fg-faint">
+              {canEdit
+                ? "Add a market above to start analysing."
+                : signedIn
+                  ? "Switch to My watchlist to add markets."
+                  : "Sign in to build your own watchlist."}
+            </div>
           </Card>
         ) : visibleResults.length === 0 ? (
           <Card className="p-8 text-center">
@@ -419,7 +523,7 @@ export default function AnalysisPage({
             onReorder={persistOrder}
             // A filtered grid is only part of the watchlist, so a drag would
             // have no well-defined place for the hidden cards. Reorder on All.
-            canReorder={canManageWatchlist && assetFilter === "all"}
+            canReorder={canEdit && assetFilter === "all"}
             className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]"
             renderItem={(r) =>
               r.ok ? (
@@ -428,7 +532,7 @@ export default function AnalysisPage({
                   strongRatio={strongRatio}
                   refreshing={refreshing.has(r.symbol)}
                   canRefresh={canRefresh}
-                  canRemove={canManageWatchlist}
+                  canRemove={canEdit}
                   onOpen={openDetail}
                   onRefresh={refreshOne}
                   onRemove={removeSymbol}
@@ -439,7 +543,7 @@ export default function AnalysisPage({
                   error={r.error}
                   refreshing={refreshing.has(r.symbol)}
                   canRefresh={canRefresh}
-                  canRemove={canManageWatchlist}
+                  canRemove={canEdit}
                   onRefresh={refreshOne}
                   onRemove={removeSymbol}
                 />
@@ -461,7 +565,7 @@ export default function AnalysisPage({
           strongRatio={strongRatio}
           timeframes={timeframes}
           canRefresh={canRefresh}
-          canRemove={canManageWatchlist}
+          canRemove={canEdit}
           onClose={() => setDetail(null)}
           onRemove={(s) => void removeSymbol(s)}
           onTimeframeChange={(tf) => setDetail((d) => (d ? { ...d, timeframe: tf } : d))}
@@ -471,6 +575,7 @@ export default function AnalysisPage({
       {showSettings && settings && (
         <MarketSettingsSheet
           settings={settings}
+          canEdit={isAdmin}
           onClose={() => setShowSettings(false)}
           onSaved={(s) => {
             setConfig((c) => (c ? { ...c, settings: s } : c));

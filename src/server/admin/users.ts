@@ -11,6 +11,7 @@ import { hashPassword } from "../auth";
 import { revokeAuthTokens } from "../authTokens";
 import { Credentials, User, type StoredAccount, type UserRole, type UserStatus } from "../db";
 import { dropUserSockets } from "../ctrader/connection";
+import { UserWatchlist } from "../market/userWatchlist";
 import { TelegramLink, TelegramLinkCode } from "../telegram/store";
 
 export interface AdminUserRow {
@@ -209,6 +210,7 @@ export async function deleteUser(userId: string, actorId: string): Promise<Delet
     Credentials.deleteMany({ userId: objectId }).exec(),
     TelegramLink.deleteMany({ userId: objectId }).exec(),
     TelegramLinkCode.deleteMany({ userId: objectId }).exec(),
+    UserWatchlist.deleteMany({ userId: objectId }).exec(),
     revokeAuthTokens(userId),
   ]);
   await User.deleteOne({ _id: objectId }).exec();

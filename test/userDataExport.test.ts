@@ -5,6 +5,7 @@ import { PriceAlert } from "../src/server/alerts/store";
 import { Briefing } from "../src/server/briefing/store";
 import { Credentials, User } from "../src/server/db";
 import { JournalEntry, JournalSync } from "../src/server/journal/store";
+import { UserWatchlist } from "../src/server/market/userWatchlist";
 import { PaperPosition } from "../src/server/simulation/store";
 import { TelegramLink } from "../src/server/telegram/store";
 import {
@@ -33,6 +34,7 @@ const originals = {
   paperFind: PaperPosition.find,
   briefingFind: Briefing.find,
   telegramFindOne: TelegramLink.findOne,
+  watchlistFindOne: UserWatchlist.findOne,
 };
 
 afterEach(() => {
@@ -44,6 +46,7 @@ afterEach(() => {
   (PaperPosition as any).find = originals.paperFind;
   (Briefing as any).find = originals.briefingFind;
   (TelegramLink as any).findOne = originals.telegramFindOne;
+  (UserWatchlist as any).findOne = originals.watchlistFindOne;
 });
 
 describe("user data export", () => {
@@ -139,6 +142,13 @@ describe("user data export", () => {
         notificationsEnabled: true,
         linkedAt: new Date("2026-11-08T00:00:00.000Z"),
       });
+    (UserWatchlist as any).findOne = () =>
+      leanQuery({
+        userId: USER_ID,
+        mode: "mine",
+        symbols: ["EURUSD", "XAUUSD"],
+        order: ["XAUUSD", "EURUSD"],
+      });
 
     const data = await exportUserData(USER_ID, new Date("2026-11-15T10:00:00.000Z"));
     assert.ok(data);
@@ -154,6 +164,11 @@ describe("user data export", () => {
     assert.equal(data.paperTrading.length, 1);
     assert.equal(data.briefings.length, 1);
     assert.equal(data.telegram?.chatId, "chat-1");
+    assert.deepEqual(data.watchlist, {
+      mode: "mine",
+      symbols: ["EURUSD", "XAUUSD"],
+      order: ["XAUUSD", "EURUSD"],
+    });
 
     const text = JSON.stringify(data);
     for (const secret of [
@@ -177,6 +192,7 @@ describe("user data export", () => {
     (PaperPosition as any).find = () => sortedQuery([]);
     (Briefing as any).find = () => sortedQuery([]);
     (TelegramLink as any).findOne = () => leanQuery(null);
+    (UserWatchlist as any).findOne = () => leanQuery(null);
     assert.equal(await exportUserData(USER_ID), null);
   });
 

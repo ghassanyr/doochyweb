@@ -358,26 +358,26 @@ export default function App() {
           isAdmin ? (
             <AdminPage currentUsername={me?.username} onNavigate={handleViewChange} />
           ) : (
-            <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
+            <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
           )
         ) : view === "admin-settings" ? (
           isAdmin ? (
             <AdminSettingsPage onNavigate={handleViewChange} />
           ) : (
-            <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
+            <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
           )
         ) : view === "admin-integrations" ? (
           isAdmin ? (
             <AdminIntegrationsPage onNavigate={handleViewChange} />
           ) : (
-            <AnalysisPage canRefresh={signedIn} canManageWatchlist={false} />
+            <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
           )
         ) : view === "analysis" ? (
-          <AnalysisPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
+          <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
         ) : view === "signals" ? (
           <SignalsPage canRefresh={signedIn} canManageSignals={isAdmin} />
         ) : view === "breakouts" ? (
-          <BreakoutsPage canRefresh={signedIn} canManageWatchlist={isAdmin} />
+          <BreakoutsPage canRefresh={signedIn} />
         ) : view === "learn" ? (
           <LearnPage />
         ) : view === "alerts" ? (

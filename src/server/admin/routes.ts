@@ -373,7 +373,16 @@ adminRouter.put("/settings", adminRequired, async (req: AuthedRequest, res) => {
         maintenance: req.body?.maintenance,
         announcement: req.body?.announcement,
         registration: req.body?.registration,
+        analysis: req.body?.analysis,
         legal: req.body?.legal,
+        seo: req.body?.seo,
+        content: req.body?.content,
+        tradingDefaults: req.body?.tradingDefaults,
+        locale: req.body?.locale,
+        social: req.body?.social,
+        pwa: req.body?.pwa,
+        templates: req.body?.templates,
+        webhooks: req.body?.webhooks,
       },
       req.username ?? req.userId ?? "admin"
     );

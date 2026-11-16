@@ -243,6 +243,11 @@ export interface WebhookSettings {
   alertTriggered: boolean;
 }
 
+export interface AnalysisSettings {
+  /** Maximum number of symbols a member can keep in their personal watchlist. */
+  watchlistLimit: number;
+}
+
 export type ThemeFont = "inter" | "system" | "serif";
 export type ThemeDensity = "compact" | "comfortable" | "spacious";
 
@@ -267,6 +272,8 @@ export interface SiteConfig {
 
 export interface SiteSettings extends Omit<SiteConfig, "registration"> {
   registration: RegistrationSettings;
+  /** Analysis page limits, admin-only. */
+  analysis: AnalysisSettings;
   /** Admin-only copy overrides. */
   templates: TemplateSettings;
   /** Admin-only webhook configuration; the signing secret is private. */

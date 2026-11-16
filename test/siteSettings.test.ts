@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  DEFAULT_ANALYSIS,
   DEFAULT_ANNOUNCEMENT,
   DEFAULT_BRANDING,
   DEFAULT_LEGAL,
@@ -11,10 +12,11 @@ import {
   DEFAULT_SITE,
   DEFAULT_THEME,
 } from "../src/server/settings/defaults";
-import { mergeSiteSettings, publicSiteConfig } from "../src/server/settings/store";
+import { mergeAnalysis, mergeSiteSettings, publicSiteConfig } from "../src/server/settings/store";
 import { normalizePublicBaseUrl, publicBaseUrlFor } from "../src/server/settings/siteUrl";
 import {
   SettingsValidationError,
+  normalizeAnalysis,
   normalizeAnnouncement,
   normalizeBranding,
   normalizeLegal,
@@ -36,6 +38,8 @@ describe("site settings defaults", () => {
     assert.deepEqual(settings.navigation, DEFAULT_NAVIGATION);
     assert.deepEqual(settings.maintenance, DEFAULT_MAINTENANCE);
     assert.deepEqual(settings.announcement, DEFAULT_ANNOUNCEMENT);
+    assert.deepEqual(settings.analysis, DEFAULT_ANALYSIS);
+    assert.equal(DEFAULT_ANALYSIS.watchlistLimit, 10);
     assert.equal(settings.version, null);
     assert.equal(settings.updatedAt, null);
     assert.equal(settings.updatedBy, null);
@@ -475,5 +479,48 @@ describe("normalizeAnnouncement", () => {
       { ...DEFAULT_ANNOUNCEMENT, startsAt: "2026-01-01T00:00:00.000Z" }
     );
     assert.equal(announcement.startsAt, null);
+  });
+});
+
+describe("analysis settings", () => {
+  test("mergeAnalysis falls back to the default limit for missing or invalid values", () => {
+    assert.equal(mergeAnalysis(undefined).watchlistLimit, 10);
+    assert.equal(mergeAnalysis({}).watchlistLimit, 10);
+    assert.equal(mergeAnalysis({ watchlistLimit: 0 }).watchlistLimit, 10);
+    assert.equal(mergeAnalysis({ watchlistLimit: 61 }).watchlistLimit, 10);
+    assert.equal(mergeAnalysis({ watchlistLimit: "many" }).watchlistLimit, 10);
+  });
+
+  test("mergeAnalysis keeps a stored limit and rounds it", () => {
+    assert.equal(mergeAnalysis({ watchlistLimit: 25 }).watchlistLimit, 25);
+    assert.equal(mergeAnalysis({ watchlistLimit: 7.6 }).watchlistLimit, 8);
+  });
+
+  test("mergeSiteSettings carries the stored analysis limit", () => {
+    const settings = mergeSiteSettings({ analysis: { watchlistLimit: 30 } });
+    assert.equal(settings.analysis.watchlistLimit, 30);
+  });
+
+  test("normalizeAnalysis clamps to 1..60 and rounds", () => {
+    assert.equal(normalizeAnalysis({ watchlistLimit: 12.4 }, DEFAULT_ANALYSIS).watchlistLimit, 12);
+    assert.equal(normalizeAnalysis({ watchlistLimit: 1 }, DEFAULT_ANALYSIS).watchlistLimit, 1);
+    assert.equal(normalizeAnalysis({ watchlistLimit: 60 }, DEFAULT_ANALYSIS).watchlistLimit, 60);
+    assert.throws(
+      () => normalizeAnalysis({ watchlistLimit: 0 }, DEFAULT_ANALYSIS),
+      SettingsValidationError
+    );
+    assert.throws(
+      () => normalizeAnalysis({ watchlistLimit: 61 }, DEFAULT_ANALYSIS),
+      SettingsValidationError
+    );
+  });
+
+  test("an empty patch keeps the base limit", () => {
+    assert.deepEqual(normalizeAnalysis(undefined, { watchlistLimit: 18 }), { watchlistLimit: 18 });
+  });
+
+  test("the public config does not expose the personal limit", () => {
+    const config = publicSiteConfig(mergeSiteSettings({ analysis: { watchlistLimit: 30 } }));
+    assert.equal("analysis" in config, false);
   });
 });

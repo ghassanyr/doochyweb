@@ -3,6 +3,7 @@
 // build, and every value can be overridden from the admin panel.
 
 import type {
+  AnalysisSettings,
   AnnouncementSettings,
   BrandingSettings,
   LegalSettings,
@@ -219,6 +220,10 @@ export const DEFAULT_ANNOUNCEMENT: AnnouncementSettings = {
   endsAt: null,
 };
 
+export const DEFAULT_ANALYSIS: AnalysisSettings = {
+  watchlistLimit: 10,
+};
+
 /** The complete settings shape when no document exists yet. */
 export function defaultSiteSettings(): SiteSettings {
   return {
@@ -232,6 +237,7 @@ export function defaultSiteSettings(): SiteSettings {
     maintenance: { ...DEFAULT_MAINTENANCE },
     announcement: { ...DEFAULT_ANNOUNCEMENT },
     registration: { ...DEFAULT_REGISTRATION },
+    analysis: { ...DEFAULT_ANALYSIS },
     legal: { ...DEFAULT_LEGAL },
     seo: { ...DEFAULT_SEO },
     content: { ...DEFAULT_CONTENT, emptyStates: { ...DEFAULT_CONTENT.emptyStates } },

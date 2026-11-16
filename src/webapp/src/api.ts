@@ -217,6 +217,15 @@ export interface WriteResult {
 // Analysis (market technical analysis), see src/server/market
 // ---------------------------------------------------------------------------
 
+export type WatchlistMode = "site" | "mine";
+
+export interface MarketWatchlist {
+  symbols: string[];
+  order: string[];
+  mode: WatchlistMode;
+  limit: number;
+}
+
 export const marketApi = {
   config: () =>
     request<import("./market/types").MarketConfig>("/api/market/config"),
@@ -226,21 +235,55 @@ export const marketApi = {
       `/api/market/search?q=${encodeURIComponent(q)}`
     ),
 
-  watchlist: () => request<{ symbols: string[]; order: string[] }>("/api/market/watchlist"),
+  // Effective list for the caller, plus the mode and personal cap.
+  watchlist: () => request<MarketWatchlist>("/api/market/watchlist"),
 
+  // The site list, used by the admin editor regardless of the admin's own mode.
+  siteWatchlist: () =>
+    request<{ symbols: string[]; order: string[] }>("/api/market/watchlist/public"),
+
+  setWatchlistMode: (mode: WatchlistMode) =>
+    request<MarketWatchlist>("/api/market/watchlist/mode", {
+      method: "PUT",
+      body: { mode },
+    }),
+
+  // Personal list writes. These fail while the caller is viewing the site list.
   saveOrder: (order: string[]) =>
-    request<{ order: string[] }>("/api/market/watchlist/order", {
+    request<MarketWatchlist>("/api/market/watchlist/mine/order", {
       method: "POST",
       body: { order },
     }),
 
   addSymbol: (symbol: string) =>
-    request<{ symbols: string[] }>("/api/market/watchlist", { method: "POST", body: { symbol } }),
+    request<MarketWatchlist>("/api/market/watchlist/mine", {
+      method: "POST",
+      body: { symbol },
+    }),
 
   removeSymbol: (symbol: string) =>
-    request<{ symbols: string[] }>(`/api/market/watchlist?symbol=${encodeURIComponent(symbol)}`, {
+    request<MarketWatchlist>(`/api/market/watchlist/mine?symbol=${encodeURIComponent(symbol)}`, {
       method: "DELETE",
     }),
+
+  // Site list writes, admin only.
+  saveSiteOrder: (order: string[]) =>
+    request<{ order: string[] }>("/api/market/watchlist/public/order", {
+      method: "POST",
+      body: { order },
+    }),
+
+  addSiteSymbol: (symbol: string) =>
+    request<{ symbols: string[] }>("/api/market/watchlist/public", {
+      method: "POST",
+      body: { symbol },
+    }),
+
+  removeSiteSymbol: (symbol: string) =>
+    request<{ symbols: string[] }>(
+      `/api/market/watchlist/public?symbol=${encodeURIComponent(symbol)}`,
+      { method: "DELETE" }
+    ),
 
   analysis: (timeframe: string) =>
     request<{
@@ -891,6 +934,10 @@ export interface TradingDefaultsSettings {
   signalExpiryHours: number;
 }
 
+export interface AnalysisSettings {
+  watchlistLimit: number;
+}
+
 export type DateFormat = "locale" | "iso" | "dmy" | "mdy";
 export type NumberFormat = "locale" | "comma-dot" | "dot-comma";
 
@@ -965,6 +1012,7 @@ export interface SiteConfig {
 
 export interface SiteSettings extends Omit<SiteConfig, "registration"> {
   registration: RegistrationSettings;
+  analysis: AnalysisSettings;
   templates: TemplateSettings;
   webhooks: WebhookSettings;
   updatedAt: string | null;
@@ -1134,6 +1182,7 @@ export const adminApi = {
     maintenance?: Partial<MaintenanceSettings>;
     announcement?: Partial<AnnouncementSettings>;
     registration?: Partial<RegistrationSettings>;
+    analysis?: Partial<AnalysisSettings>;
     legal?: Partial<LegalSettings>;
     seo?: Partial<SeoSettings>;
     content?: Partial<ContentSettings>;

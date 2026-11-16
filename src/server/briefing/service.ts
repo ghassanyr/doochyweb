@@ -4,16 +4,17 @@
 // shows the same numbers the narrative was written about. `refresh` rebuilds it
 // on demand, which is what the page's Refresh button calls.
 //
-// Data sources are the ones that already exist: the shared watchlist and its
-// daily bars for movers, and the active published signals. No journal, holdings
-// or account data is read, so the brief needs no broker connection. When no AI
-// key is configured the snapshot is still stored and returned, with an error
-// explaining how to turn the written part on.
+// Data sources are the ones that already exist: the member's effective
+// watchlist and its daily bars for movers, and the active published signals. No
+// journal, holdings or account data is read, so the brief needs no broker
+// connection. When no AI key is configured the snapshot is still stored and
+// returned, with an error explaining how to turn the written part on.
 
 import { aiChat, loadAiConfig, type AiConfig } from "../ai/client";
 import { cachedCatalogFull, resolveMeta } from "../market/catalog";
 import { cachedBars, getCandles } from "../market/providers/index";
-import { getSettings, publicSettings } from "../market/store";
+import { publicSettings } from "../market/store";
+import { getEffectiveWatchlist } from "../market/userWatchlist";
 import type { Candle } from "../market/types";
 import { DEFAULT_BRANDING } from "../settings/defaults";
 import { getSiteSettings } from "../settings/store";
@@ -35,12 +36,11 @@ async function brandName(): Promise<string> {
   }
 }
 
-/** Daily bars for the shared watchlist, skipping anything that cannot be read. */
-async function gatherMovers(): Promise<{ symbol: string; bars: Candle[] }[]> {
+/** Daily bars for the member's effective watchlist, skipping unreadable symbols. */
+async function gatherMovers(userId: string): Promise<{ symbol: string; bars: Candle[] }[]> {
   let symbols: string[] = [];
   try {
-    const settings = await getSettings();
-    symbols = settings.watchlist.slice(0, MAX_SYMBOLS);
+    symbols = (await getEffectiveWatchlist(userId)).slice(0, MAX_SYMBOLS);
   } catch {
     return [];
   }
@@ -77,7 +77,7 @@ export async function generateBriefing(
   now: Date = new Date()
 ): Promise<BriefingRecord> {
   const [movers, signals, name] = await Promise.all([
-    gatherMovers(),
+    gatherMovers(userId),
     listSignals({ status: "active", limit: 6, now }).catch(() => ({
       signals: [],
       total: 0,

@@ -8,7 +8,7 @@
 // and a forced refresh sits behind authRequired because it spends the shared
 // account's rate limit.
 
-import { Router } from "express";
+import { Router, type Response } from "express";
 
 import { analyze, applyLatestPrice, setStrongRatio } from "./analysis";
 import { readCaptures } from "./captures";
@@ -31,7 +31,7 @@ import { ensureDeterministicNote } from "./narrationEvents";
 import { NARRATION_PROMPT_VERSION } from "./narrationModel";
 import { listNarrations } from "./narrationStore";
 import { detectSweep, isLastBarForming, type Sweep } from "./patterns";
-import { authRequired, adminRequired } from "../auth";
+import { authRequired, adminRequired, tokenUserId, type AuthedRequest } from "../auth";
 import { resolveMarketAccount } from "./account";
 import {
   cachedCatalog,
@@ -44,12 +44,20 @@ import { buildCatalog, normalizeSymbol, resolveAgainstBroker, searchCatalog, toS
 import {
   addToWatchlist,
   getSettings,
-  getWatchlist,
   publicSettings,
   removeFromWatchlist,
   saveCardOrder,
   updateSettings,
 } from "./store";
+import {
+  addToPersonalWatchlist,
+  getEffectiveWatchlist,
+  getWatchlistView,
+  removeFromPersonalWatchlist,
+  savePersonalOrder,
+  setWatchlistMode,
+  type PersonalMutationResult,
+} from "./userWatchlist";
 import { DEFAULT_TIMEFRAME, getTimeframe, timeframeLabels, TIMEFRAMES } from "./timeframes";
 import type {
   AnalysisError,
@@ -103,13 +111,26 @@ marketRouter.get("/account", async (_req, res) => {
 
 // ---------------------------------------------------------------- watchlist
 
-marketRouter.get("/watchlist", async (_req, res) => {
+// Effective list for the caller: the site list for anonymous visitors and for
+// members who have not switched to their own list.
+marketRouter.get("/watchlist", async (req, res) => {
+  try {
+    const userId = await tokenUserId(req);
+    res.json(await getWatchlistView(userId));
+  } catch (err) {
+    res.status(500).json({ error: message(err) });
+  }
+});
+
+// The admin editor works on the site list explicitly, so an admin who has a
+// personal list on /analysis never edits the wrong one.
+marketRouter.get("/watchlist/public", async (_req, res) => {
   const { watchlist, cardOrder } = await getSettings();
   res.json({ symbols: watchlist, order: cardOrder });
 });
 
-// Saved drag-and-drop layout. Admin only: the layout is shared state.
-marketRouter.post("/watchlist/order", adminRequired, async (req, res) => {
+// Saved drag-and-drop layout for the site list. Admin only: it is shared state.
+marketRouter.post("/watchlist/public/order", adminRequired, async (req, res) => {
   const order = req.body?.order;
   if (!Array.isArray(order)) {
     res.status(400).json({ error: "order must be an array of symbols" });
@@ -118,7 +139,7 @@ marketRouter.post("/watchlist/order", adminRequired, async (req, res) => {
   res.json({ order: await saveCardOrder(order) });
 });
 
-marketRouter.post("/watchlist", adminRequired, async (req, res) => {
+marketRouter.post("/watchlist/public", adminRequired, async (req, res) => {
   const symbol = req.body?.symbol;
   if (!symbol) {
     res.status(400).json({ error: "symbol is required" });
@@ -135,7 +156,7 @@ marketRouter.post("/watchlist", adminRequired, async (req, res) => {
   res.json({ symbols: await addToWatchlist(meta.symbol) });
 });
 
-marketRouter.delete("/watchlist", adminRequired, async (req, res) => {
+marketRouter.delete("/watchlist/public", adminRequired, async (req, res) => {
   const symbol = req.query.symbol;
   if (!symbol) {
     res.status(400).json({ error: "symbol is required" });
@@ -144,13 +165,74 @@ marketRouter.delete("/watchlist", adminRequired, async (req, res) => {
   res.json({ symbols: await removeFromWatchlist(String(symbol)) });
 });
 
+function sendPersonalMutation(res: Response, result: PersonalMutationResult): void {
+  if (result.ok) {
+    res.json(result.view);
+    return;
+  }
+  if (result.code === "site-mode") {
+    res.status(409).json({ error: "Switch to your own watchlist before editing it." });
+    return;
+  }
+  if (result.code === "limit") {
+    res.status(409).json({
+      error: `Your watchlist can hold up to ${result.limit ?? 10} markets.`,
+    });
+    return;
+  }
+  res.status(404).json({ error: "Watchlist not found." });
+}
+
+marketRouter.post("/watchlist/mine", authRequired, async (req: AuthedRequest, res) => {
+  const symbol = req.body?.symbol;
+  if (!symbol) {
+    res.status(400).json({ error: "symbol is required" });
+    return;
+  }
+  const { items: catalog, brokerError } = await cachedCatalogFull();
+  const typed = normalizeSymbol(symbol);
+  const meta = resolveMeta(typed, catalog);
+  if (!meta) {
+    res.status(400).json({ error: unresolvableError(typed, brokerError) });
+    return;
+  }
+  sendPersonalMutation(res, await addToPersonalWatchlist(req.userId!, meta.symbol));
+});
+
+marketRouter.delete("/watchlist/mine", authRequired, async (req: AuthedRequest, res) => {
+  const symbol = req.query.symbol;
+  if (!symbol) {
+    res.status(400).json({ error: "symbol is required" });
+    return;
+  }
+  sendPersonalMutation(res, await removeFromPersonalWatchlist(req.userId!, String(symbol)));
+});
+
+marketRouter.post("/watchlist/mine/order", authRequired, async (req: AuthedRequest, res) => {
+  const order = req.body?.order;
+  if (!Array.isArray(order)) {
+    res.status(400).json({ error: "order must be an array of symbols" });
+    return;
+  }
+  sendPersonalMutation(res, await savePersonalOrder(req.userId!, order));
+});
+
+marketRouter.put("/watchlist/mode", authRequired, async (req: AuthedRequest, res) => {
+  const mode = req.body?.mode;
+  if (mode !== "site" && mode !== "mine") {
+    res.status(400).json({ error: "mode must be site or mine" });
+    return;
+  }
+  res.json(await setWatchlistMode(req.userId!, mode));
+});
+
 // ---------------------------------------------------------------- settings
 
 marketRouter.get("/settings", async (_req, res) => {
   res.json(await publicSettings());
 });
 
-marketRouter.post("/settings", authRequired, async (req, res) => {
+marketRouter.post("/settings", adminRequired, async (req, res) => {
   const body = req.body ?? {};
   const patch: Record<string, unknown> = {};
   if (body.refreshSeconds !== undefined) patch.refreshSeconds = Number(body.refreshSeconds);
@@ -165,11 +247,28 @@ marketRouter.post("/settings", authRequired, async (req, res) => {
 
 // ---------------------------------------------------------------- analysis
 
+// A caller may ask for an explicit symbol set. Cap and dedupe it so one URL
+// cannot turn a sweep into an unbounded broker read.
+const MAX_ANALYSIS_SYMBOLS = 60;
+
+function requestedSymbols(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const symbol = part.trim().toUpperCase();
+    if (!symbol || seen.has(symbol)) continue;
+    seen.add(symbol);
+    out.push(symbol);
+    if (out.length >= MAX_ANALYSIS_SYMBOLS) break;
+  }
+  return out;
+}
+
 marketRouter.get("/analysis", async (req, res) => {
   const timeframe = req.query.timeframe ? String(req.query.timeframe) : DEFAULT_TIMEFRAME;
   const symbols = req.query.symbols
-    ? String(req.query.symbols).split(",").map((s) => s.trim()).filter(Boolean)
-    : await getWatchlist();
+    ? requestedSymbols(String(req.query.symbols))
+    : await getEffectiveWatchlist(await tokenUserId(req));
   // The rating engine reads the strong-buy sensitivity from module state, so
   // prime it from the stored settings before every sweep.
   const { strongRatio } = await getSettings();

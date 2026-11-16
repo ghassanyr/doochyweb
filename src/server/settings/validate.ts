@@ -7,6 +7,7 @@
 
 import { DEFAULT_MODULES, MODULE_KEYS } from "./defaults";
 import type {
+  AnalysisSettings,
   AnnouncementSettings,
   AnnouncementTone,
   BrandingSettings,
@@ -583,6 +584,15 @@ export function normalizeTradingDefaults(
 
 const DATE_FORMATS: readonly DateFormat[] = ["locale", "iso", "dmy", "mdy"];
 const NUMBER_FORMATS: readonly NumberFormat[] = ["locale", "comma-dot", "dot-comma"];
+
+export function normalizeAnalysis(patch: unknown, base: AnalysisSettings): AnalysisSettings {
+  const source = plainObject(patch);
+  return {
+    watchlistLimit: Math.round(
+      readNumber(source, "watchlistLimit", base.watchlistLimit, 1, 60)
+    ),
+  };
+}
 
 export function normalizeLocale(patch: unknown, base: LocaleSettings): LocaleSettings {
   const source = plainObject(patch);

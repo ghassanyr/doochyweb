@@ -9,10 +9,13 @@ import type { MarketSettings } from "./types";
 
 export function MarketSettingsSheet({
   settings,
+  canEdit,
   onClose,
   onSaved,
 }: {
   settings: MarketSettings;
+  /** Only an admin can change the shared analysis settings. */
+  canEdit: boolean;
   onClose: () => void;
   onSaved: (s: MarketSettings) => void;
 }) {
@@ -29,6 +32,7 @@ export function MarketSettingsSheet({
   }, [settings]);
 
   async function save() {
+    if (!canEdit) return;
     setError(null);
     setSaved(false);
     try {
@@ -48,7 +52,7 @@ export function MarketSettingsSheet({
     <AnimatedModal open onClose={onClose} title="Analysis settings">
       <div className="space-y-4">
         {error && <Flash tone="danger">{error}</Flash>}
-        {saved && !error && <Flash tone="success">Settings saved</Flash>}
+        {saved && !error && canEdit && <Flash tone="success">Settings saved</Flash>}
 
         {settings.account ? (
           <div className="flex gap-2.5 rounded-xl border border-success/25 bg-success-soft/50 p-3 text-xs leading-relaxed text-fg-muted">
@@ -94,11 +98,17 @@ export function MarketSettingsSheet({
             className={inputCls}
             value={strongRatio}
             onChange={(e) => setStrongRatio(e.target.value)}
+            disabled={!canEdit}
           />
           <p className="text-xs text-fg-faint">
             Net buy/sell vote ratio that upgrades Buy/Sell to Strong. Lower triggers more easily
             (default 0.25).
           </p>
+          {!canEdit && (
+            <p className="text-xs text-fg-faint">
+              Only an admin can change the shared sensitivity.
+            </p>
+          )}
         </div>
       </div>
 
@@ -106,9 +116,11 @@ export function MarketSettingsSheet({
         <Button variant="ghost" onClick={onClose}>
           Close
         </Button>
-        <Button variant="primary" icon={<Save className="h-4 w-4" />} onClickAsync={save}>
-          Save
-        </Button>
+        {canEdit && (
+          <Button variant="primary" icon={<Save className="h-4 w-4" />} onClickAsync={save}>
+            Save
+          </Button>
+        )}
       </div>
     </AnimatedModal>
   );

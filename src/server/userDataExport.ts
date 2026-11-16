@@ -7,12 +7,13 @@ import type { BriefingRecord } from "./briefing/types";
 import { Credentials, User, type StoredAccount } from "./db";
 import { JournalEntry, JournalSync, toJournalView } from "./journal/store";
 import type { JournalEntryView } from "./journal/types";
+import { UserWatchlist, type WatchlistMode } from "./market/userWatchlist";
 import { PaperPosition, toPaperView } from "./simulation/store";
 import type { PaperPositionView } from "./simulation/types";
 import { TelegramLink, toLinkView, type TelegramLinkRecord } from "./telegram/store";
 
 export const USER_EXPORT_FORMAT = "doochy-user-data";
-export const USER_EXPORT_VERSION = 1;
+export const USER_EXPORT_VERSION = 2;
 
 export interface UserDataExport {
   format: typeof USER_EXPORT_FORMAT;
@@ -46,6 +47,11 @@ export interface UserDataExport {
   paperTrading: PaperPositionView[];
   briefings: BriefingRecord[];
   telegram: TelegramLinkRecord | null;
+  watchlist: {
+    mode: WatchlistMode;
+    symbols: string[];
+    order: string[];
+  } | null;
 }
 
 function iso(value: unknown): string | null {
@@ -71,16 +77,18 @@ export async function exportUserData(
   if (!mongoose.isValidObjectId(userId)) return null;
   const owner = new mongoose.Types.ObjectId(userId);
 
-  const [user, credentials, alerts, journal, sync, paper, briefings, telegram] = await Promise.all([
-    User.findById(owner).lean().exec(),
-    Credentials.findOne({ userId: owner }).lean().exec(),
-    PriceAlert.find({ userId: owner }).sort({ createdAt: 1 }).lean().exec(),
-    JournalEntry.find({ userId: owner }).sort({ createdAt: 1 }).lean().exec(),
-    JournalSync.findOne({ userId: owner }).lean().exec(),
-    PaperPosition.find({ userId: owner }).sort({ openedAt: 1 }).lean().exec(),
-    Briefing.find({ userId: owner }).sort({ dateKey: 1 }).lean().exec(),
-    TelegramLink.findOne({ userId: owner }).lean().exec(),
-  ]);
+  const [user, credentials, alerts, journal, sync, paper, briefings, telegram, watchlist] =
+    await Promise.all([
+      User.findById(owner).lean().exec(),
+      Credentials.findOne({ userId: owner }).lean().exec(),
+      PriceAlert.find({ userId: owner }).sort({ createdAt: 1 }).lean().exec(),
+      JournalEntry.find({ userId: owner }).sort({ createdAt: 1 }).lean().exec(),
+      JournalSync.findOne({ userId: owner }).lean().exec(),
+      PaperPosition.find({ userId: owner }).sort({ openedAt: 1 }).lean().exec(),
+      Briefing.find({ userId: owner }).sort({ dateKey: 1 }).lean().exec(),
+      TelegramLink.findOne({ userId: owner }).lean().exec(),
+      UserWatchlist.findOne({ userId: owner }).lean().exec(),
+    ]);
 
   if (!user) return null;
 
@@ -118,5 +126,14 @@ export async function exportUserData(
     paperTrading: (paper as any[]).map(toPaperView),
     briefings: (briefings as any[]).map(toBriefingRecord),
     telegram: telegram ? toLinkView(telegram) : null,
+    watchlist: watchlist
+      ? {
+          mode: (watchlist as any).mode === "mine" ? "mine" : "site",
+          symbols: Array.isArray((watchlist as any).symbols)
+            ? (watchlist as any).symbols
+            : [],
+          order: Array.isArray((watchlist as any).order) ? (watchlist as any).order : [],
+        }
+      : null,
   };
 }

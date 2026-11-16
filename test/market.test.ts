@@ -20,6 +20,7 @@ import { getTimeframe, TIMEFRAMES } from "../src/server/market/timeframes";
 import { noSourceError, trimFormingTail } from "../src/server/market/providers/index";
 import * as breaker from "../src/server/market/providers/breaker";
 import type { Candle, Timeframe } from "../src/server/market/types";
+import { resolveWatchlistView } from "../src/server/market/userWatchlist";
 import { applyOrder, moveTo, dropIndex } from "../src/webapp/src/market/order";
 import { changedSymbolCount, dayKey, dayLabel, fmtCaptureTime, groupChanges, matchesCapture, relativeTime } from "../src/webapp/src/market/captures";
 import { computeConfluence, pinSelectedTimeframe } from "../src/webapp/src/market/confluence";
@@ -1123,5 +1124,38 @@ describe("MTF confluence", () => {
     const c = computeConfluence(pinned, "4h");
     assert.equal(c.segments.find((s) => s.id === "4h")?.rating, "strong_buy");
     assert.equal(c.rating, "sell");
+  });
+});
+
+describe("per-user watchlists", () => {
+  const site = { symbols: ["EURUSD", "XAUUSD"], order: ["XAUUSD", "EURUSD"] };
+  const mine = { symbols: ["BTCUSD"], order: ["BTCUSD"] };
+
+  test("site mode shows the site list even when a personal list exists", () => {
+    const view = resolveWatchlistView("site", site, mine);
+    assert.equal(view.mode, "site");
+    assert.deepEqual(view.symbols, site.symbols);
+    assert.deepEqual(view.order, site.order);
+  });
+
+  test("mine mode shows the personal list", () => {
+    const view = resolveWatchlistView("mine", site, mine);
+    assert.equal(view.mode, "mine");
+    assert.deepEqual(view.symbols, mine.symbols);
+    assert.deepEqual(view.order, mine.order);
+  });
+
+  test("mine mode without a document falls back to the site list", () => {
+    const view = resolveWatchlistView("mine", site, null);
+    assert.equal(view.mode, "site");
+    assert.deepEqual(view.symbols, site.symbols);
+  });
+
+  test("resolved lists are copies, so callers cannot mutate stored state", () => {
+    const view = resolveWatchlistView("mine", site, mine);
+    view.symbols.push("GBPUSD");
+    view.order.push("GBPUSD");
+    assert.deepEqual(mine.symbols, ["BTCUSD"]);
+    assert.deepEqual(mine.order, ["BTCUSD"]);
   });
 });

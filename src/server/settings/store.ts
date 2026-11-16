@@ -8,6 +8,7 @@
 import mongoose from "mongoose";
 
 import {
+  DEFAULT_ANALYSIS,
   DEFAULT_ANNOUNCEMENT,
   DEFAULT_BRANDING,
   DEFAULT_CONTENT,
@@ -28,6 +29,7 @@ import {
   MODULE_KEYS,
 } from "./defaults";
 import type {
+  AnalysisSettings,
   AnnouncementSettings,
   AnnouncementTone,
   ContentSettings,
@@ -51,6 +53,7 @@ import type {
   WebhookSettings,
 } from "./types";
 import {
+  normalizeAnalysis,
   normalizeAnnouncement,
   normalizeBranding,
   normalizeLegal,
@@ -271,6 +274,13 @@ const tradingDefaultsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const analysisSchema = new mongoose.Schema(
+  {
+    watchlistLimit: { type: Number, default: DEFAULT_ANALYSIS.watchlistLimit },
+  },
+  { _id: false }
+);
+
 const localeSchema = new mongoose.Schema(
   {
     locale: { type: String, default: DEFAULT_LOCALE.locale },
@@ -392,6 +402,10 @@ const siteSettingsSchema = new mongoose.Schema(
     tradingDefaults: {
       type: tradingDefaultsSchema,
       default: () => ({ ...DEFAULT_TRADING_DEFAULTS }),
+    },
+    analysis: {
+      type: analysisSchema,
+      default: () => ({ ...DEFAULT_ANALYSIS }),
     },
     locale: { type: localeSchema, default: () => ({ ...DEFAULT_LOCALE }) },
     social: { type: socialSchema, default: () => ({ ...DEFAULT_SOCIAL }) },
@@ -571,6 +585,17 @@ export function mergeAnnouncement(stored: any): AnnouncementSettings {
   };
 }
 
+export function mergeAnalysis(stored: any): AnalysisSettings {
+  const analysis = stored && typeof stored === "object" ? stored : {};
+  const limit = Number(analysis.watchlistLimit);
+  return {
+    watchlistLimit:
+      Number.isFinite(limit) && limit >= 1 && limit <= 60
+        ? Math.round(limit)
+        : DEFAULT_ANALYSIS.watchlistLimit,
+  };
+}
+
 /** Merge a stored document over the defaults. Exported for the test suite. */
 export function mergeSiteSettings(doc: any): SiteSettings {
   const updatedAt = iso(doc?.updatedAt);
@@ -582,6 +607,7 @@ export function mergeSiteSettings(doc: any): SiteSettings {
     maintenance: mergeMaintenance(doc?.maintenance),
     announcement: mergeAnnouncement(doc?.announcement),
     registration: mergeRegistration(doc?.registration),
+    analysis: mergeAnalysis(doc?.analysis),
     legal: mergeLegal(doc?.legal),
     seo: { ...DEFAULT_SEO, ...(doc?.seo ?? {}) },
     content: {
@@ -646,6 +672,7 @@ export async function saveSiteSettings(
     maintenance?: unknown;
     announcement?: unknown;
     registration?: unknown;
+    analysis?: unknown;
     legal?: unknown;
     seo?: unknown;
     content?: unknown;
@@ -668,6 +695,7 @@ export async function saveSiteSettings(
   const maintenance = normalizeMaintenance(patch.maintenance, current.maintenance);
   const announcement = normalizeAnnouncement(patch.announcement, current.announcement);
   const registration = normalizeRegistration(patch.registration, current.registration);
+  const analysis = normalizeAnalysis(patch.analysis, current.analysis);
   const legal = normalizeLegal(patch.legal, current.legal);
   const seo = normalizeSeo(patch.seo, current.seo);
   const content = normalizeContent(patch.content, current.content);
@@ -692,6 +720,7 @@ export async function saveSiteSettings(
         maintenance,
         announcement,
         registration,
+        analysis,
         legal,
         seo,
         content,

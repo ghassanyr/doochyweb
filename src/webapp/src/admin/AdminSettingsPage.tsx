@@ -26,6 +26,7 @@ import {
 
 import {
   adminApi,
+  type AnalysisSettings,
   type AnnouncementSettings,
   type AnnouncementTone,
   type BrandingSettings,
@@ -396,6 +397,7 @@ export default function AdminSettingsPage({
   const [pwa, setPwa] = useState<PwaSettings | null>(null);
   const [templates, setTemplates] = useState<TemplateSettings | null>(null);
   const [webhooks, setWebhooks] = useState<WebhookSettings | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -429,6 +431,7 @@ export default function AdminSettingsPage({
         setPwa(settings.pwa);
         setTemplates(settings.templates);
         setWebhooks(settings.webhooks);
+        setAnalysis(settings.analysis);
       })
       .catch((err) => {
         if (alive) setError(err instanceof Error ? err.message : "Failed to load site settings");
@@ -477,7 +480,8 @@ export default function AdminSettingsPage({
       !social ||
       !pwa ||
       !templates ||
-      !webhooks
+      !webhooks ||
+      !analysis
     ) {
       return false;
     }
@@ -497,7 +501,8 @@ export default function AdminSettingsPage({
       JSON.stringify(social) !== JSON.stringify(loaded.social) ||
       JSON.stringify(pwa) !== JSON.stringify(loaded.pwa) ||
       JSON.stringify(templates) !== JSON.stringify(loaded.templates) ||
-      JSON.stringify(webhooks) !== JSON.stringify(loaded.webhooks)
+      JSON.stringify(webhooks) !== JSON.stringify(loaded.webhooks) ||
+      JSON.stringify(analysis) !== JSON.stringify(loaded.analysis)
     );
   }, [
     loaded,
@@ -517,6 +522,7 @@ export default function AdminSettingsPage({
     pwa,
     templates,
     webhooks,
+    analysis,
   ]);
 
   function reset() {
@@ -537,6 +543,7 @@ export default function AdminSettingsPage({
     setPwa(loaded.pwa);
     setTemplates(loaded.templates);
     setWebhooks(loaded.webhooks);
+    setAnalysis(loaded.analysis);
     applyTheme(loaded.theme);
     setSaved(false);
     setError(null);
@@ -559,7 +566,8 @@ export default function AdminSettingsPage({
       !social ||
       !pwa ||
       !templates ||
-      !webhooks
+      !webhooks ||
+      !analysis
     ) {
       return;
     }
@@ -574,6 +582,7 @@ export default function AdminSettingsPage({
         maintenance,
         announcement,
         registration,
+        analysis,
         legal,
         seo,
         content,
@@ -601,6 +610,7 @@ export default function AdminSettingsPage({
       setPwa(settings.pwa);
       setTemplates(settings.templates);
       setWebhooks(settings.webhooks);
+      setAnalysis(settings.analysis);
       // Push the saved values into the provider so the header, title and
       // palette update without a reload.
       setConfig({
@@ -666,7 +676,8 @@ export default function AdminSettingsPage({
     !social ||
     !pwa ||
     !templates ||
-    !webhooks
+    !webhooks ||
+    !analysis
   ) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-3">
@@ -1278,6 +1289,27 @@ export default function AdminSettingsPage({
               options={NUMBER_FORMAT_OPTIONS}
             />
           </div>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Analysis</h2>
+              <p className="text-xs text-fg-muted">
+                Limits for the market analysis page. The site watchlist is managed under Admin.
+              </p>
+            </div>
+          </div>
+          <NumberField
+            label="Personal watchlist limit"
+            value={analysis.watchlistLimit}
+            onChange={(watchlistLimit) => setAnalysis({ ...analysis, watchlistLimit })}
+            min={1}
+            max={60}
+            suffix="markets"
+            hint="Signed-in members can keep this many symbols in their own watchlist. The site list is separate."
+          />
         </Card>
 
         <Card className="space-y-4 p-4">

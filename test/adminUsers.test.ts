@@ -10,6 +10,7 @@ import {
 } from "../src/server/admin/users";
 import { AuthToken } from "../src/server/authTokens";
 import { Credentials, User } from "../src/server/db";
+import { UserWatchlist } from "../src/server/market/userWatchlist";
 import { TelegramLink, TelegramLinkCode } from "../src/server/telegram/store";
 
 const USER_ID = "507f1f77bcf86cd799439011";
@@ -39,6 +40,7 @@ const originals = {
   linkDeleteMany: TelegramLink.deleteMany,
   codeDeleteMany: TelegramLinkCode.deleteMany,
   tokenDeleteMany: AuthToken.deleteMany,
+  watchlistDeleteMany: UserWatchlist.deleteMany,
 };
 
 afterEach(() => {
@@ -52,6 +54,7 @@ afterEach(() => {
   (TelegramLink as any).deleteMany = originals.linkDeleteMany;
   (TelegramLinkCode as any).deleteMany = originals.codeDeleteMany;
   (AuthToken as any).deleteMany = originals.tokenDeleteMany;
+  (UserWatchlist as any).deleteMany = originals.watchlistDeleteMany;
 });
 
 function stubFindById(user: any) {
@@ -86,6 +89,10 @@ function stubDeletes() {
   };
   (AuthToken as any).deleteMany = (filter: any) => {
     calls.push(`authtoken:${String(filter.userId)}`);
+    return execQuery({});
+  };
+  (UserWatchlist as any).deleteMany = (filter: any) => {
+    calls.push(`watchlist:${String(filter.userId)}`);
     return execQuery({});
   };
   return calls;
@@ -162,6 +169,7 @@ describe("deleteUser", () => {
       `credentials:${USER_ID}`,
       `link:${USER_ID}`,
       `user:${USER_ID}`,
+      `watchlist:${USER_ID}`,
     ]);
   });
 

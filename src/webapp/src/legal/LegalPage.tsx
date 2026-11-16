@@ -343,15 +343,15 @@ function buildDocuments(
         {
           title: "2. Essential cookies",
           bullets: [
-            "ctrader_oauth_state — an HTTP-only cookie set during cTrader sign-in to validate the OAuth state and prevent cross-site request forgery. It expires after about ten minutes and is cleared when the callback completes.",
+            "ctrader_oauth_state: an HTTP-only cookie set during cTrader sign-in to validate the OAuth state and prevent cross-site request forgery. It expires after about ten minutes and is cleared when the callback completes.",
           ],
         },
         {
           title: "3. Browser storage",
           bullets: [
-            "doochyweb_token — keeps you signed in between page loads.",
-            "Theme, filter, announcement, and cookie-notice preferences — remember how the interface should look and which notices you have dismissed.",
-            "Training progress — stores your local practice session so the daily drill can resume.",
+            "doochyweb_token: keeps you signed in between page loads.",
+            "Theme, filter, announcement, and cookie-notice preferences: remember how the interface should look and which notices you have dismissed.",
+            "Training progress: stores your local practice session so the daily drill can resume.",
           ],
         },
         {
