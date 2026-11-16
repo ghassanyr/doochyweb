@@ -1,15 +1,16 @@
 // Daily briefing.
 //
-// One brief per UTC day, built from the shared watchlist and the signals that are
-// still active, then written up by the configured AI provider. The snapshot is
-// frozen when the brief is generated, so reopening the page later in the day
-// shows the same numbers the prose was written about. Refresh rebuilds it.
+// One brief per UTC day, built from the member's own watchlist (or the site list
+// when their list is empty) and the signals that are still active, then written
+// up by the configured AI provider. The snapshot is frozen when the brief is
+// generated, so reopening the page later in the day shows the same numbers the
+// prose was written about. Refresh rebuilds it.
 //
 // This page deliberately does not read the journal: the brief is about the
 // market and the published ideas, not the member's own open positions.
 
 import { useCallback, useEffect, useState } from "react";
-import { Newspaper, RefreshCw, Sparkles } from "lucide-react";
+import { Newspaper, RefreshCw } from "lucide-react";
 
 import { briefingApi, type BriefingRecord, type BriefingResponse } from "../api";
 import { FadeRise } from "../components/motion";
@@ -60,6 +61,7 @@ export default function BriefingPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Newspaper className="h-4 w-4 text-accent" />
             <h3 className="text-sm font-semibold text-fg">Daily briefing</h3>
+            {briefing?.model && <Badge tone="muted">{briefing.model}</Badge>}
             {briefing && (
               <span className="text-[11px] text-fg-faint">
                 {briefing.snapshot.dateKey} · built {formatLocalDateTime(briefing.generatedAt)}
@@ -77,9 +79,19 @@ export default function BriefingPage() {
             </Button>
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-            Built once a day from the shared watchlist and the signals that are still active. Refreshing
+            Built once a day from your watchlist and the signals that are still active. Refreshing
             replaces today's brief with current numbers.
           </p>
+          {briefing &&
+            (briefing.narrative ? (
+              <p className="mt-3 whitespace-pre-line text-[13.5px] leading-relaxed text-fg-muted">
+                {briefing.narrative}
+              </p>
+            ) : (
+              <p className="mt-3 text-[12.5px] leading-relaxed text-fg-muted">
+                {briefing.error || "No written summary for today."}
+              </p>
+            ))}
           {error && (
             <div className="mt-3">
               <Flash tone="danger">{error}</Flash>
@@ -105,23 +117,6 @@ export default function BriefingPage() {
               </Flash>
             )}
 
-            <Card className="p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Sparkles className="h-4 w-4 text-accent" />
-                <h3 className="text-sm font-semibold text-fg">Summary</h3>
-                {briefing.model && <Badge tone="muted">{briefing.model}</Badge>}
-              </div>
-              {briefing.narrative ? (
-                <p className="mt-2 whitespace-pre-line text-[13.5px] leading-relaxed text-fg-muted">
-                  {briefing.narrative}
-                </p>
-              ) : (
-                <p className="mt-2 text-[12.5px] leading-relaxed text-fg-muted">
-                  {briefing.error || "No written summary for today."}
-                </p>
-              )}
-            </Card>
-
             <div className="grid gap-3 lg:grid-cols-2">
               <MoversCard briefing={briefing} />
               <SignalsCard briefing={briefing} />
@@ -138,7 +133,9 @@ function MoversCard({ briefing }: { briefing: BriefingRecord }) {
   return (
     <Card className="p-4">
       <h3 className="text-sm font-semibold text-fg">Watchlist moves</h3>
-      <p className="mt-0.5 text-[11px] text-fg-faint">Daily close against the previous close.</p>
+      <p className="mt-0.5 text-[11px] text-fg-faint">
+        Daily close for the symbols in your watchlist against the previous close.
+      </p>
       {rows.length === 0 ? (
         <p className="mt-3 text-[12.5px] text-fg-muted">
           No daily data was available for the watchlist when this brief was built.

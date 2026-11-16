@@ -61,6 +61,11 @@ export async function findBriefing(userId: string, dateKey: string): Promise<Bri
   return doc ? toBriefingRecord(doc) : null;
 }
 
+/** Drop a stored brief so the next read rebuilds it from the current watchlist. */
+export async function clearBriefing(userId: string, dateKey: string): Promise<void> {
+  await Briefing.deleteOne({ ...owner(userId), dateKey }).exec();
+}
+
 /** Replace today's brief. Used by generation and by an explicit refresh. */
 export async function saveBriefing(params: {
   userId: string;

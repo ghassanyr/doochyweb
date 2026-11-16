@@ -449,9 +449,21 @@ export default function AnalysisPage({
             <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
           ) : (
             <p className="flex-1 self-center px-1 text-xs text-fg-faint">
-              {signedIn
-                ? "The site list is curated by an admin. Switch to My watchlist to add, remove or reorder markets."
-                : ""}
+              {signedIn ? (
+                <>
+                  The site list is curated by an admin. Switch to{" "}
+                  <button
+                    type="button"
+                    onClick={() => void switchMode("mine")}
+                    className="font-medium text-accent hover:underline"
+                  >
+                    My watchlist
+                  </button>{" "}
+                  to add, remove or reorder markets.
+                </>
+              ) : (
+                ""
+              )}
             </p>
           )}
         </Card>

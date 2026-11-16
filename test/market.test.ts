@@ -20,7 +20,7 @@ import { getTimeframe, TIMEFRAMES } from "../src/server/market/timeframes";
 import { noSourceError, trimFormingTail } from "../src/server/market/providers/index";
 import * as breaker from "../src/server/market/providers/breaker";
 import type { Candle, Timeframe } from "../src/server/market/types";
-import { resolveWatchlistView } from "../src/server/market/userWatchlist";
+import { preferPersonalWatchlist, resolveWatchlistView } from "../src/server/market/userWatchlist";
 import { applyOrder, moveTo, dropIndex } from "../src/webapp/src/market/order";
 import { changedSymbolCount, dayKey, dayLabel, fmtCaptureTime, groupChanges, matchesCapture, relativeTime } from "../src/webapp/src/market/captures";
 import { computeConfluence, pinSelectedTimeframe } from "../src/webapp/src/market/confluence";
@@ -1157,5 +1157,24 @@ describe("per-user watchlists", () => {
     view.order.push("GBPUSD");
     assert.deepEqual(mine.symbols, ["BTCUSD"]);
     assert.deepEqual(mine.order, ["BTCUSD"]);
+  });
+
+  test("the briefing prefers personal symbols even while site mode is active", () => {
+    assert.deepEqual(preferPersonalWatchlist(site, mine), ["BTCUSD"]);
+  });
+
+  test("the briefing falls back to the site list when the personal list is empty", () => {
+    assert.deepEqual(preferPersonalWatchlist(site, { symbols: [], order: [] }), [
+      "EURUSD",
+      "XAUUSD",
+    ]);
+    assert.deepEqual(preferPersonalWatchlist(site, null), ["EURUSD", "XAUUSD"]);
+  });
+
+  test("the preferred briefing list is a copy", () => {
+    const symbols = preferPersonalWatchlist(site, mine);
+    symbols.push("GBPUSD");
+    assert.deepEqual(mine.symbols, ["BTCUSD"]);
+    assert.deepEqual(site.symbols, ["EURUSD", "XAUUSD"]);
   });
 });

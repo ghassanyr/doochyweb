@@ -7,6 +7,8 @@
 
 import mongoose from "mongoose";
 
+import { briefingDateKey } from "../briefing/build";
+import { clearBriefing } from "../briefing/store";
 import { DEFAULT_ANALYSIS } from "../settings/defaults";
 import { getSiteSettings } from "../settings/store";
 import { getSettings } from "./store";
@@ -99,6 +101,19 @@ async function siteLists(): Promise<WatchlistLists> {
   return { symbols: normalizeWatchlist(watchlist), order: normalizeWatchlist(cardOrder) };
 }
 
+/**
+ * A change to the personal symbols makes today's frozen brief stale. Dropping
+ * it means the next visit rebuilds from the new list instead of showing moves
+ * for symbols the member no longer follows.
+ */
+async function invalidateBriefing(userId: string): Promise<void> {
+  try {
+    await clearBriefing(userId, briefingDateKey(new Date()));
+  } catch {
+    // The brief is regenerated on the next read if this fails.
+  }
+}
+
 async function findMine(
   userId: string
 ): Promise<{ mode: WatchlistMode; symbols: string[]; order: string[] } | null> {
@@ -123,9 +138,27 @@ export async function getWatchlistView(userId: string | null): Promise<Watchlist
   };
 }
 
-/** The symbols an analysis sweep or briefing should read for this caller. */
+/** The symbols an analysis sweep should read for this caller. */
 export async function getEffectiveWatchlist(userId: string | null): Promise<string[]> {
   return (await getWatchlistView(userId)).symbols;
+}
+
+/**
+ * The briefing prefers the member's own symbols whenever they have any, even
+ * while the Analysis page is showing the site list. An empty personal list falls
+ * back to the site list so a new member still gets a useful brief.
+ */
+export function preferPersonalWatchlist(
+  site: WatchlistLists,
+  mine: WatchlistLists | null
+): string[] {
+  return mine?.symbols.length ? [...mine.symbols] : [...site.symbols];
+}
+
+/** The symbols the daily briefing should read for this caller. */
+export async function getBriefingWatchlist(userId: string | null): Promise<string[]> {
+  const [site, mine] = await Promise.all([siteLists(), userId ? findMine(userId) : null]);
+  return preferPersonalWatchlist(site, mine);
 }
 
 export type PersonalMutationResult =
@@ -133,9 +166,10 @@ export type PersonalMutationResult =
   | { ok: false; code: "site-mode" | "limit" | "not-found"; limit?: number };
 
 /**
- * Switch between the site list and the personal list. Switching to "mine" seeds
- * an empty personal list from the site list; switching to "site" only changes
- * the mode, so the personal symbols and order survive.
+ * Switch between the site list and the personal list. The first switch to
+ * "mine" starts empty, so the member builds their own list rather than editing
+ * a copy of the site list. Switching to "site" only changes the mode, so the
+ * personal symbols and order survive for the next switch back.
  */
 export async function setWatchlistMode(
   userId: string,
@@ -145,16 +179,10 @@ export async function setWatchlistMode(
   if (!owner) throw new Error("invalid user id");
 
   if (mode === "mine") {
-    const [site, limit, existing] = await Promise.all([
-      siteLists(),
-      personalLimit(),
-      findMine(userId),
-    ]);
-    const symbols = (existing?.symbols.length ? existing.symbols : site.symbols).slice(0, limit);
+    const existing = await findMine(userId);
+    const symbols = existing?.symbols ?? [];
     const allowed = new Set(symbols);
-    const order = (existing?.order.length ? existing.order : site.order).filter((symbol) =>
-      allowed.has(symbol)
-    );
+    const order = (existing?.order ?? []).filter((symbol) => allowed.has(symbol));
     await UserWatchlist.updateOne(
       { userId: owner },
       { $set: { mode: "mine", symbols, order, updatedAt: new Date() } },
@@ -195,6 +223,7 @@ export async function addToPersonalWatchlist(
     { $set: { symbols, updatedAt: new Date() } },
     { upsert: true }
   ).exec();
+  await invalidateBriefing(userId);
   return { ok: true, view: await getWatchlistView(userId) };
 }
 
@@ -219,6 +248,7 @@ export async function removeFromPersonalWatchlist(
     },
     { upsert: true }
   ).exec();
+  await invalidateBriefing(userId);
   return { ok: true, view: await getWatchlistView(userId) };
 }
 
@@ -238,5 +268,6 @@ export async function savePersonalOrder(
     { $set: { order: clean, updatedAt: new Date() } },
     { upsert: true }
   ).exec();
+  await invalidateBriefing(userId);
   return { ok: true, view: await getWatchlistView(userId) };
 }
