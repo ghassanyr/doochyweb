@@ -101,6 +101,12 @@ Telegram uses long polling only, so it needs no inbound route or webhook.
 
 AI features are optional and configured under **Admin → Integrations**. Pick OpenAI, OpenRouter, Groq, NVIDIA or a local Ollama server, or enter any other OpenAI-compatible endpoint with **Custom**. The page links to the provider key page, fills in the endpoint and, when available, a recommended model, loads the models the endpoint advertises, checks which ones the key can actually use, and tests the connection before you save. NVIDIA's catalog is filtered to chat models and probed because its `/v1/models` response lists models that the key cannot invoke. Ollama needs no API key. The key is encrypted at rest and never returned to the browser.
 
+### Daily briefing
+
+The Briefing page stores one brief per user per UTC day from the effective watchlist, active published signals and open journal ideas. The snapshot is frozen when the brief is generated, so the page keeps showing the numbers the write-up was based on until you refresh it. Each brief includes per-symbol notes, open ideas with recorded plan levels, active signals, key risks, levels to monitor, and data notes. Members choose their focus sessions under the briefing header; the default is London and New York.
+
+With an AI provider configured, the brief is written as structured JSON and validated against the snapshot. If no provider is saved or the response is unusable, the page still renders a deterministic data summary. No news feed is connected, so the brief never invents headlines or event context.
+
 ### Webhooks
 
 Outbound webhooks are configured under **Admin → Site settings → Webhooks**. Enable the events you want and set an HTTPS endpoint; the optional secret signs each JSON payload with `X-Doochy-Signature: sha256=<hex>`. Deliveries are queued in the background and retried, and the settings page has a test button that uses the saved configuration.

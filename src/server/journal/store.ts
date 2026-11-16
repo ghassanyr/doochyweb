@@ -7,6 +7,8 @@
 
 import mongoose from "mongoose";
 
+import { briefingDateKey } from "../briefing/build";
+import { clearBriefing } from "../briefing/store";
 import type {
   JournalEntryView,
   JournalImportResult,
@@ -73,6 +75,14 @@ export class JournalError extends Error {
     super(message);
     this.name = "JournalError";
     this.status = status;
+  }
+}
+
+async function invalidateBriefing(userId: string): Promise<void> {
+  try {
+    await clearBriefing(userId, briefingDateKey(new Date()));
+  } catch {
+    // The brief is regenerated on the next read if this fails.
   }
 }
 
@@ -191,6 +201,7 @@ export async function createJournalEntry(
     accountLabel: null,
     verified: false,
   });
+  await invalidateBriefing(userId);
   return toJournalView(doc.toObject());
 }
 
@@ -219,6 +230,7 @@ export async function updateJournalEntry(
   doc.tags = input.tags;
   doc.note = input.note;
   await doc.save();
+  await invalidateBriefing(userId);
   return toJournalView(doc.toObject());
 }
 
@@ -233,6 +245,7 @@ export async function updateJournalNote(
   if (!doc) throw new JournalError(404, "journal entry not found");
   doc.note = note;
   await doc.save();
+  await invalidateBriefing(userId);
   return toJournalView(doc.toObject());
 }
 
@@ -270,6 +283,7 @@ export async function deleteJournalEntry(userId: string, id: string): Promise<vo
   if (!mongoose.isValidObjectId(id)) throw new JournalError(404, "journal entry not found");
   const result = await JournalEntry.deleteOne({ _id: id, ...ownerFilter(userId) }).exec();
   if (!result.deletedCount) throw new JournalError(404, "journal entry not found");
+  await invalidateBriefing(userId);
 }
 
 /**

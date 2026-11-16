@@ -28,7 +28,7 @@
     "admin:grant": "tsx src/server/admin/roleCli.ts grant",
     "admin:revoke": "tsx src/server/admin/roleCli.ts revoke"
   },
-  "packageManager": "pnpm@11.18.0",
+  "packageManager": "pnpm@12.21.0",
   "dependencies": {
     "@reiryoku/ctrader-layer": "^2.2.0",
     "bcrypt": "^5.1.1",

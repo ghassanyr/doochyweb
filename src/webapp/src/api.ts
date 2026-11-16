@@ -703,10 +703,32 @@ export const simulationApi = {
 // Daily briefing, see src/server/briefing
 // ---------------------------------------------------------------------------
 
-export interface BriefingMover {
+export type BriefingFocusSession = "asia" | "london" | "newyork";
+
+export interface BriefingSessionRow {
+  key: BriefingFocusSession;
+  label: string;
+  status: "open" | "closed";
+  nextChange: string | null;
+}
+
+export interface BriefingQuote {
+  price: number;
+  at: string;
+  source: "latest" | "daily";
+}
+
+export interface BriefingWatchlistRow {
   symbol: string;
-  last: number;
-  changePct: number;
+  name: string | null;
+  type: string | null;
+  last: number | null;
+  previousClose: number | null;
+  changePct: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  barTime: string | null;
+  quote: BriefingQuote | null;
 }
 
 export interface BriefingSignal {
@@ -716,16 +738,64 @@ export interface BriefingSignal {
   entry: number | null;
   entryMax: number | null;
   target: number;
+  target2: number | null;
+  target3: number | null;
   stop: number;
+  timeframe: string | null;
+  note: string;
   createdAt: string;
   ageHours: number;
+  quote: BriefingQuote | null;
+  toEntryPct: number | null;
+  toStopPct: number | null;
+  toTargetPct: number | null;
+}
+
+export interface BriefingJournalIdea {
+  id: string;
+  symbol: string;
+  side: "buy" | "sell";
+  entryPrice: number | null;
+  stop: number | null;
+  target: number | null;
+  verified: boolean;
+  openedAt: string | null;
+  note: string;
+  quote: BriefingQuote | null;
+  toEntryPct: number | null;
+  toStopPct: number | null;
+  toTargetPct: number | null;
 }
 
 export interface BriefingSnapshot {
+  version: number;
   dateKey: string;
   generatedAt: string;
-  movers: BriefingMover[];
+  focusSessions: BriefingFocusSession[];
+  sessions: BriefingSessionRow[];
+  watchlist: BriefingWatchlistRow[];
   signals: BriefingSignal[];
+  journalIdeas: BriefingJournalIdea[];
+  dataNotes: string[];
+}
+
+export interface BriefingSections {
+  headline: string;
+  overview: string;
+  watchlist: {
+    symbol: string;
+    whatHappened: string;
+    whyItMatters: string;
+    watchFor: string;
+  }[];
+  journalIdeas: { id: string; update: string }[];
+  risks: string[];
+  monitor: string[];
+  caveats: string[];
+}
+
+export interface BriefingPreferences {
+  focusSessions: BriefingFocusSession[];
 }
 
 export interface BriefingRecord {
@@ -733,6 +803,7 @@ export interface BriefingRecord {
   generatedAt: string;
   model: string | null;
   narrative: string | null;
+  sections: BriefingSections | null;
   error: string | null;
   snapshot: BriefingSnapshot;
 }
@@ -740,6 +811,7 @@ export interface BriefingRecord {
 export interface BriefingResponse {
   aiReady: boolean;
   briefing: BriefingRecord | null;
+  preferences: BriefingPreferences;
 }
 
 export const briefingApi = {
@@ -747,6 +819,12 @@ export const briefingApi = {
 
   refresh: () =>
     request<BriefingResponse>("/api/briefing/refresh", { method: "POST" }),
+
+  savePreferences: (focusSessions: BriefingFocusSession[]) =>
+    request<{ preferences: BriefingPreferences }>("/api/briefing/preferences", {
+      method: "PATCH",
+      body: { focusSessions },
+    }),
 };
 
 export interface AdminUser {

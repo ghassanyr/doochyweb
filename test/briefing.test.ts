@@ -4,11 +4,23 @@ import { beforeEach, describe, test } from "node:test";
 import {
   briefingDateKey,
   buildBriefingPrompt,
-  buildMovers,
+  buildFallbackSections,
+  buildJournalIdeas,
   buildSignalRows,
   buildSnapshot,
+  buildWatchlistRows,
+  levelDistancePct,
+  parseBriefingSections,
   percentChange,
 } from "../src/server/briefing/build";
+import {
+  buildSessionRows,
+  normalizeFocusSessions,
+  parseFocusSessions,
+} from "../src/server/briefing/sessions";
+import { toBriefingRecord } from "../src/server/briefing/store";
+import type { BriefingSnapshot } from "../src/server/briefing/types";
+import type { JournalEntryView } from "../src/server/journal/types";
 import {
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_MODEL,
@@ -31,6 +43,60 @@ function bars(closes: number[]): Candle[] {
     close,
     volume: 0,
   }));
+}
+
+function journal(overrides: Partial<JournalEntryView> = {}): JournalEntryView {
+  return {
+    id: "j1",
+    source: "manual",
+    dealId: null,
+    accountCtid: null,
+    accountLabel: null,
+    symbol: "EURUSD",
+    side: "sell",
+    lots: null,
+    entryPrice: 1.07,
+    exitPrice: null,
+    stop: 1.08,
+    target: 1.05,
+    pnl: null,
+    fees: null,
+    openedAt: "2026-01-09T10:00:00.000Z",
+    closedAt: null,
+    status: "open",
+    verified: false,
+    strategy: "",
+    tags: [],
+    note: "Planned short",
+    createdAt: "2026-01-09T10:00:00.000Z",
+    updatedAt: "2026-01-09T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function builtSnapshot(overrides: Partial<BriefingSnapshot> = {}): BriefingSnapshot {
+  const now = new Date("2026-01-10T12:00:00.000Z");
+  return {
+    ...buildSnapshot({
+      now,
+      focusSessions: ["london", "newyork"],
+      watchlist: [
+        {
+          symbol: "EURUSD",
+          name: "Euro",
+          type: "forex",
+          bars: bars([1, 1.05]),
+          quote: { price: 1.06, at: now.toISOString(), source: "latest" },
+        },
+      ],
+      signals: [signal()],
+      journalEntries: [journal()],
+      quotes: {
+        EURUSD: { price: 1.06, at: now.toISOString(), source: "latest" },
+      },
+    }),
+    ...overrides,
+  };
 }
 
 function signal(overrides: Partial<SignalView> = {}): SignalView {
@@ -80,17 +146,28 @@ describe("percentChange", () => {
   });
 });
 
-describe("buildMovers", () => {
-  test("uses the last two daily closes", () => {
-    const rows = buildMovers([{ symbol: "EURUSD", bars: bars([1.0, 1.05]) }]);
+describe("buildWatchlistRows", () => {
+  test("uses the last two daily closes and the latest daily range", () => {
+    const rows = buildWatchlistRows([
+      {
+        symbol: "eurusd",
+        name: "Euro",
+        type: "forex",
+        bars: bars([1.0, 1.05]),
+        quote: { price: 1.06, at: "2026-01-10T12:00:00.000Z", source: "latest" },
+      },
+    ]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].symbol, "EURUSD");
     assert.equal(rows[0].last, 1.05);
+    assert.equal(rows[0].previousClose, 1);
     assert.equal(rows[0].changePct, 5);
+    assert.equal(rows[0].dayHigh, 1.05);
+    assert.equal(rows[0].quote?.price, 1.06);
   });
 
-  test("sorts by absolute move and caps the list", () => {
-    const rows = buildMovers(
+  test("preserves watchlist order and caps the list", () => {
+    const rows = buildWatchlistRows(
       [
         { symbol: "AAA", bars: bars([100, 101]) },
         { symbol: "BBB", bars: bars([100, 90]) },
@@ -98,23 +175,55 @@ describe("buildMovers", () => {
       ],
       2
     );
-    assert.deepEqual(
-      rows.map((row) => row.symbol),
-      ["BBB", "CCC"]
-    );
+    assert.deepEqual(rows.map((row) => row.symbol), ["AAA", "BBB"]);
   });
 
-  test("drops symbols without two closes", () => {
-    const rows = buildMovers([
-      { symbol: "ONE", bars: bars([100]) },
-      { symbol: "NONE", bars: [] },
-    ]);
-    assert.deepEqual(rows, []);
+  test("keeps a symbol even when daily bars are missing", () => {
+    const rows = buildWatchlistRows([{ symbol: "NONE", bars: [] }]);
+    assert.equal(rows[0].symbol, "NONE");
+    assert.equal(rows[0].last, null);
+    assert.equal(rows[0].changePct, null);
+    assert.equal(rows[0].dayHigh, null);
+  });
+});
+
+describe("levelDistancePct", () => {
+  test("reports the signed distance to a level", () => {
+    assert.equal(levelDistancePct(100, 110), 10);
+    assert.equal(levelDistancePct(100, 90), -10);
+    assert.equal(levelDistancePct(null, 90), null);
+    assert.equal(levelDistancePct(0, 90), null);
+  });
+});
+
+describe("focus sessions", () => {
+  test("defaults and validates the saved preference", () => {
+    assert.deepEqual(normalizeFocusSessions(undefined), ["london", "newyork"]);
+    assert.deepEqual(parseFocusSessions(["london", "london", "asia"]), ["london", "asia"]);
+    assert.equal(parseFocusSessions([]), null);
+    assert.equal(parseFocusSessions("london"), null);
+  });
+
+  test("reports open and closed sessions from UTC", () => {
+    const rows = buildSessionRows(
+      ["asia", "london", "newyork"],
+      new Date("2026-01-14T14:00:00.000Z")
+    );
+    assert.equal(rows[0].status, "closed");
+    assert.equal(rows[1].status, "open");
+    assert.equal(rows[2].status, "open");
+    assert.match(rows[1].nextChange ?? "", /closes at 16:30 UTC/);
+  });
+
+  test("closes every FX session at the weekend", () => {
+    const rows = buildSessionRows(["london", "newyork"], new Date("2026-01-17T14:00:00.000Z"));
+    assert.ok(rows.every((row) => row.status === "closed"));
+    assert.match(rows[0].nextChange ?? "", /Monday at 08:00 UTC/);
   });
 });
 
 describe("buildSignalRows", () => {
-  test("includes the age in hours and caps the list", () => {
+  test("includes age, quote distance and caps the list", () => {
     const now = new Date("2026-01-10T12:00:00.000Z");
     const rows = buildSignalRows(
       [
@@ -122,73 +231,211 @@ describe("buildSignalRows", () => {
         signal({ id: "b", createdAt: "2026-01-09T12:00:00.000Z" }),
       ],
       now,
-      1
+      {
+        EURUSD: { price: 1.11, at: now.toISOString(), source: "latest" },
+      },
+      { limit: 1 }
     );
     assert.equal(rows.length, 1);
     assert.equal(rows[0].id, "a");
     assert.equal(rows[0].ageHours, 6);
-    assert.equal(rows[0].target, 1.12);
+    assert.equal(rows[0].toTargetPct, 0.9);
+    assert.equal(rows[0].toStopPct, -1.8);
+  });
+
+  test("prefers signals on watchlist symbols", () => {
+    const now = new Date("2026-01-10T12:00:00.000Z");
+    const rows = buildSignalRows(
+      [
+        signal({ id: "new-other", symbol: "GBPUSD", createdAt: "2026-01-10T11:00:00.000Z" }),
+        signal({ id: "old-watch", symbol: "EURUSD", createdAt: "2026-01-10T01:00:00.000Z" }),
+      ],
+      now,
+      {},
+      { limit: 1, watchlist: ["EURUSD"] }
+    );
+    assert.equal(rows[0].id, "old-watch");
+  });
+});
+
+describe("buildJournalIdeas", () => {
+  test("keeps open ideas, prefers watchlist symbols and reports distance", () => {
+    const rows = buildJournalIdeas(
+      [
+        journal({ id: "closed", status: "closed" }),
+        journal({ id: "other", symbol: "GBPUSD", openedAt: "2026-01-10T11:00:00.000Z" }),
+        journal({ id: "watch", symbol: "EURUSD", openedAt: "2026-01-09T11:00:00.000Z" }),
+      ],
+      { EURUSD: { price: 1.06, at: "2026-01-10T12:00:00.000Z", source: "latest" } },
+      { limit: 2, watchlist: ["EURUSD"] }
+    );
+    assert.deepEqual(rows.map((row) => row.id), ["watch", "other"]);
+    assert.ok(rows[0].toTargetPct != null);
   });
 });
 
 describe("buildSnapshot", () => {
-  test("carries the day, movers and signals", () => {
-    const now = new Date("2026-01-10T12:00:00.000Z");
-    const snapshot = buildSnapshot({
-      now,
-      movers: [{ symbol: "EURUSD", bars: bars([1, 1.01]) }],
-      signals: [signal()],
-    });
+  test("carries the day, sessions, watchlist, signals and journal ideas", () => {
+    const snapshot = builtSnapshot();
+    assert.equal(snapshot.version, 2);
     assert.equal(snapshot.dateKey, "2026-01-10");
-    assert.equal(snapshot.generatedAt, now.toISOString());
-    assert.equal(snapshot.movers.length, 1);
+    assert.equal(snapshot.watchlist.length, 1);
     assert.equal(snapshot.signals.length, 1);
+    assert.equal(snapshot.journalIdeas.length, 1);
+    assert.equal(snapshot.sessions.length, 2);
+    assert.ok(snapshot.dataNotes.some((note) => note.includes("No news feed")));
+  });
+});
+
+describe("buildFallbackSections", () => {
+  test("writes deterministic sections from the snapshot", () => {
+    const snapshot = builtSnapshot();
+    const sections = buildFallbackSections(snapshot);
+    assert.match(sections.headline, /EURUSD/);
+    assert.match(sections.overview, /London and New York focus/);
+    assert.match(sections.overview, /No news feed is connected/);
+    assert.equal(sections.watchlist.length, 1);
+    assert.match(sections.watchlist[0].whatHappened, /EURUSD closed at/);
+    assert.match(sections.watchlist[0].whyItMatters, /open sell journal idea/);
+    assert.equal(sections.journalIdeas[0].id, "j1");
+    assert.match(sections.journalIdeas[0].update, /Latest quote|latest quote/);
+    assert.ok(sections.risks.length > 0);
+    assert.ok(sections.monitor.length > 0);
+    assert.equal(sections.caveats.length > 0, true);
+  });
+
+  test("handles an empty snapshot", () => {
+    const snapshot = builtSnapshot({
+      watchlist: [],
+      signals: [],
+      journalIdeas: [],
+      dataNotes: ["No news feed is connected."],
+    });
+    const sections = buildFallbackSections(snapshot);
+    assert.equal(sections.headline, "Watchlist briefing");
+    assert.equal(sections.watchlist.length, 0);
+    assert.ok(sections.risks.length > 0);
+    assert.ok(sections.monitor.length > 0);
   });
 });
 
 describe("buildBriefingPrompt", () => {
-  const snapshot = {
-    dateKey: "2026-01-10",
-    generatedAt: "2026-01-10T12:00:00.000Z",
-    movers: [{ symbol: "EURUSD", last: 1.05, changePct: 2.5 }],
-    signals: [
-      {
-        id: "a",
-        symbol: "GBPUSD",
-        direction: "sell" as const,
-        entry: 1.27,
-        entryMax: null,
-        target: 1.25,
-        stop: 1.28,
-        createdAt: "2026-01-10T00:00:00.000Z",
-        ageHours: 12,
-      },
-    ],
-  };
-
-  test("includes the data and forbids advice", () => {
+  test("includes the data, JSON contract and advice rules", () => {
+    const snapshot = builtSnapshot();
     const [system, user] = buildBriefingPrompt(snapshot, "Doochy");
     assert.ok(system.content.includes("Doochy"));
+    assert.ok(system.content.includes("Return only a JSON object"));
     assert.ok(system.content.includes("Never give financial advice"));
+    assert.ok(system.content.includes("No news feed is supplied"));
     assert.ok(user.content.includes("EURUSD"));
-    assert.ok(user.content.includes("+2.5%"));
-    assert.ok(user.content.includes("GBPUSD sell"));
-    assert.ok(user.content.includes("12 hours ago"));
+    assert.ok(user.content.includes("+5%"));
+    assert.ok(user.content.includes("London and New York"));
+    assert.ok(user.content.includes("id j1"));
+    assert.ok(user.content.includes("No news feed is connected"));
   });
 
   test("handles an empty snapshot without empty lists", () => {
-    const [, user] = buildBriefingPrompt(
-      { dateKey: "2026-01-10", generatedAt: "", movers: [], signals: [] },
-      "Doochy"
-    );
-    assert.ok(user.content.includes("no daily data available"));
+    const snapshot = builtSnapshot({
+      watchlist: [],
+      signals: [],
+      journalIdeas: [],
+      dataNotes: ["No news feed is connected."],
+    });
+    const [, user] = buildBriefingPrompt(snapshot, "Doochy");
+    assert.ok(user.content.includes("no watchlist symbols"));
     assert.ok(user.content.includes("no active signals"));
+    assert.ok(user.content.includes("no open journal ideas"));
   });
 
   test("contains no em dash", () => {
-    const [system, user] = buildBriefingPrompt(snapshot, "Doochy");
+    const [system, user] = buildBriefingPrompt(builtSnapshot(), "Doochy");
     assert.equal(system.content.includes("\u2014"), false);
     assert.equal(user.content.includes("\u2014"), false);
+  });
+});
+
+describe("parseBriefingSections", () => {
+  test("accepts fenced JSON and cleans em dashes", () => {
+    const snapshot = builtSnapshot();
+    const raw = "```json\n" + JSON.stringify({
+      headline: "Dollar firms",
+      overview: "Metals slip \u2014 dollar firms.",
+      watchlist: [
+        {
+          symbol: "EURUSD",
+          whatHappened: "Moved up.",
+          whyItMatters: "Open idea follows it.",
+          watchFor: "Watch 1.08.",
+        },
+      ],
+      journalIdeas: [{ id: "j1", update: "Plan unchanged \u2014 wait for entry." }],
+      risks: ["Risk one."],
+      monitor: ["Watch 1.08."],
+      caveats: ["No news feed."],
+    }) + "\n```";
+    const parsed = parseBriefingSections(raw, snapshot);
+    assert.equal(parsed.error, null);
+    assert.equal(parsed.sections.headline, "Dollar firms");
+    assert.equal(parsed.sections.overview.includes("\u2014"), false);
+    assert.equal(parsed.sections.journalIdeas[0].id, "j1");
+    assert.equal(parsed.sections.journalIdeas[0].update, "Plan unchanged - wait for entry.");
+  });
+
+  test("drops unknown symbols and ids, and fills missing notes", () => {
+    const snapshot = builtSnapshot();
+    const raw = JSON.stringify({
+      headline: "Only a headline",
+      watchlist: [
+        { symbol: "UNKNOWN", whatHappened: "x", whyItMatters: "y", watchFor: "z" },
+      ],
+      journalIdeas: [{ id: "unknown", update: "ignore me" }],
+    });
+    const parsed = parseBriefingSections(raw, snapshot);
+    assert.equal(parsed.sections.watchlist.length, 1);
+    assert.equal(parsed.sections.watchlist[0].symbol, "EURUSD");
+    assert.ok(parsed.sections.watchlist[0].whatHappened.length > 0);
+    assert.equal(parsed.sections.journalIdeas[0].id, "j1");
+    assert.ok(parsed.sections.journalIdeas[0].update.length > 0);
+    assert.ok(parsed.sections.risks.length > 0);
+  });
+
+  test("falls back on malformed JSON", () => {
+    const snapshot = builtSnapshot();
+    const parsed = parseBriefingSections("not json at all", snapshot);
+    assert.match(parsed.error ?? "", /not valid briefing JSON/);
+    assert.deepEqual(parsed.sections, buildFallbackSections(snapshot));
+  });
+
+  test("caps long fields and lists", () => {
+    const snapshot = builtSnapshot();
+    const raw = JSON.stringify({
+      headline: "x".repeat(400),
+      risks: Array.from({ length: 12 }, (_, index) => `Risk ${index}`),
+    });
+    const parsed = parseBriefingSections(raw, snapshot);
+    assert.equal(parsed.sections.headline.length, 140);
+    assert.equal(parsed.sections.risks.length, 5);
+  });
+});
+
+describe("toBriefingRecord", () => {
+  test("normalizes a legacy mover snapshot", () => {
+    const record = toBriefingRecord({
+      dateKey: "2026-01-10",
+      generatedAt: "2026-01-10T12:00:00.000Z",
+      narrative: "Legacy prose",
+      snapshot: {
+        dateKey: "2026-01-10",
+        generatedAt: "2026-01-10T12:00:00.000Z",
+        movers: [{ symbol: "EURUSD", last: 1.05, changePct: 2.5 }],
+        signals: [],
+      },
+    });
+    assert.equal(record.snapshot.version, 1);
+    assert.equal(record.snapshot.watchlist[0].symbol, "EURUSD");
+    assert.equal(record.snapshot.watchlist[0].last, 1.05);
+    assert.equal(record.narrative, "Legacy prose");
+    assert.equal(record.sections, null);
   });
 });
 

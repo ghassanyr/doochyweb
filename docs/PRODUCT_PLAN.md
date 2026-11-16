@@ -1,6 +1,6 @@
 # Product readiness plan
 
-Status snapshot: 2026-11-15, working tree on top of HEAD `f14f060`.
+Status snapshot: 2026-11-16, working tree on top of HEAD `5c05829`.
 Sources: the original buyer-readiness plan (P0/P1/P2) and the cTrader fresh-buyer audit.
 
 The separate Trade AI feature backlog lives in `update.md`; it is not part of this plan.
@@ -10,7 +10,8 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 - P0 is complete. The setup checklist now covers backups and guided AI provider setup, and backups have retention, status, per-user export and secure-deletion guidance.
 - P1 is complete: metadata, content copy, defaults, locale/formats, roles, templates and theme extras are implemented.
 - P2 is complete: PWA metadata, social links, webhooks and deployment version information are implemented.
-- Last verified: `pnpm typecheck`, `pnpm test` with 828 tests, and `pnpm build` all pass.
+- The daily briefing is now a structured, per-user brief over the effective watchlist, active signals and open journal ideas, with saved focus sessions, deterministic fallback sections and legacy snapshot regeneration.
+- Last verified: `pnpm typecheck`, `pnpm test` with 861 tests, `pnpm build` and `git diff --check` all pass.
 
 ## P0: needed for a sellable self-hosted product
 
