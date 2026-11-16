@@ -23,7 +23,6 @@ import {
   type BriefingJournalIdea,
   type BriefingRecord,
   type BriefingResponse,
-  type BriefingSignal,
   type BriefingWatchlistRow,
 } from "../api";
 import { FadeRise } from "../components/motion";
@@ -130,7 +129,7 @@ export default function BriefingPage() {
 
   return (
     <FadeRise>
-      <div className="space-y-3">
+      <div className="mx-auto w-full max-w-6xl space-y-3">
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Newspaper className="h-4 w-4 text-accent" />
@@ -219,33 +218,32 @@ export default function BriefingPage() {
             )}
             {data?.aiReady && briefing.error && <Flash tone="warning">{briefing.error}</Flash>}
 
-            <BriefingHero briefing={briefing} />
+            <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="min-w-0 space-y-3">
+                <BriefingHero briefing={briefing} />
+                <WatchlistSection briefing={briefing} />
+              </div>
 
-            <WatchlistSection briefing={briefing} />
-
-            <div className="grid gap-3 lg:grid-cols-2">
-              <JournalIdeasSection briefing={briefing} />
-              <SignalsSection briefing={briefing} />
+              <aside className="min-w-0 space-y-3">
+                <JournalIdeasSection briefing={briefing} />
+                <SignalsSection briefing={briefing} />
+                <BulletCard
+                  title="Key risks"
+                  subtitle="Limits and data gaps in this brief."
+                  icon={<ShieldAlert className="h-4 w-4 text-accent" />}
+                  items={sections?.risks ?? []}
+                  empty="No specific risks were supplied."
+                />
+                <BulletCard
+                  title="What to monitor"
+                  subtitle="Recorded levels and daily ranges."
+                  icon={<Eye className="h-4 w-4 text-accent" />}
+                  items={sections?.monitor ?? []}
+                  empty="No monitoring levels were supplied."
+                />
+                <DataNotesCard briefing={briefing} />
+              </aside>
             </div>
-
-            <div className="grid gap-3 lg:grid-cols-2">
-              <BulletCard
-                title="Key risks"
-                subtitle="Limits and data gaps in this brief."
-                icon={<ShieldAlert className="h-4 w-4 text-accent" />}
-                items={sections?.risks ?? []}
-                empty="No specific risks were supplied."
-              />
-              <BulletCard
-                title="What to monitor"
-                subtitle="Recorded levels and daily ranges."
-                icon={<Eye className="h-4 w-4 text-accent" />}
-                items={sections?.monitor ?? []}
-                empty="No monitoring levels were supplied."
-              />
-            </div>
-
-            <DataNotesCard briefing={briefing} />
           </>
         )}
       </div>
@@ -399,13 +397,13 @@ function JournalIdeaCard({ idea, update }: { idea: BriefingJournalIdea; update?:
           </span>
         )}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
         <Metric label="Entry" value={num(idea.entryPrice)} />
         <Metric label="Stop" value={num(idea.stop)} />
         <Metric label="Target" value={num(idea.target)} />
         <Metric label="Current" value={num(idea.quote?.price ?? null)} />
       </div>
-      <div className="mt-2 grid grid-cols-3 gap-2 text-[10.5px] text-fg-faint">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] text-fg-faint">
         <span>To entry: {distance(idea.toEntryPct)}</span>
         <span>To stop: {distance(idea.toStopPct)}</span>
         <span>To target: {distance(idea.toTargetPct)}</span>
@@ -435,54 +433,31 @@ function SignalsSection({ briefing }: { briefing: BriefingRecord }) {
           No signals were active when this brief was built.
         </p>
       ) : (
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="text-left text-[10.5px] uppercase tracking-wider text-fg-faint">
-                <th className="py-1 font-medium">Symbol</th>
-                <th className="py-1 font-medium">Side</th>
-                <th className="py-1 text-right font-medium">Entry</th>
-                <th className="py-1 text-right font-medium">Current</th>
-                <th className="py-1 text-right font-medium">Target</th>
-                <th className="py-1 text-right font-medium">Stop</th>
-                <th className="py-1 text-right font-medium">Age</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <SignalRow key={row.id} row={row} />
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-3 space-y-2">
+          {rows.map((row) => (
+            <div key={row.id} className="rounded-xl border border-hairline bg-soft p-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-fg">{row.symbol}</span>
+                <Badge tone={row.direction === "buy" ? "success" : "danger"}>
+                  {row.direction.toUpperCase()}
+                </Badge>
+                <span className="ml-auto text-[11px] text-fg-faint">{row.ageHours}h old</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                <Metric label="Entry" value={row.entry == null ? "-" : num(row.entry)} />
+                <Metric label="Current" value={num(row.quote?.price ?? null)} />
+                <Metric label="Target" value={num(row.target)} />
+                <Metric label="Stop" value={num(row.stop)} />
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] text-fg-faint">
+                <span>To target: {distance(row.toTargetPct)}</span>
+                {row.entryMax != null && <span>Entry up to {num(row.entryMax)}</span>}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </Card>
-  );
-}
-
-function SignalRow({ row }: { row: BriefingSignal }) {
-  return (
-    <tr className="border-t border-hairline">
-      <td className="py-1.5 font-medium text-fg">{row.symbol}</td>
-      <td className="py-1.5">
-        <Badge tone={row.direction === "buy" ? "success" : "danger"}>
-          {row.direction.toUpperCase()}
-        </Badge>
-      </td>
-      <td className="py-1.5 text-right tabular-nums text-fg-muted">
-        {row.entry == null ? "-" : num(row.entry)}
-        {row.entryMax != null && ` to ${num(row.entryMax)}`}
-      </td>
-      <td className="py-1.5 text-right tabular-nums text-fg-muted">
-        {num(row.quote?.price ?? null)}
-      </td>
-      <td className="py-1.5 text-right tabular-nums text-fg-muted">
-        {num(row.target)}
-        <span className="ml-1 text-[10px] text-fg-faint">{distance(row.toTargetPct)}</span>
-      </td>
-      <td className="py-1.5 text-right tabular-nums text-fg-muted">{num(row.stop)}</td>
-      <td className="py-1.5 text-right tabular-nums text-fg-muted">{row.ageHours}h</td>
-    </tr>
   );
 }
 
