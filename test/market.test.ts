@@ -10,7 +10,14 @@ import { describe, test } from "node:test";
 import { analyze, applyLatestPrice, RATINGS } from "../src/server/market/analysis";
 import { detectEngulfing, detectEngulfingMatch, detectSweep } from "../src/server/market/patterns";
 import * as ti from "../src/server/market/indicators";
-import { buildCatalog, resolveAgainstBroker, toSymbolMeta, searchCatalog } from "../src/server/market/symbols";
+import {
+  buildCatalog,
+  filterNoisyCatalog,
+  noisyCatalogSymbols,
+  resolveAgainstBroker,
+  toSymbolMeta,
+  searchCatalog,
+} from "../src/server/market/symbols";
 import { deriveCryptoPairs, cryptoCatalogEntries, type RawPair } from "../src/server/market/crypto";
 import { providerOrder } from "../src/server/market/providers/index";
 import { maskClientId, resolveConnectInput } from "../src/server/credentials";
@@ -388,6 +395,48 @@ describe("symbol resolution against the broker", () => {
     assert.equal(bySymbol.has("JP225"), false);
     assert.equal(bySymbol.has("ESP35"), false);
     assert.equal(bySymbol.has("GER40"), true);
+  });
+
+  test("hides broker pricing variants when the base symbol exists", () => {
+    const broker = [
+      ...BROKER,
+      "XAUUSD.1C", "XAUUSD.1R", "XAUUSD.2C", "XAUUSD.2R", "XAUUSD.x", "XAUUSD.i",
+    ];
+    const full = buildCatalog(broker);
+    const visible = new Set(filterNoisyCatalog(full, broker).map((entry) => entry.symbol));
+    assert.equal(visible.has("XAUUSD"), true);
+    for (const symbol of ["XAUUSD1C", "XAUUSD1R", "XAUUSD2C", "XAUUSD2R", "XAUUSDX", "XAUUSDI"]) {
+      assert.equal(visible.has(symbol), false);
+    }
+    const hidden = noisyCatalogSymbols(full, broker);
+    assert.equal(hidden.has("XAUUSD1C"), true);
+    assert.equal(hidden.has("XAUUSDI"), true);
+  });
+
+  test("keeps variants when the broker has no canonical base", () => {
+    const broker = ["XAUUSD.1C", "XAUUSD.2R"];
+    const full = buildCatalog(broker);
+    const visible = new Set(filterNoisyCatalog(full, broker).map((entry) => entry.symbol));
+    assert.equal(visible.has("XAUUSD1C"), true);
+    assert.equal(visible.has("XAUUSD2R"), true);
+  });
+
+  test("hides numeric-leading crypto bases without hiding index symbols", () => {
+    const crypto = deriveCryptoPairs([
+      { symbol: "0GUSDT", baseAsset: "0G", quoteAsset: "USDT", status: "TRADING" },
+      { symbol: "1000CATUSDT", baseAsset: "1000CAT", quoteAsset: "USDT", status: "TRADING" },
+      { symbol: "1MBABYDOGEUSDT", baseAsset: "1MBABYDOGE", quoteAsset: "USDT", status: "TRADING" },
+      { symbol: "1INCHUSDT", baseAsset: "1INCH", quoteAsset: "USDT", status: "TRADING" },
+      { symbol: "SOLUSDT", baseAsset: "SOL", quoteAsset: "USDT", status: "TRADING" },
+    ]);
+    const full = buildCatalog(BROKER, crypto);
+    const visible = new Set(filterNoisyCatalog(full, BROKER).map((entry) => entry.symbol));
+    for (const symbol of ["0GUSD", "1000CATUSD", "1MBABYDOGEUSD", "1INCHUSD"]) {
+      assert.equal(visible.has(symbol), false);
+    }
+    assert.equal(visible.has("SOLUSD"), true);
+    assert.equal(visible.has("US500"), true);
+    assert.equal(visible.has("NAS100"), true);
   });
 });
 

@@ -6,6 +6,7 @@ import type { PaperAccountView, PaperInput, PaperPositionView, PaperSide } from 
 
 export const PAPER_START_BALANCE = 100_000;
 export const MAX_NOTIONAL = 1_000_000;
+export const MAX_LOTS = 10_000;
 
 export type PaperValidation =
   | { ok: true; value: PaperInput }
@@ -29,12 +30,36 @@ export function validatePaperInput(body: unknown): PaperValidation {
   }
   const side = rawSide as PaperSide;
 
-  const notional = asNumber(source.notional);
-  if (notional == null || notional <= 0) {
-    return { ok: false, error: "size must be a positive USD amount" };
+  const inferredMode = source.notional != null && source.lots == null ? "usd" : "lots";
+  const rawMode = String(source.sizeMode ?? inferredMode).trim().toLowerCase();
+  if (rawMode !== "usd" && rawMode !== "lots") {
+    return { ok: false, error: "size mode must be usd or lots" };
   }
-  if (notional > MAX_NOTIONAL) {
-    return { ok: false, error: `size cannot exceed ${MAX_NOTIONAL.toLocaleString("en-US")} USD` };
+  const sizeMode = rawMode as PaperInput["sizeMode"];
+
+  let notional: number | null = null;
+  let lots: number | null = null;
+  let ctid: number | null = null;
+  if (sizeMode === "usd") {
+    notional = asNumber(source.notional);
+    if (notional == null || notional <= 0) {
+      return { ok: false, error: "size must be a positive USD amount" };
+    }
+    if (notional > MAX_NOTIONAL) {
+      return { ok: false, error: `size cannot exceed ${MAX_NOTIONAL.toLocaleString("en-US")} USD` };
+    }
+  } else {
+    lots = asNumber(source.lots);
+    ctid = asNumber(source.ctid);
+    if (lots == null || lots <= 0) {
+      return { ok: false, error: "size must be a positive lot amount" };
+    }
+    if (lots > MAX_LOTS) {
+      return { ok: false, error: `size cannot exceed ${MAX_LOTS.toLocaleString("en-US")} lots` };
+    }
+    if (ctid == null || !Number.isInteger(ctid) || ctid <= 0) {
+      return { ok: false, error: "a connected cTrader account is required for lot sizing" };
+    }
   }
 
   const stop = asNumber(source.stop);
@@ -44,7 +69,7 @@ export function validatePaperInput(body: unknown): PaperValidation {
     return { ok: false, error: "target must be a positive price" };
   }
 
-  return { ok: true, value: { symbol, side, notional, stop, target } };
+  return { ok: true, value: { symbol, side, sizeMode, notional, lots, ctid, stop, target } };
 }
 
 /**
@@ -85,6 +110,27 @@ export function paperPnl(
   return Math.round(notional * signed * 100) / 100;
 }
 
+export function paperLotPnl(
+  side: PaperSide,
+  volume: number,
+  quoteUsdFactor: number | null,
+  entry: number,
+  exit: number
+): number {
+  if (!(entry > 0) || !Number.isFinite(exit) || !(volume > 0)) return 0;
+  const diff = side === "buy" ? exit - entry : entry - exit;
+  return round(diff * (volume / 100) * (quoteUsdFactor ?? 1));
+}
+
+type PnlRow = Pick<PaperPositionView, "side" | "sizeMode" | "notional" | "volume" | "spec">;
+
+export function paperPnlFor(row: PnlRow, entry: number, exit: number): number {
+  if (row.sizeMode === "lots" && row.volume != null && row.spec) {
+    return paperLotPnl(row.side, row.volume, row.spec.quoteUsdFactor, entry, exit);
+  }
+  return paperPnl(row.side, row.notional, entry, exit);
+}
+
 /**
  * Which level the last price reached. The stop is checked first so a bar that
  * spans both levels is treated as the loss, never the win.
@@ -107,7 +153,7 @@ export function computePaperAccount(
   for (const row of open) {
     const mark = prices[row.symbol] ?? row.lastPrice;
     if (mark == null || !Number.isFinite(mark)) continue;
-    unrealizedPnl += paperPnl(row.side, row.notional, row.entryPrice, mark);
+    unrealizedPnl += paperPnlFor(row, row.entryPrice, mark);
   }
   unrealizedPnl = round(unrealizedPnl);
 

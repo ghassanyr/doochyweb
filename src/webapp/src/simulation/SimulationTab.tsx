@@ -2,8 +2,8 @@
 //
 // A virtual 100,000 USD book: positions fill at the current market price,
 // close automatically when a stop or target is reached, and can be closed by
-// hand at any time. Sizing is notional USD, so one number behaves the same on an
-// FX pair, an index and a crypto pair. Nothing here touches a broker account.
+// hand at any time. Sizing uses cTrader lots when a spec is available and falls
+// back to USD notional otherwise. Nothing here places broker orders.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlaskConical, RefreshCw, Search, X } from "lucide-react";
@@ -11,10 +11,12 @@ import { FlaskConical, RefreshCw, Search, X } from "lucide-react";
 import {
   marketApi,
   simulationApi,
+  type AccountView,
   type PaperAccount,
   type PaperListResponse,
   type PaperPosition,
   type PaperSide,
+  type PaperSymbolSpec,
 } from "../api";
 import { FadeRise } from "../components/motion";
 import { Badge, Button, Card, Flash, inputCls, Skeleton } from "../components/ui";
@@ -24,7 +26,7 @@ import { formatLocalDateTime } from "../time";
 const POLL_MS = 30_000;
 const DEFAULT_SIZE = "10000";
 
-export default function SimulationTab() {
+export default function SimulationTab({ accounts }: { accounts: AccountView[] }) {
   const [data, setData] = useState<PaperListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,9 @@ export default function SimulationTab() {
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [stop, setStop] = useState("");
   const [target, setTarget] = useState("");
+  const [ctid, setCtid] = useState<number | null>(null);
+  const [spec, setSpec] = useState<PaperSymbolSpec | null>(null);
+  const [specLoading, setSpecLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -70,6 +75,41 @@ export default function SimulationTab() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!ctid && accounts.length) setCtid(accounts[0].ctid);
+  }, [accounts, ctid]);
+
+  useEffect(() => {
+    let alive = true;
+    const query = symbol.trim().toUpperCase();
+    if (!ctid || !query) {
+      setSpec(null);
+      setSpecLoading(false);
+      return;
+    }
+    setSpecLoading(true);
+    const id = window.setTimeout(() => {
+      simulationApi
+        .spec(query, ctid)
+        .then((result) => {
+          if (!alive) return;
+          setSpec(result.spec);
+          const initial = result.spec.minLots ?? 0.1;
+          setSize((current) => (current === DEFAULT_SIZE ? String(initial) : current));
+        })
+        .catch(() => {
+          if (alive) setSpec(null);
+        })
+        .finally(() => {
+          if (alive) setSpecLoading(false);
+        });
+    }, 200);
+    return () => {
+      alive = false;
+      window.clearTimeout(id);
+    };
+  }, [ctid, symbol]);
 
   const matches = useMemo(() => {
     const query = symbol.trim().toUpperCase();
@@ -116,9 +156,13 @@ export default function SimulationTab() {
   );
 
   const openPosition = useCallback(async () => {
-    const notional = Number(size);
-    if (!symbol.trim() || !Number.isFinite(notional) || notional <= 0) {
+    const value = Number(size);
+    if (!symbol.trim() || !Number.isFinite(value) || value <= 0) {
       setNotice({ tone: "danger", text: "Pick a symbol and a size above zero." });
+      return;
+    }
+    if (specLoading) {
+      setNotice({ tone: "danger", text: "Wait for the lot specification to load." });
       return;
     }
     const stopValue = stop.trim() ? Number(stop) : null;
@@ -134,16 +178,29 @@ export default function SimulationTab() {
 
     setSubmitting(true);
     try {
-      const result = await simulationApi.open({
-        symbol: symbol.trim().toUpperCase(),
-        side,
-        notional,
-        stop: stopValue,
-        target: targetValue,
-      });
+      const payload = spec
+        ? {
+            symbol: symbol.trim().toUpperCase(),
+            side,
+            sizeMode: "lots" as const,
+            lots: value,
+            ctid: spec.account.ctid,
+            stop: stopValue,
+            target: targetValue,
+          }
+        : {
+            symbol: symbol.trim().toUpperCase(),
+            side,
+            sizeMode: "usd" as const,
+            notional: value,
+            stop: stopValue,
+            target: targetValue,
+          };
+      const result = await simulationApi.open(payload);
       setSymbol("");
       setStop("");
       setTarget("");
+      setSize(DEFAULT_SIZE);
       setNotice({
         tone: "success",
         text: `Opened ${result.position.side} ${result.position.symbol} at ${result.position.entryPrice}.`,
@@ -154,7 +211,7 @@ export default function SimulationTab() {
     } finally {
       setSubmitting(false);
     }
-  }, [symbol, side, size, stop, target, load]);
+  }, [symbol, side, size, stop, target, spec, specLoading, load]);
 
   const closePosition = useCallback(
     async (row: PaperPosition) => {
@@ -293,14 +350,46 @@ export default function SimulationTab() {
               </div>
             </div>
 
+            {accounts.length > 0 && (
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-fg-muted">Lot spec account</span>
+                <select
+                  className={inputCls + " py-1.5"}
+                  value={ctid ?? ""}
+                  onChange={(event) => setCtid(Number(event.target.value))}
+                >
+                  {accounts.map((account) => (
+                    <option key={account.ctid} value={account.ctid}>
+                      {account.broker} {account.login}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-fg-muted">Size (USD)</span>
+              <span className="mb-1 block text-[11px] font-medium text-fg-muted">
+                {spec ? "Size (Lots)" : "Size (USD)"}
+              </span>
               <input
                 className={inputCls + " py-1.5 tabular-nums"}
                 value={size}
                 onChange={(event) => setSize(event.target.value)}
                 inputMode="decimal"
               />
+              {specLoading ? (
+                <span className="mt-1 block text-[10.5px] text-fg-faint">Loading lot spec...</span>
+              ) : spec ? (
+                <span className="mt-1 block text-[10.5px] text-fg-faint">
+                  Min {spec.minLots ?? "-"}
+                  {spec.lotStep != null ? ` step ${spec.lotStep}` : ""}
+                  {spec.maxLots != null ? ` max ${spec.maxLots}` : ""}
+                </span>
+              ) : (
+                <span className="mt-1 block text-[10.5px] text-fg-faint">
+                  Connect a cTrader account for lot sizing. USD fallback stays available.
+                </span>
+              )}
             </label>
 
             <label className="block">
@@ -328,7 +417,7 @@ export default function SimulationTab() {
             <Button
               variant="primary"
               size="sm"
-              disabled={submitting}
+              disabled={submitting || specLoading}
               onClick={() => void openPosition()}
             >
               {submitting ? "Opening" : "Open"}
@@ -393,7 +482,7 @@ export default function SimulationTab() {
                             {row.side.toUpperCase()}
                           </Badge>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.notional}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{formatSize(row)}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.entryPrice}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.stop ?? "-"}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.target ?? "-"}</td>
@@ -467,7 +556,7 @@ export default function SimulationTab() {
                           {row.side.toUpperCase()}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.notional}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{formatSize(row)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.entryPrice}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.exitPrice ?? "-"}</td>
                       <td
@@ -508,8 +597,17 @@ export default function SimulationTab() {
   );
 }
 
+function formatSize(row: PaperPosition): string {
+  if (row.sizeMode === "lots" && row.lots != null) return `${row.lots} lots`;
+  return `${row.notional} USD`;
+}
+
 function unrealized(row: PaperPosition): number | null {
   if (row.lastPrice == null || !(row.entryPrice > 0)) return null;
+  if (row.sizeMode === "lots" && row.volume != null && row.spec) {
+    const diff = row.side === "buy" ? row.lastPrice - row.entryPrice : row.entryPrice - row.lastPrice;
+    return Math.round(diff * (row.volume / 100) * (row.spec.quoteUsdFactor ?? 1) * 100) / 100;
+  }
   const move = (row.lastPrice - row.entryPrice) / row.entryPrice;
   const signed = row.side === "buy" ? move : -move;
   return Math.round(row.notional * signed * 100) / 100;

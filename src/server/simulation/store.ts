@@ -8,15 +8,20 @@
 import mongoose from "mongoose";
 
 import { signalPrices } from "../signals/prices";
+import { paperVolumeForLots, resolvePaperSpec, snapPaperLots } from "./specs";
 import type { PaperCloseReason, PaperInput, PaperPositionView } from "./types";
-import { levelError, paperPnl } from "./validate";
+import { levelError, paperPnlFor } from "./validate";
 
 const positionSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     symbol: { type: String, required: true },
     side: { type: String, enum: ["buy", "sell"], required: true },
+    sizeMode: { type: String, enum: ["usd", "lots"], default: "usd" },
     notional: { type: Number, required: true },
+    lots: { type: Number, default: null },
+    volume: { type: Number, default: null },
+    spec: { type: mongoose.Schema.Types.Mixed, default: null },
     entryPrice: { type: Number, required: true },
     stop: { type: Number, default: null },
     target: { type: Number, default: null },
@@ -58,7 +63,11 @@ export function toPaperView(doc: any): PaperPositionView {
     id: String(doc._id),
     symbol: String(doc.symbol),
     side: doc.side,
+    sizeMode: doc.sizeMode === "lots" ? "lots" : "usd",
     notional: Number(doc.notional),
+    lots: doc.lots ?? null,
+    volume: doc.volume ?? null,
+    spec: doc.spec ?? null,
     entryPrice: Number(doc.entryPrice),
     stop: doc.stop ?? null,
     target: doc.target ?? null,
@@ -96,11 +105,38 @@ export async function openPaperPosition(
   const invalid = levelError(input, entry);
   if (invalid) throw new PaperError(400, invalid);
 
+  let notional = input.notional ?? 0;
+  let lots: number | null = null;
+  let volume: number | null = null;
+  let spec: PaperPositionView["spec"] = null;
+  let sizeMode: PaperPositionView["sizeMode"] = "usd";
+
+  if (input.sizeMode === "lots") {
+    const resolved = await resolvePaperSpec(userId, input.symbol, input.ctid ?? 0);
+    if (!resolved) {
+      throw new PaperError(400, "No cTrader lot specification is available for that symbol.");
+    }
+    const snapped = snapPaperLots(input.lots ?? 0, resolved.spec);
+    const resolvedVolume = paperVolumeForLots(input.lots ?? 0, resolved.spec);
+    if (snapped == null || resolvedVolume == null) {
+      throw new PaperError(400, "The lot size is outside that symbol's allowed range.");
+    }
+    sizeMode = "lots";
+    lots = snapped;
+    volume = resolvedVolume;
+    spec = resolved.spec;
+    notional = Math.abs(entry * (resolvedVolume / 100) * (resolved.spec.quoteUsdFactor ?? 1));
+  }
+
   const doc = await PaperPosition.create({
     ...owner(userId),
     symbol: input.symbol,
     side: input.side,
-    notional: input.notional,
+    sizeMode,
+    notional,
+    lots,
+    volume,
+    spec,
     entryPrice: entry,
     stop: input.stop,
     target: input.target,
@@ -147,7 +183,7 @@ export async function closePaperPosition(
   if (!doc) throw new PaperError(404, "open position not found");
 
   doc.exitPrice = price;
-  doc.pnl = paperPnl(doc.side as "buy" | "sell", Number(doc.notional), Number(doc.entryPrice), price);
+  doc.pnl = paperPnlFor(toPaperView(doc.toObject()), Number(doc.entryPrice), price);
   doc.status = "closed";
   doc.closeReason = reason;
   doc.lastPrice = price;
@@ -168,12 +204,7 @@ export async function settlePaperPosition(
   const doc = await PaperPosition.findOne({ _id: id, status: "open" }).lean().exec();
   if (!doc) return null;
 
-  const pnl = paperPnl(
-    doc.side as "buy" | "sell",
-    Number(doc.notional),
-    Number(doc.entryPrice),
-    price
-  );
+  const pnl = paperPnlFor(toPaperView(doc), Number(doc.entryPrice), price);
   const updated = await PaperPosition.findOneAndUpdate(
     { _id: id, status: "open" },
     {

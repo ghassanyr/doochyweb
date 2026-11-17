@@ -8,12 +8,17 @@
 
 import { clearCache, cTraderCatalog } from "./providers/index";
 import { cryptoPairs } from "./crypto";
-import { buildCatalog, normalizeSymbol, resolveAgainstBroker, toSymbolMeta } from "./symbols";
+import { buildCatalog, filterNoisyCatalog, normalizeSymbol, resolveAgainstBroker, toSymbolMeta } from "./symbols";
 import type { CatalogEntry, SymbolMeta } from "./types";
 
 const CATALOG_TTL_MS = 60_000;
 
-let catalogCache: { at: number; items: CatalogEntry[]; brokerError: string | null } | null = null;
+let catalogCache: {
+  at: number;
+  items: CatalogEntry[];
+  full: CatalogEntry[];
+  brokerError: string | null;
+} | null = null;
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -31,7 +36,11 @@ function message(err: unknown): string {
  * comes back empty, and every forex and metals symbol would otherwise claim it
  * does not exist.
  */
-export async function loadCatalog(): Promise<{ items: CatalogEntry[]; brokerError: string | null }> {
+export async function loadCatalog(): Promise<{
+  items: CatalogEntry[];
+  full: CatalogEntry[];
+  brokerError: string | null;
+}> {
   const crypto = await cryptoPairs();
   let broker: string[] = [];
   let brokerError: string | null = null;
@@ -40,7 +49,8 @@ export async function loadCatalog(): Promise<{ items: CatalogEntry[]; brokerErro
   } catch (err) {
     brokerError = message(err);
   }
-  return { items: buildCatalog(broker, crypto), brokerError };
+  const full = buildCatalog(broker, crypto);
+  return { items: filterNoisyCatalog(full, broker), full, brokerError };
 }
 
 /**
@@ -80,11 +90,19 @@ export async function cachedCatalog(): Promise<CatalogEntry[]> {
 }
 
 /** The catalog plus whatever went wrong reading the broker half. */
-export async function cachedCatalogFull(): Promise<{ items: CatalogEntry[]; brokerError: string | null }> {
+export async function cachedCatalogFull(): Promise<{
+  items: CatalogEntry[];
+  full: CatalogEntry[];
+  brokerError: string | null;
+}> {
   if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache;
   const loaded = await loadCatalog();
   catalogCache = { at: Date.now(), ...loaded };
   return catalogCache;
+}
+
+export async function cachedFullCatalog(): Promise<CatalogEntry[]> {
+  return (await cachedCatalogFull()).full;
 }
 
 /** Force the catalog to be re-read, e.g. after credentials change. */

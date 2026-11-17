@@ -638,12 +638,47 @@ export const alertsApi = {
 
 export type PaperSide = "buy" | "sell";
 export type PaperCloseReason = "manual" | "stop" | "target";
+export type PaperSizeMode = "usd" | "lots";
+
+export interface PaperLotSpecSnapshot {
+  symbolId: number;
+  brokerSymbol: string;
+  lotSize: number;
+  minVolume: number;
+  stepVolume: number;
+  maxVolume: number;
+  quoteAsset: string | null;
+  digits: number;
+  quoteUsdFactor: number | null;
+  ctid: number;
+  isLive: boolean;
+}
+
+export interface PaperSymbolSpec {
+  requestedSymbol: string;
+  brokerSymbol: string;
+  symbolId: number;
+  spec: PaperLotSpecSnapshot;
+  minLots: number | null;
+  maxLots: number | null;
+  lotStep: number | null;
+  account: {
+    ctid: number;
+    login: number;
+    broker: string;
+    isLive: boolean;
+  };
+}
 
 export interface PaperPosition {
   id: string;
   symbol: string;
   side: PaperSide;
+  sizeMode: PaperSizeMode;
   notional: number;
+  lots: number | null;
+  volume: number | null;
+  spec: PaperLotSpecSnapshot | null;
   entryPrice: number;
   stop: number | null;
   target: number | null;
@@ -679,13 +714,21 @@ export interface PaperListResponse {
 export interface PaperInputPayload {
   symbol: string;
   side: PaperSide;
-  notional: number;
+  sizeMode?: PaperSizeMode;
+  notional?: number;
+  lots?: number;
+  ctid?: number;
   stop?: number | null;
   target?: number | null;
 }
 
 export const simulationApi = {
   list: () => request<PaperListResponse>("/api/simulation"),
+
+  spec: (symbol: string, ctid: number) =>
+    request<{ spec: PaperSymbolSpec }>(
+      `/api/simulation/spec?symbol=${encodeURIComponent(symbol)}&ctid=${ctid}`
+    ),
 
   open: (input: PaperInputPayload) =>
     request<{ position: PaperPosition }>("/api/simulation", { method: "POST", body: input }),

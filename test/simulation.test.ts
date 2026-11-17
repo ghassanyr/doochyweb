@@ -1,22 +1,43 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { paperLotBounds, paperVolumeForLots, snapPaperLots } from "../src/server/simulation/specs";
+import type { PaperLotSpecSnapshot, PaperPositionView } from "../src/server/simulation/types";
 import {
   PAPER_START_BALANCE,
   closeDecision,
   computePaperAccount,
   levelError,
+  paperLotPnl,
   paperPnl,
+  paperPnlFor,
   validatePaperInput,
 } from "../src/server/simulation/validate";
-import type { PaperPositionView } from "../src/server/simulation/types";
+
+const LOT_SPEC: PaperLotSpecSnapshot = {
+  symbolId: 7,
+  brokerSymbol: "EURUSD",
+  lotSize: 100_000,
+  minVolume: 1_000,
+  stepVolume: 1_000,
+  maxVolume: 10_000_000,
+  quoteAsset: "USD",
+  digits: 5,
+  quoteUsdFactor: 1,
+  ctid: 123,
+  isLive: false,
+};
 
 function position(overrides: Partial<PaperPositionView> = {}): PaperPositionView {
   return {
     id: "p1",
     symbol: "EURUSD",
     side: "buy",
+    sizeMode: "usd",
     notional: 10_000,
+    lots: null,
+    volume: null,
+    spec: null,
     entryPrice: 1.1,
     stop: 1.09,
     target: 1.12,
@@ -53,6 +74,28 @@ describe("validatePaperInput", () => {
   test("caps the position size", () => {
     const parsed = validatePaperInput({ symbol: "EURUSD", side: "buy", notional: 1_000_001 });
     assert.equal(parsed.ok, false);
+  });
+
+  test("accepts lot sizing with an account", () => {
+    const parsed = validatePaperInput({
+      symbol: "EURUSD",
+      side: "buy",
+      sizeMode: "lots",
+      lots: "0.10",
+      ctid: 123,
+    });
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.sizeMode, "lots");
+    assert.equal(parsed.value.lots, 0.1);
+    assert.equal(parsed.value.ctid, 123);
+    assert.equal(parsed.value.notional, null);
+  });
+
+  test("requires an account for lot sizing", () => {
+    assert.equal(
+      validatePaperInput({ symbol: "EURUSD", side: "buy", sizeMode: "lots", lots: 0.1 }).ok,
+      false
+    );
   });
 
   test("rejects negative levels", () => {
@@ -95,6 +138,45 @@ describe("paperPnl", () => {
   test("rounds to cents and guards a zero entry", () => {
     assert.equal(paperPnl("buy", 1000, 3, 3.3333), 111.1);
     assert.equal(paperPnl("buy", 1000, 0, 10), 0);
+  });
+});
+
+describe("lot sizing", () => {
+  test("derives lot bounds from broker volume fields", () => {
+    assert.deepEqual(paperLotBounds(LOT_SPEC), {
+      minLots: 0.01,
+      maxLots: 100,
+      lotStep: 0.01,
+    });
+  });
+
+  test("snaps lots to the broker volume grid", () => {
+    assert.equal(paperVolumeForLots(0.105, LOT_SPEC), 11_000);
+    assert.equal(snapPaperLots(0.105, LOT_SPEC), 0.11);
+    assert.equal(snapPaperLots(0.001, LOT_SPEC), 0.01);
+    assert.equal(snapPaperLots(500, LOT_SPEC), 100);
+  });
+});
+
+describe("lot P&L", () => {
+  test("uses broker volume and quote conversion", () => {
+    assert.equal(paperLotPnl("buy", 100_000, 1, 1.1, 1.11), 10);
+    assert.equal(paperLotPnl("sell", 100_000, 1, 1.11, 1.1), 10);
+    assert.equal(paperLotPnl("buy", 100_000, 0.5, 1.1, 1.11), 5);
+  });
+
+  test("paperPnlFor selects the stored size mode", () => {
+    const usd = position({ lastPrice: 110 });
+    const lots = position({
+      sizeMode: "lots",
+      notional: 0,
+      lots: 0.1,
+      volume: 100_000,
+      spec: LOT_SPEC,
+      lastPrice: 110,
+    });
+    assert.equal(paperPnlFor(usd, 100, 110), 1000);
+    assert.equal(paperPnlFor(lots, 100, 110), 10_000);
   });
 });
 
@@ -158,6 +240,28 @@ describe("computePaperAccount", () => {
   test("falls back to the last mark when no fresh price exists", () => {
     const account = computePaperAccount([position({ lastPrice: 1.15 })]);
     assert.equal(account.unrealizedPnl, 454.55);
+  });
+
+  test("mixed lot and USD rows report USD exposure", () => {
+    const account = computePaperAccount(
+      [
+        position({ id: "usd", symbol: "EURUSD", entryPrice: 100, lastPrice: 110, notional: 1_000 }),
+        position({
+          id: "lot",
+          symbol: "GBPUSD",
+          sizeMode: "lots",
+          notional: 1_000,
+          lots: 1,
+          volume: 100_000,
+          spec: LOT_SPEC,
+          entryPrice: 1.1,
+          lastPrice: 1.11,
+        }),
+      ],
+      { EURUSD: 110, GBPUSD: 1.11 }
+    );
+    assert.equal(account.unrealizedPnl, 110);
+    assert.equal(account.exposure, 2_000);
   });
 
   test("an empty book reports a null win rate", () => {

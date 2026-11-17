@@ -177,6 +177,8 @@ describe("user data export", () => {
     assert.equal(data.journal.entries.length, 1);
     assert.equal(data.journal.sync?.lastImported, 2);
     assert.equal(data.paperTrading.length, 1);
+    assert.equal(data.paperTrading[0].sizeMode, "usd");
+    assert.equal(data.paperTrading[0].lots, null);
     assert.equal(data.briefings.length, 1);
     assert.equal(data.coachReports.length, 1);
     assert.equal(data.coachReports[0].key, "journal-1");

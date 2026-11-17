@@ -1,20 +1,37 @@
 // Shared shapes for paper trading.
 //
-// A paper position is sized in notional USD rather than lots: the same number
-// then means the same thing on an FX pair, an index and a crypto pair, and the
-// P&L needs no per-symbol contract specification. The book starts at 100,000 and
-// only records realised P&L; equity is that plus any open profit.
+// A paper position is sized either in USD notional or, when a connected cTrader
+// account supplies contract specs, in lots. The book starts at 100,000 and only
+// records realised P&L; equity is that plus any open profit.
 
 export type PaperSide = "buy" | "sell";
 export type PaperStatus = "open" | "closed";
 export type PaperCloseReason = "manual" | "stop" | "target";
+export type PaperSizeMode = "usd" | "lots";
+
+export interface PaperLotSpecSnapshot {
+  symbolId: number;
+  brokerSymbol: string;
+  lotSize: number;
+  minVolume: number;
+  stepVolume: number;
+  maxVolume: number;
+  quoteAsset: string | null;
+  digits: number;
+  quoteUsdFactor: number | null;
+  ctid: number;
+  isLive: boolean;
+}
 
 export interface PaperPositionView {
   id: string;
   symbol: string;
   side: PaperSide;
-  /** Position size in USD. P&L is the percentage move times this. */
+  sizeMode: PaperSizeMode;
   notional: number;
+  lots: number | null;
+  volume: number | null;
+  spec: PaperLotSpecSnapshot | null;
   entryPrice: number;
   stop: number | null;
   target: number | null;
@@ -54,7 +71,10 @@ export interface PaperListResponse {
 export interface PaperInput {
   symbol: string;
   side: PaperSide;
-  notional: number;
+  sizeMode: PaperSizeMode;
+  notional: number | null;
+  lots: number | null;
+  ctid: number | null;
   stop: number | null;
   target: number | null;
 }

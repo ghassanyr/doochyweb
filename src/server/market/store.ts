@@ -10,6 +10,7 @@
 import mongoose from "mongoose";
 
 import { describeMarketAccount } from "./account";
+import { cachedCatalog } from "./catalog";
 import { DEFAULT_TIMEFRAME, isTimeframeId } from "./timeframes";
 import type { AnalysisSettings } from "./types";
 
@@ -160,19 +161,8 @@ export async function saveCardOrder(order: string[]): Promise<string[]> {
 /** The knobs plus which cTrader account is supplying prices. Never any
  *  credential material. */
 export async function publicSettings(): Promise<AnalysisSettings> {
-  const s = await getSettings();
-  const info = await describeMarketAccount();
-  let symbolCount = 0;
-  if (info.account) {
-    // Served from the per-account symbol cache after the first call, so this is
-    // cheap enough to include on a config read.
-    try {
-      const { cTraderCatalog } = await import("./providers/ctrader");
-      symbolCount = (await cTraderCatalog()).length;
-    } catch {
-      symbolCount = 0;
-    }
-  }
+  const [s, info, catalog] = await Promise.all([getSettings(), describeMarketAccount(), cachedCatalog()]);
+  const symbolCount = info.account ? catalog.filter((entry) => entry.provider !== "binance").length : 0;
   return {
     refreshSeconds: s.refreshSeconds,
     defaultTimeframe: s.defaultTimeframe,

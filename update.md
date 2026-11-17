@@ -163,9 +163,13 @@ started, `later` means deliberately deferred, `skip` means not planned.
 - Lives as the Paper trading tab inside `/trading`, after Positions, Pending
   orders and Journal. It is per member, not per broker account, so the account
   selector above the tabs does not filter it.
-- Positions are sized in notional USD, not lots: one number then means the same
-  thing on an FX pair, an index and a crypto pair, and the P&L needs no per-symbol
-  contract specification. The book starts at 100,000 and tracks realised P&L.
+- Positions use cTrader lot sizing when a connected account supplies a contract
+  spec for the symbol. The form shows `Size (Lots)`, min/max/step hints, and the
+  account whose specs are used. Volume, spec snapshot and quote conversion are
+  stored with the position so later P&L uses the same contract.
+- Symbols without a cTrader spec, including Binance-only crypto, fall back to USD
+  notional sizing and the form shows `Size (USD)`. Old rows remain USD rows.
+- The book starts at 100,000, tracks realised P&L, and reports exposure in USD.
 - Fills happen server side at the current market price, so the browser cannot
   choose its own entry. A buy needs its stop below and target above the fill; a
   sell is the mirror image.
@@ -173,10 +177,11 @@ started, `later` means deliberately deferred, `skip` means not planned.
   stop first so a tick that spans both levels is booked as the loss. Closing is a
   single-winner transition, so the checker and a manual close cannot both apply.
 - History rows can be deleted once closed. Open rows must be closed first.
-- New API: `GET/POST /api/simulation`, `POST /api/simulation/:id/close`,
-  `DELETE /api/simulation/:id`, all behind auth and the Trading module gate.
-- Self-tested by `test/simulation.test.ts` (validation, levels, P&L, close rules,
-  book summary).
+- New API: `GET/POST /api/simulation`, `GET /api/simulation/spec`,
+  `POST /api/simulation/:id/close`, `DELETE /api/simulation/:id`, all behind auth
+  and the Trading module gate.
+- Self-tested by `test/simulation.test.ts` (validation, lot grid, levels, P&L,
+  close rules, book summary).
 
 ### Daily Briefing
 
@@ -263,10 +268,23 @@ started, `later` means deliberately deferred, `skip` means not planned.
   clears the stored brief, and an in-flight pass will not overwrite a replaced
   brief.
 
+## Catalog noise cleanup
+
+- Broker pricing variants such as `XAUUSD.1C`, `XAUUSD.1R`, `XAUUSD.2C`,
+  `XAUUSD.2R`, `.x` and `.i` are hidden when the canonical broker symbol exists.
+- Crypto bases starting with a digit are hidden from the catalog, including
+  `0GUSD`, `1000CATUSD`, `1MBABYDOGEUSD` and `1INCHUSD`.
+- The filter applies to `/api/market/config`, `/catalog`, `/search`, watchlist
+  adds and signal adds. Index symbols such as `US500` and `NAS100` are kept.
+- `pnpm market:cleanup-noisy --dry-run` reports affected saved rows. Run
+  `pnpm doochy:backup` first, then `pnpm market:cleanup-noisy --apply` to remove
+  them from watchlists, signals, alerts and paper rows. The migration also clears
+  today's briefing for users whose watchlist changed.
+
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 893 tests, all passing.
+- `pnpm test`: 903 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

@@ -15,7 +15,7 @@ import type { PaperPositionView } from "./simulation/types";
 import { TelegramLink, toLinkView, type TelegramLinkRecord } from "./telegram/store";
 
 export const USER_EXPORT_FORMAT = "doochy-user-data";
-export const USER_EXPORT_VERSION = 3;
+export const USER_EXPORT_VERSION = 4;
 
 export interface UserDataExport {
   format: typeof USER_EXPORT_FORMAT;

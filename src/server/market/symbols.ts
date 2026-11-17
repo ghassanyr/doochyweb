@@ -142,6 +142,33 @@ export function toSymbolMeta(
   };
 }
 
+const BROKER_VARIANT_RE = /\.(?:[12][CR]|[xi])$/;
+
+export function brokerVariantBase(name: string): string | null {
+  const match = BROKER_VARIANT_RE.exec(name);
+  return match ? name.slice(0, match.index) : null;
+}
+
+export function isNoisyCatalogEntry(entry: CatalogEntry, available: readonly string[]): boolean {
+  const base = brokerVariantBase(entry.name);
+  if (base && available.includes(base)) return true;
+  return /^\d/.test(baseAssetOf(entry.symbol));
+}
+
+export function filterNoisyCatalog(entries: CatalogEntry[], available: readonly string[]): CatalogEntry[] {
+  return entries.filter((entry) => !isNoisyCatalogEntry(entry, available));
+}
+
+export function noisyCatalogSymbols(entries: CatalogEntry[], available: readonly string[]): Set<string> {
+  const noisy = new Set<string>();
+  for (const entry of entries) {
+    if (!isNoisyCatalogEntry(entry, available)) continue;
+    noisy.add(normalizeSymbol(entry.symbol));
+    noisy.add(normalizeSymbol(entry.name));
+  }
+  return noisy;
+}
+
 /**
  * The add-market catalog: every symbol the account can trade, plus an entry for
  * each alias that this account can actually serve (so US500 appears even though
