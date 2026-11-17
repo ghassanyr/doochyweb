@@ -240,6 +240,8 @@ describe("IMAP setup rules", () => {
     assert.equal(values.port, 993);
     assert.equal(values.encryption, "tls");
     assert.equal(values.folder, "INBOX");
+    assert.equal(values.senderFilter, "");
+    assert.equal(values.subjectFilter, "");
     assert.equal(values.pollMinutes, 360);
     assert.equal(values.enabled, true);
   });
@@ -255,8 +257,8 @@ describe("Gmail preset", () => {
     assert.equal(preset.values.folder, "INBOX");
     assert.equal(preset.values.pollMinutes, 360);
     assert.equal(preset.values.enabled, true);
-    assert.equal(preset.values.senderFilter, "ai.analysis@getleveraged.com");
-    assert.equal(preset.values.subjectFilter, "AI Market Analysis");
+    assert.equal("senderFilter" in preset.values, false);
+    assert.equal("subjectFilter" in preset.values, false);
   });
 
   test("never ships the mailbox address or app password", () => {
@@ -350,5 +352,61 @@ describe("forwarded analysis mail", () => {
       matchesFilters(chain, "ai.analysis@getleveraged.com", "Weekly Recap"),
       false
     );
+  });
+});
+
+const INLINE_FORWARD_HTML = [
+  "<html><body>",
+  "<p>FYI</p>",
+  "<div>---------- Forwarded message ---------<br>",
+  "From: AI Analysis &lt;ai.analysis@getleveraged.com&gt;<br>",
+  "Subject: AI Market Analysis (US Session)</div>",
+  "<div>17-Nov-2026 06:14 EST</div>",
+  "<div>BTCUSD | Target Level 63564.0977</div>",
+  "<div>Pattern : Support</div>",
+  "</body></html>",
+].join("");
+
+const INLINE_FORWARD_RAW = [
+  "From: doochy@gmail.com",
+  "To: doochy@gmail.com",
+  "Subject: Fwd: AI Market Analysis (US Session)",
+  "Date: Tue, 17 Nov 2026 12:00:00 +0000",
+  "MIME-Version: 1.0",
+  "Content-Type: text/html; charset=utf-8",
+  "",
+  INLINE_FORWARD_HTML,
+].join("\r\n");
+
+describe("inline forwarded analysis mail", () => {
+  test("matches the original sender from the quoted body", async () => {
+    const parsed = await simpleParser(Buffer.from(INLINE_FORWARD_RAW));
+    const chain = await forwardChain(parsed);
+    assert.equal(chain.length, 1);
+    assert.equal(
+      matchesFilters(chain, "ai.analysis@getleveraged.com", "AI Market Analysis"),
+      true
+    );
+  });
+
+  test("parses the market card from the forwarded body", async () => {
+    const parsed = await simpleParser(Buffer.from(INLINE_FORWARD_RAW));
+    const session = parseSession({
+      subject: parsed.subject,
+      from: parsed.from?.text,
+      receivedAt: parsed.date,
+      html: typeof parsed.html === "string" ? parsed.html : null,
+      text: parsed.text,
+    });
+    assert.equal(session.sessionKey, "2026-11-17");
+    assert.equal(session.markets.length, 1);
+    assert.equal(session.markets[0]?.symbol, "BTCUSD");
+    assert.equal(session.markets[0]?.pattern, "Support");
+  });
+
+  test("empty filters accept every message", async () => {
+    const parsed = await simpleParser(Buffer.from(INLINE_FORWARD_RAW));
+    const chain = await forwardChain(parsed);
+    assert.equal(matchesFilters(chain, "", ""), true);
   });
 });

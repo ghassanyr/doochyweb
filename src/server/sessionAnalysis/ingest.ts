@@ -18,6 +18,7 @@ import {
 import { asImapValues, imapClient } from "../integrations/imapSetup";
 import { resolveIntegration } from "../integrations/store";
 import {
+  htmlToText,
   imageRefs,
   imageSize,
   isChartImage,
@@ -167,6 +168,29 @@ async function collectImages(message: ParsedMail): Promise<ParsedImage[]> {
   return images;
 }
 
+/**
+ * Collect charts from the whole forward chain. Gmail can keep the original
+ * message as an embedded `message/rfc822` while the inline images stay on the
+ * outer message, so the analysis message alone is not always enough.
+ */
+async function collectChainImages(
+  chain: ParsedMail[],
+  analysis: ParsedMail
+): Promise<ParsedImage[]> {
+  const ordered = [analysis, ...chain.filter((message) => message !== analysis)];
+  const images: ParsedImage[] = [];
+  const seen = new Set<string>();
+  for (const message of ordered) {
+    for (const image of await collectImages(message)) {
+      const hash = imageHash(image.buffer);
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+      images.push(image);
+    }
+  }
+  return images;
+}
+
 function addressValues(value: AddressObject | AddressObject[] | undefined): string[] {
   if (!value) return [];
   const list = Array.isArray(value) ? value : [value];
@@ -190,17 +214,25 @@ function headerValues(value: HeaderValue | undefined): string[] {
 
 /**
  * Everything that can identify the original sender. A forward hides the
- * analysis address in the embedded message, while the outer From is the
- * mailbox that received the forward, so both are checked.
+ * analysis address in the embedded message or, for an inline forward, in a
+ * quoted "From:" line in the body, while the outer From is the mailbox that
+ * received the forward. All of them are checked.
  */
 function senderHaystack(message: ParsedMail): string {
   const headers = message.headers;
+  const body = [
+    typeof message.text === "string" ? message.text : "",
+    typeof message.html === "string" ? htmlToText(message.html) : "",
+  ]
+    .join(" ")
+    .toLowerCase();
   return [
     ...addressValues(message.from),
     ...addressValues(message.replyTo),
     ...headerValues(headers.get("sender")),
     ...headerValues(headers.get("x-original-from")),
     ...headerValues(headers.get("x-forwarded-from")),
+    body,
   ]
     .join(" ")
     .toLowerCase();
@@ -227,7 +259,10 @@ export function matchesFilters(
 }
 
 function isEmbeddedMessage(attachment: Attachment): boolean {
-  return /^message\/(?:rfc822|global)$/i.test(attachment.contentType);
+  return (
+    /^message\/(?:rfc822|global)$/i.test(attachment.contentType) ||
+    /\.eml$/i.test(attachment.filename ?? "")
+  );
 }
 
 /**
@@ -272,7 +307,6 @@ function withCharts(
 }
 
 async function runSync(): Promise<SessionSyncResult> {
-
   let resolved;
   try {
     resolved = await resolveIntegration("imap");
@@ -316,6 +350,8 @@ async function runSync(): Promise<SessionSyncResult> {
       }
       candidates.reverse();
 
+      let matched = 0;
+      let newest: { from: string; subject: string } | null = null;
       for (const source of candidates) {
         let parsed: ParsedMail;
         try {
@@ -324,8 +360,16 @@ async function runSync(): Promise<SessionSyncResult> {
           continue;
         }
 
+        if (!newest) {
+          newest = {
+            from: parsed.from?.text ?? "",
+            subject: parsed.subject ?? "",
+          };
+        }
+
         const chain = await forwardChain(parsed);
         if (!matchesFilters(chain, values.senderFilter, values.subjectFilter)) continue;
+        matched++;
 
         // Prefer the message that actually carries the market cards. An outer
         // forward usually only has the subject and no analysis text.
@@ -351,7 +395,7 @@ async function runSync(): Promise<SessionSyncResult> {
           });
         }
 
-        const images = await collectImages(message);
+        const images = await collectChainImages(chain, message);
         await saveSession(session, withCharts(session.markets, images));
         return result({
           ok: true,
@@ -363,11 +407,19 @@ async function runSync(): Promise<SessionSyncResult> {
         });
       }
 
+      const newestDetail = newest
+        ? ` Newest message: from ${(newest.from || "unknown").slice(0, 120)}, subject "${(newest.subject || "(none)").slice(0, 120)}".`
+        : "";
       return result({
         ok: true,
         configured: true,
         imported: false,
-        message: "No matching analysis email was found in the mailbox.",
+        message:
+          candidates.length === 0
+            ? `No messages in ${values.folder} from the last ${LOOKBACK_DAYS} days.`
+            : matched === 0
+              ? `Read ${candidates.length} message${candidates.length === 1 ? "" : "s"}, but none matched the sender or subject filter.${newestDetail}`
+              : `Matched ${matched} message${matched === 1 ? "" : "s"}, but none contained a market card.${newestDetail}`,
       });
     } finally {
       lock.release();

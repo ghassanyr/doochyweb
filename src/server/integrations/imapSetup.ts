@@ -52,8 +52,6 @@ export const IMAP_PRESETS: readonly ImapPreset[] = [
       port: 993,
       encryption: "tls",
       folder: "INBOX",
-      senderFilter: "ai.analysis@getleveraged.com",
-      subjectFilter: "AI Market Analysis",
       pollMinutes: 360,
       enabled: true,
     },
