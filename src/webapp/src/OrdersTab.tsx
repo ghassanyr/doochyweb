@@ -38,20 +38,17 @@ export default function OrdersTab({
   mode,
   accounts,
   ctid,
-  isLive,
   isAdmin,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
-  isLive: boolean;
   /** Only admins can publish signals. */
   isAdmin: boolean;
 }) {
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [orderFilters, setOrderFilters] = useState<FilterState>(() => loadFilter(true));
   const timer = useRef<number | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
@@ -105,7 +102,6 @@ export default function OrdersTab({
         setRows(orders);
         setError(null);
       }
-      setLastUpdated(Date.now());
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 401) return;
       setError(err.message || "Failed to load orders");
@@ -140,21 +136,9 @@ export default function OrdersTab({
   const shownOrders = applyFilter(rows, orderFilters);
   const sortedOrders = sortRows(shownOrders, orderFilters.sortKey, orderFilters.sortAsc);
 
-  const accountLabel = selectedLabel(accounts, ctid);
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge tone={combined ? "muted" : isLive ? "accent" : "muted"}>
-            {combined ? "MULTI" : isLive ? "LIVE" : "DEMO"}
-          </Badge>
-          <span className="truncate text-sm font-medium text-fg-muted">{accountLabel}</span>
-          <span className="text-xs text-fg-faint">
-            {sortedOrders.length} pending
-            {lastUpdated ? ` · ${new Date(lastUpdated).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : ""}
-          </span>
-        </div>
+      <div className="flex items-center justify-end gap-3">
         <div className="flex shrink-0 items-center gap-1.5">
           <Button
             size="sm"
@@ -300,20 +284,6 @@ export default function OrdersTab({
       />
     </div>
   );
-}
-
-function selectedLabel(accounts: AccountView[], ctid: number | null): string {
-  if (ctid == null) {
-    if (accounts.length === 0) return "No account";
-    if (accounts.length === 1) {
-      const only = accounts[0];
-      return `${only.nickname?.trim() || only.login} · ${only.broker}`;
-    }
-    return `${accounts.length} accounts selected`;
-  }
-  const a = accounts.find((x) => x.ctid === ctid);
-  if (!a) return `Account #${ctid}`;
-  return `${a.nickname?.trim() || a.login} · ${a.broker}`;
 }
 
 // A resting LIMIT/STOP order awaiting fill. Not a position yet, so no P&L. Shows

@@ -508,6 +508,34 @@ function SidebarFooter({
           <div
             className={
               collapsed
+                ? "space-y-0.5"
+                : "flex items-center justify-center gap-0.5 px-0.5 pb-1.5"
+            }
+          >
+            <FooterAction
+              icon={nextMode === "light" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              label={nextMode === "light" ? "Light mode" : "Dark mode"}
+              collapsed={collapsed}
+              onClick={onToggleMode}
+            />
+            <FooterAction
+              icon={<Settings className="h-4 w-4" />}
+              label="Settings"
+              collapsed={collapsed}
+              onClick={onOpenSettings}
+            />
+            <FooterAction
+              icon={<LogOut className="h-4 w-4" />}
+              label="Sign out"
+              collapsed={collapsed}
+              onClick={onLogout}
+              tone="danger"
+            />
+          </div>
+
+          <div
+            className={
+              collapsed
                 ? "flex justify-center py-1"
                 : "rounded-lg border border-hairline bg-soft px-2.5 py-2"
             }
@@ -555,28 +583,6 @@ function SidebarFooter({
               )}
             </div>
           </div>
-
-          <div className="mt-1 space-y-0.5">
-            <FooterAction
-              icon={nextMode === "light" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              label={nextMode === "light" ? "Light mode" : "Dark mode"}
-              collapsed={collapsed}
-              onClick={onToggleMode}
-            />
-            <FooterAction
-              icon={<Settings className="h-4 w-4" />}
-              label="Settings"
-              collapsed={collapsed}
-              onClick={onOpenSettings}
-            />
-            <FooterAction
-              icon={<LogOut className="h-4 w-4" />}
-              label="Sign out"
-              collapsed={collapsed}
-              onClick={onLogout}
-              tone="danger"
-            />
-          </div>
         </>
       ) : (
         <div className="space-y-1">
@@ -619,19 +625,18 @@ function FooterAction({
     <button
       type="button"
       onClick={onClick}
-      aria-label={collapsed ? label : undefined}
-      title={collapsed ? label : undefined}
+      aria-label={label}
+      title={label}
       className={
-        "flex w-full items-center gap-2.5 rounded-lg py-2 text-[12.5px] font-medium transition " +
+        "flex items-center rounded-lg py-2 text-[12.5px] font-medium transition " +
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-canvas " +
-        (collapsed ? "justify-center px-0 " : "px-2.5 ") +
+        (collapsed ? "w-full justify-center px-0 " : "justify-center px-2.5 ") +
         (tone === "danger"
           ? "text-fg-muted hover:bg-danger-soft hover:text-danger"
           : "text-fg-muted hover:bg-soft hover:text-fg")
       }
     >
       {icon}
-      {!collapsed && <span className="truncate">{label}</span>}
     </button>
   );
 }

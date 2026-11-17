@@ -197,6 +197,13 @@ export default function AlertsPage() {
   return (
     <FadeRise>
       <div className="space-y-3">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Alerts</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Price levels you want to hear about, checked every minute.
+          </p>
+        </header>
+
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-2">
             <BellRing className="h-4 w-4 text-accent" />

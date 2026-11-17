@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Plus, Radio, Search } from "lucide-react";
+import { Bell, Plus, Search } from "lucide-react";
 
 import { marketApi, signalsApi, telegramApi, type TelegramStatus } from "../api";
 import { AnimatedModal } from "../components/Modal";
@@ -217,10 +217,15 @@ export default function SignalsPage({
   return (
     <FadeRise>
       <div className="space-y-3">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Signals</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Trade ideas from the desk, with live status and performance.
+          </p>
+        </header>
+
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-            <Radio className="h-4 w-4 text-accent" />
-            <h3 className="text-sm font-semibold text-fg">Signals</h3>
             <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-success">
               <span className="h-1.5 w-1.5 rounded-full bg-success" />
               Public

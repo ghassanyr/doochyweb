@@ -172,6 +172,13 @@ export default function CoachPage() {
   return (
     <FadeRise>
       <div className="space-y-3">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Coach</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Weekly reviews of your trading, generated on request.
+          </p>
+        </header>
+
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Sparkles className="h-4 w-4 text-accent" />

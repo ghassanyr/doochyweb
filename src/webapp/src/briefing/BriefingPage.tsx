@@ -192,6 +192,13 @@ export default function BriefingPage() {
   return (
     <FadeRise>
       <div className="mx-auto w-full max-w-6xl space-y-3">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Briefing</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            One daily brief built from your watchlist, signals and open ideas.
+          </p>
+        </header>
+
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Newspaper className="h-4 w-4 text-accent" />

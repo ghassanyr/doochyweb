@@ -339,7 +339,7 @@ export default function AnalysisPage({
           </p>
         </header>
 
-        {/* Toolbar: timeframes + add market + refresh + settings */}
+        {/* Toolbar: timeframes + watchlist + asset classes + add market */}
         <Card className="flex flex-col gap-2.5 p-3">
           <div className="flex flex-wrap items-center gap-1">
             {timeframes.map((t) => (
@@ -357,116 +357,110 @@ export default function AnalysisPage({
                 {t.label}
               </button>
             ))}
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {signedIn ? (
+                <>
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
+                    Watchlist
+                  </span>
+                  <div
+                    role="group"
+                    aria-label="Watchlist source"
+                    className="flex rounded-md border border-hairline p-0.5"
+                  >
+                    {(
+                      [
+                        { id: "site" as const, label: "Site list" },
+                        { id: "mine" as const, label: "My watchlist" },
+                      ]
+                    ).map((option) => {
+                      const active = mode === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => void switchMode(option.id)}
+                          className={
+                            "rounded px-2.5 py-1 text-xs font-medium transition " +
+                            (active
+                              ? "bg-accent-soft text-accent"
+                              : "text-fg-muted hover:bg-surface-hover hover:text-fg")
+                          }
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {mode === "mine" && (
+                    <span className="tabular-nums text-[11px] text-fg-faint">
+                      {results.length}/{limit}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] text-fg-faint">Site watchlist</span>
+                  {onSignIn && (
+                    <button
+                      type="button"
+                      onClick={onSignIn}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                    >
+                      <LogIn className="h-3.5 w-3.5" />
+                      Sign in to build your own
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
-          <div
-            role="group"
-            aria-label="Filter by asset class"
-            className="flex flex-wrap items-center gap-1 border-t border-hairline pt-2.5"
-          >
+          <div className="flex flex-wrap items-center gap-1 border-t border-hairline pt-2.5">
             <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
               Asset class
             </span>
-            {ASSET_FILTERS.map((f) => {
-              const active = f.id === assetFilter;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setAssetFilter(f.id)}
-                  className={
-                    "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition " +
-                    (active
-                      ? "border border-accent/20 bg-accent-soft text-accent"
-                      : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
-                  }
-                >
-                  {f.label}
-                  <span
+            <div
+              role="group"
+              aria-label="Filter by asset class"
+              className="flex flex-wrap items-center gap-1"
+            >
+              {ASSET_FILTERS.map((f) => {
+                const active = f.id === assetFilter;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setAssetFilter(f.id)}
                     className={
-                      "tabular-nums text-[10px] " + (active ? "opacity-70" : "text-fg-faint")
+                      "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                      (active
+                        ? "border border-accent/20 bg-accent-soft text-accent"
+                        : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
                     }
                   >
-                    {assetCounts[f.id]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-hairline pt-2.5">
-            <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
-              Watchlist
-            </span>
-            {signedIn ? (
-              <>
-                <div
-                  role="group"
-                  aria-label="Watchlist source"
-                  className="flex rounded-md border border-hairline p-0.5"
-                >
-                  {(
-                    [
-                      { id: "site" as const, label: "Site list" },
-                      { id: "mine" as const, label: "My watchlist" },
-                    ]
-                  ).map((option) => {
-                    const active = mode === option.id;
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => void switchMode(option.id)}
-                        className={
-                          "rounded px-2.5 py-1 text-xs font-medium transition " +
-                          (active
-                            ? "bg-accent-soft text-accent"
-                            : "text-fg-muted hover:bg-surface-hover hover:text-fg")
-                        }
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {mode === "mine" ? (
-                  <span className="tabular-nums text-[11px] text-fg-faint">
-                    {results.length}/{limit}
-                  </span>
-                ) : (
-                  <span className="text-[11px] text-fg-faint">
-                    The site list is curated by an admin. Switch to{" "}
-                    <button
-                      type="button"
-                      onClick={() => void switchMode("mine")}
-                      className="font-medium text-accent hover:underline"
+                    {f.label}
+                    <span
+                      className={
+                        "tabular-nums text-[10px] " + (active ? "opacity-70" : "text-fg-faint")
+                      }
                     >
-                      My watchlist
-                    </button>{" "}
-                    to add, remove or reorder markets.
-                  </span>
-                )}
-              </>
-            ) : (
-              <span className="text-[11px] text-fg-faint">This is the site watchlist.</span>
-            )}
-            {!signedIn && onSignIn && (
-              <button
-                type="button"
-                onClick={onSignIn}
-                className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-              >
-                <LogIn className="h-3.5 w-3.5" />
-                Sign in to build your own
-              </button>
+                      {assetCounts[f.id]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {canEdit && (
+              <div className="ml-auto w-full sm:w-72">
+                <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
+              </div>
             )}
           </div>
-
-          {canEdit && (
-            <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
-          )}
         </Card>
 
         <StatusLine

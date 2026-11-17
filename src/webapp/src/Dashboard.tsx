@@ -82,6 +82,13 @@ export default function Dashboard({
   return (
     <FadeRise>
       <div className="space-y-5">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Trading</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Positions, pending orders and order entry across your connected accounts.
+          </p>
+        </header>
+
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
             <span className="text-sm font-medium text-fg-muted">Account</span>
@@ -171,7 +178,6 @@ export default function Dashboard({
             mode={activeAccounts.length > 1 ? "combined" : "separate"}
             accounts={activeAccounts}
             ctid={single?.ctid ?? null}
-            isLive={single?.isLive ?? false}
             isAdmin={isAdmin}
           />
         )}
@@ -185,13 +191,11 @@ function Tabs({
   mode,
   accounts,
   ctid,
-  isLive,
   isAdmin,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
-  isLive: boolean;
   isAdmin: boolean;
 }) {
   const [tab, setTab] = useState<PageKey>("positions");
@@ -222,9 +226,9 @@ function Tabs({
         </p>
       </div>
       {tab === "positions" ? (
-        <PositionsTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
+        <PositionsTab mode={mode} accounts={accounts} ctid={ctid} isAdmin={isAdmin} />
       ) : tab === "orders" ? (
-        <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isLive={isLive} isAdmin={isAdmin} />
+        <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isAdmin={isAdmin} />
       ) : tab === "journal" ? (
         // The journal replaced the old order-history tab. It imports closed
         // cTrader deals automatically, so the account selector above has no

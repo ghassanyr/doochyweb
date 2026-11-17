@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Radio, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { marketApi } from "../api";
 import { Card, inputCls } from "../components/ui";
@@ -216,8 +216,6 @@ export function Breakouts({ onOpenSymbol }: { onOpenSymbol?: (symbol: string) =>
     <div className="space-y-3">
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-          <Radio className="h-4 w-4 text-accent" />
-          <h3 className="text-sm font-semibold text-fg">Breakouts</h3>
           {enabled && !error && (
             <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-success">
               <span className="h-1.5 w-1.5 rounded-full bg-success" />

@@ -85,7 +85,7 @@ export default function SessionAnalysisPage({
           </p>
         </header>
 
-        <Card className="flex flex-col gap-2.5 p-3">
+        <Card className="p-3">
           <div className="flex flex-wrap items-center gap-2">
             {day ? (
               <SessionBadge name={day.sessionName} />
@@ -114,11 +114,6 @@ export default function SessionAnalysisPage({
               )}
             </div>
           </div>
-
-          <p className="border-t border-hairline pt-2.5 text-[11px] leading-relaxed text-fg-faint">
-            Imported automatically from the dedicated analysis mailbox. The server checks every
-            six hours by default, and an administrator can run a check immediately.
-          </p>
         </Card>
 
         {syncResult && (

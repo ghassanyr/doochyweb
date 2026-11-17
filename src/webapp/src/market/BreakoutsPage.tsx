@@ -52,6 +52,13 @@ export default function BreakoutsPage({
   return (
     <FadeRise>
       <div className="space-y-3">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Breakouts</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Markets pressing through key levels, ranked by strength.
+          </p>
+        </header>
+
         <Breakouts onOpenSymbol={openSymbol} />
         <MarketSnapshots onOpenSymbol={openSymbol} />
       </div>

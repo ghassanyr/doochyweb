@@ -170,7 +170,7 @@ export default function LearnPage() {
         <div className="flex flex-wrap items-end justify-between gap-3 px-1">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-fg">
-              Daily drill
+              Learn
             </h1>
             <p className="mt-1 text-xs leading-relaxed text-fg-muted">
               Probability and trade practice on anonymized chart setups. Symbols,

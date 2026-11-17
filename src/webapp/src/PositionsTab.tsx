@@ -45,20 +45,17 @@ export default function PositionsTab({
   mode,
   accounts,
   ctid,
-  isLive,
   isAdmin,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
-  isLive: boolean;
   /** Only admins can publish signals. */
   isAdmin: boolean;
 }) {
   const [rows, setRows] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [filters, setFilters] = useState<FilterState>(() => loadFilter(false));
   const timer = useRef<number | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
@@ -112,7 +109,6 @@ export default function PositionsTab({
         setRows(positions);
         setError(null);
       }
-      setLastUpdated(Date.now());
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 401) return;
       setError(err.message || "Failed to load positions");
@@ -148,8 +144,6 @@ export default function PositionsTab({
   const sorted = sortRows(shown, filters.sortKey, filters.sortAsc);
   const symbols = useMemo(() => uniqueSymbols(rows), [rows]);
 
-  const accountLabel = selectedLabel(accounts, ctid);
-
   const totalPnl = useMemo(() => {
     let sum = 0;
     let hasAny = false;
@@ -164,17 +158,15 @@ export default function PositionsTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge tone={combined ? "muted" : isLive ? "accent" : "muted"}>
-            {combined ? "MULTI" : isLive ? "LIVE" : "DEMO"}
-          </Badge>
-          <span className="truncate text-sm font-medium text-fg-muted">{accountLabel}</span>
-          <span className="text-xs text-fg-faint">
-            {sorted.length} open
-            {lastUpdated ? ` · ${new Date(lastUpdated).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : ""}
-          </span>
-        </div>
+      <div className="flex flex-col items-end gap-2">
+        {totalPnl != null && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-fg-faint">Total P&L</span>
+            <span className={`font-semibold tabular-nums ${totalPnl > 0 ? "text-success" : totalPnl < 0 ? "text-danger" : "text-fg"}`}>
+              {totalPnl >= 0 ? "+" : ""}{fmtMoney(totalPnl)}
+            </span>
+          </div>
+        )}
         <div className="flex shrink-0 items-center gap-1.5">
           <Button
             size="sm"
@@ -196,15 +188,6 @@ export default function PositionsTab({
           </Button>
         </div>
       </div>
-
-      {totalPnl != null && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-fg-faint">Total P&L</span>
-          <span className={`font-semibold tabular-nums ${totalPnl > 0 ? "text-success" : totalPnl < 0 ? "text-danger" : "text-fg"}`}>
-            {totalPnl >= 0 ? "+" : ""}{fmtMoney(totalPnl)}
-          </span>
-        </div>
-      )}
 
       {publishNotice && <Flash tone="success">{publishNotice}</Flash>}
 
@@ -315,20 +298,6 @@ export default function PositionsTab({
       />
     </div>
   );
-}
-
-function selectedLabel(accounts: AccountView[], ctid: number | null): string {
-  if (ctid == null) {
-    if (accounts.length === 0) return "No account";
-    if (accounts.length === 1) {
-      const only = accounts[0];
-      return `${only.nickname?.trim() || only.login} · ${only.broker}`;
-    }
-    return `${accounts.length} accounts selected`;
-  }
-  const a = accounts.find((x) => x.ctid === ctid);
-  if (!a) return `Account #${ctid}`;
-  return `${a.nickname?.trim() || a.login} · ${a.broker}`;
 }
 
 function PositionCard({
