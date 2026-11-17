@@ -137,6 +137,48 @@ describe("session analysis parsing", () => {
     assert.equal(markets[0]?.targetLevel, "26755.2413");
   });
 
+  test("accepts a heading whose pipe was lost in the forward", () => {
+    const markets = parseMarkets(
+      "BTCUSD Target Level 63564.0977\nPattern\n: Support\nTrade Now"
+    );
+    assert.equal(markets.length, 1);
+    assert.equal(markets[0]?.symbol, "BTCUSD");
+    assert.equal(markets[0]?.targetLevel, "63564.0977");
+  });
+
+  test("accepts a heading split into symbol, label and value without a pipe", () => {
+    const markets = parseMarkets(
+      "BTCUSD\nTarget Level\n63564.0977\nPattern\n: Support\nTrade Now"
+    );
+    assert.equal(markets.length, 1);
+    assert.equal(markets[0]?.symbol, "BTCUSD");
+    assert.equal(markets[0]?.targetLevel, "63564.0977");
+  });
+
+  test("strips plain-text quote markers before matching a heading", () => {
+    const markets = parseMarkets(
+      "> BTCUSD | Target Level 63564.0977\n> Pattern\n> : Support\n> Trade Now"
+    );
+    assert.equal(markets.length, 1);
+    assert.equal(markets[0]?.symbol, "BTCUSD");
+  });
+
+  test("reads the HTML body when the plain-text part is only a stub", () => {
+    const session = parseSession({
+      text: "FYI, see the analysis below.",
+      html: [
+        "<div>17-Nov-2026 06:14 EST</div>",
+        "<div>BTCUSD | Target Level 63564.0977</div>",
+        "<div>Pattern : Support</div>",
+        "<div>Trade Now</div>",
+      ].join(""),
+      receivedAt: "2026-11-18T02:00:00.000Z",
+    });
+    assert.equal(session.sessionKey, "2026-11-17");
+    assert.equal(session.markets.length, 1);
+    assert.equal(session.markets[0]?.symbol, "BTCUSD");
+  });
+
   test("finds the analysis stamp and uses it as the session date", () => {
     const stamp = parseGeneratedAt(EMAIL_TEXT);
     assert.deepEqual(stamp, {

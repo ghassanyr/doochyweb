@@ -87,8 +87,21 @@ export function textToLines(text: string): string[] {
   return text
     .replace(/\u00a0/g, " ")
     .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
+    .map((line) => line.replace(/^\s*>+\s?/, "").replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 0);
+}
+
+/**
+ * A forwarded copy can lose the separator between the symbol and the target
+ * level: an image pipe is dropped by the text rendering, or the cells are
+ * joined with a space. Put the heading back together so the parser sees one
+ * line.
+ */
+function normalizeLooseHeading(line: string): string {
+  if (line.includes("|")) return line;
+  const match = line.match(/^(.{1,40}?)\s+Target Level\s+([0-9][0-9.,]*)\s*$/i);
+  if (!match) return line;
+  return `${match[1]!.trim()} | Target Level ${match[2]}`;
 }
 
 /**
@@ -143,28 +156,21 @@ function normalizeHeadings(lines: string[]): string[] {
     if (/^[A-Z][A-Z0-9 ._/-]{0,39}$/.test(line)) {
       let j = i + 1;
       let combined = line;
-      let sawPipe = false;
       while (j < lines.length && j <= i + 4) {
         const next = lines[j]!;
-        if (/^\|/.test(next)) {
-          sawPipe = true;
+        if (/^\|/.test(next) || /^Target Level\b/i.test(next)) {
           combined = `${combined} ${next}`;
           j++;
           continue;
         }
-        if (/^Target Level\b/i.test(next)) {
-          combined = `${combined} ${next}`;
-          j++;
-          continue;
-        }
-        if (sawPipe && /^[0-9][0-9.,]*$/.test(next)) {
+        if (/^[0-9][0-9.,]*$/.test(next) && /Target Level/i.test(combined)) {
           combined = `${combined} ${next}`;
           j++;
           break;
         }
         break;
       }
-      if (sawPipe && /Target Level/i.test(combined)) {
+      if (/Target Level\s+[0-9][0-9.,]*\s*$/i.test(combined)) {
         out.push(combined.replace(/\s+/g, " ").trim());
         i = j - 1;
         continue;
@@ -328,7 +334,9 @@ function parseBlock(block: string[]): ParsedMarket | null {
 
 /** Parse the repeated market cards out of the message text. */
 export function parseMarkets(text: string): ParsedMarket[] {
-  const lines = normalizeHeadings(mergeContinuationLines(textToLines(text)));
+  const lines = normalizeHeadings(mergeContinuationLines(textToLines(text))).map(
+    normalizeLooseHeading
+  );
   const blocks: string[][] = [];
   let current: string[] | null = null;
 
@@ -394,12 +402,12 @@ export interface ParseSessionInput {
  * stamp when present, because a forwarded copy can arrive the next day.
  */
 export function parseSession(input: ParseSessionInput): ParsedSession {
-  const text =
-    input.text && input.text.trim()
-      ? input.text
-      : input.html
-        ? htmlToText(input.html)
-        : "";
+  // A forwarded message often carries a short plain-text part next to the real
+  // HTML body. Parse both instead of letting the stub hide the analysis.
+  const parts: string[] = [];
+  if (input.text && input.text.trim()) parts.push(input.text);
+  if (input.html) parts.push(htmlToText(input.html));
+  const text = parts.join("\n");
   const markets = parseMarkets(text);
   const generated = parseGeneratedAt(text);
   const received = input.receivedAt ? new Date(input.receivedAt) : new Date();

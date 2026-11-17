@@ -24,6 +24,7 @@ import {
   isChartImage,
   pairImages,
   parseSession,
+  textToLines,
 } from "./parse";
 import { saveSession, sessionIsComplete } from "./store";
 import type {
@@ -306,6 +307,39 @@ function withCharts(
   return pairImages(markets, images);
 }
 
+/**
+ * Structural summary for the admin when a matched message still has no market
+ * card. It names the body sizes and attachment types so a forward that keeps
+ * the analysis in an unexpected part is obvious from the import result.
+ */
+function describeChain(chain: ParsedMail[]): string {
+  const details = chain.map((message, index) => {
+    const textLength = typeof message.text === "string" ? message.text.trim().length : 0;
+    const htmlLength = typeof message.html === "string" ? message.html.length : 0;
+    const counts = new Map<string, number>();
+    for (const attachment of message.attachments) {
+      const type = attachment.contentType || "unknown";
+      counts.set(type, (counts.get(type) ?? 0) + 1);
+    }
+    const attachments = [...counts]
+      .map(([type, count]) => `${type} x${count}`)
+      .join(", ");
+    return `#${index + 1} text ${textLength}, html ${htmlLength}${attachments ? `, ${attachments}` : ""}`;
+  });
+  return `Chain ${chain.length}: ${details.join("; ")}.`;
+}
+
+/** A short, line-oriented preview of the matched message for diagnostics. */
+function previewBody(message: ParsedMail): string {
+  const parts: string[] = [];
+  if (typeof message.text === "string" && message.text.trim()) parts.push(message.text);
+  if (typeof message.html === "string" && message.html.trim()) {
+    parts.push(htmlToText(message.html));
+  }
+  const preview = textToLines(parts.join("\n")).slice(0, 8).join(" / ");
+  return preview.slice(0, 240) || "(no text or HTML body)";
+}
+
 async function runSync(): Promise<SessionSyncResult> {
   let resolved;
   try {
@@ -352,6 +386,7 @@ async function runSync(): Promise<SessionSyncResult> {
 
       let matched = 0;
       let newest: { from: string; subject: string } | null = null;
+      let firstChain: ParsedMail[] | null = null;
       for (const source of candidates) {
         let parsed: ParsedMail;
         try {
@@ -369,6 +404,7 @@ async function runSync(): Promise<SessionSyncResult> {
 
         const chain = await forwardChain(parsed);
         if (!matchesFilters(chain, values.senderFilter, values.subjectFilter)) continue;
+        if (!firstChain) firstChain = chain;
         matched++;
 
         // Prefer the message that actually carries the market cards. An outer
@@ -410,6 +446,9 @@ async function runSync(): Promise<SessionSyncResult> {
       const newestDetail = newest
         ? ` Newest message: from ${(newest.from || "unknown").slice(0, 120)}, subject "${(newest.subject || "(none)").slice(0, 120)}".`
         : "";
+      const chainDetail = firstChain
+        ? ` ${describeChain(firstChain)} Preview: "${previewBody(firstChain[0]!)}"`
+        : "";
       return result({
         ok: true,
         configured: true,
@@ -419,7 +458,7 @@ async function runSync(): Promise<SessionSyncResult> {
             ? `No messages in ${values.folder} from the last ${LOOKBACK_DAYS} days.`
             : matched === 0
               ? `Read ${candidates.length} message${candidates.length === 1 ? "" : "s"}, but none matched the sender or subject filter.${newestDetail}`
-              : `Matched ${matched} message${matched === 1 ? "" : "s"}, but none contained a market card.${newestDetail}`,
+              : `Matched ${matched} message${matched === 1 ? "" : "s"}, but none contained a market card.${newestDetail}${chainDetail}`,
       });
     } finally {
       lock.release();

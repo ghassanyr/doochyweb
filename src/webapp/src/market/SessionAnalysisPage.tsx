@@ -26,15 +26,38 @@ import { AnimatedModal } from "../components/Modal";
 import { Button, Card, Flash, Skeleton } from "../components/ui";
 import { useSiteConfig } from "../siteConfig";
 
-const CHART_THEME_KEY = "doochyweb_session_chart_theme";
+// The email charts ship on a #042820 background. The page always tints them to
+// the active site canvas so they blend into the card instead of showing the
+// email's dark green panel.
+const CHART_BACKGROUND = { r: 4, g: 40, b: 32 };
+const FALLBACK_CANVAS = { r: 10, g: 14, b: 20 };
 
-/** Charts match the site by default; "exact" restores the email colours. */
-function readChartTheme(): boolean {
-  try {
-    return localStorage.getItem(CHART_THEME_KEY) !== "exact";
-  } catch {
-    return true;
+function hexRgb(hex: string): { r: number; g: number; b: number } {
+  const match = hex.trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!match) return FALLBACK_CANVAS;
+  const value = Number.parseInt(match[1]!, 16);
+  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+}
+
+/**
+ * Channel transfer that maps the chart background exactly onto the site canvas.
+ *
+ * Dark canvases sit close to the email background, so a plain offset blends the
+ * chart in while keeping every line and candle colour intact. A light canvas is
+ * far away, so the channel is inverted instead: the background lands on the
+ * canvas and the dark chart elements become dark ink on a light card.
+ */
+function chartTransfer(
+  canvas: { r: number; g: number; b: number },
+  channel: "r" | "g" | "b",
+  mode: "light" | "dark"
+): { slope: number; intercept: string } {
+  const background = CHART_BACKGROUND[channel];
+  const target = canvas[channel];
+  if (mode === "light") {
+    return { slope: -1, intercept: ((target + background) / 255).toFixed(6) };
   }
+  return { slope: 1, intercept: ((target - background) / 255).toFixed(6) };
 }
 
 function dayStamp(day: SessionDay): string {
@@ -185,7 +208,7 @@ function CardSkeleton() {
 }
 
 export default function SessionAnalysisPage({ isAdmin }: { isAdmin: boolean }) {
-  const { mode } = useSiteConfig();
+  const { mode, theme } = useSiteConfig();
   const [day, setDay] = useState<SessionDay | null>(null);
   const [days, setDays] = useState<SessionDaySummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,22 +216,9 @@ export default function SessionAnalysisPage({ isAdmin }: { isAdmin: boolean }) {
   const [selected, setSelected] = useState<string>("latest");
   const [syncResult, setSyncResult] = useState<SessionSyncResult | null>(null);
   const [chart, setChart] = useState<SessionMarket | null>(null);
-  const [matchTheme, setMatchTheme] = useState(readChartTheme);
 
-  const chartFilter = !matchTheme
-    ? undefined
-    : mode === "light"
-      ? "invert(1) hue-rotate(180deg) saturate(0.9)"
-      : "url(#session-chart-theme)";
-
-  function toggleMatchTheme(next: boolean) {
-    setMatchTheme(next);
-    try {
-      localStorage.setItem(CHART_THEME_KEY, next ? "match" : "exact");
-    } catch {
-      // Private browsing can reject storage; the toggle still works for this page.
-    }
-  }
+  const canvas = hexRgb(theme.canvas);
+  const chartFilter = "url(#session-chart-theme)";
 
   const load = useCallback(async (sessionKey?: string) => {
     setLoading(true);
@@ -275,9 +285,21 @@ export default function SessionAnalysisPage({ isAdmin }: { isAdmin: boolean }) {
         <defs>
           <filter id="session-chart-theme" colorInterpolationFilters="sRGB">
             <feComponentTransfer>
-              <feFuncR type="linear" slope="1" intercept="0.023529" />
-              <feFuncG type="linear" slope="1" intercept="-0.101961" />
-              <feFuncB type="linear" slope="1" intercept="-0.047059" />
+              <feFuncR
+                type="linear"
+                slope={chartTransfer(canvas, "r", mode).slope}
+                intercept={chartTransfer(canvas, "r", mode).intercept}
+              />
+              <feFuncG
+                type="linear"
+                slope={chartTransfer(canvas, "g", mode).slope}
+                intercept={chartTransfer(canvas, "g", mode).intercept}
+              />
+              <feFuncB
+                type="linear"
+                slope={chartTransfer(canvas, "b", mode).slope}
+                intercept={chartTransfer(canvas, "b", mode).intercept}
+              />
             </feComponentTransfer>
           </filter>
         </defs>
@@ -324,19 +346,6 @@ export default function SessionAnalysisPage({ isAdmin }: { isAdmin: boolean }) {
                 {day.subject}
               </span>
             )}
-
-            <label
-              className="flex items-center gap-1.5 text-[11px] text-fg-muted"
-              title="Tint the chart background to match the site. Turn off to see the exact colours from the email."
-            >
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 accent-accent"
-                checked={matchTheme}
-                onChange={(event) => toggleMatchTheme(event.target.checked)}
-              />
-              Match site theme
-            </label>
 
             {isAdmin && (
               <div className="ml-auto">
