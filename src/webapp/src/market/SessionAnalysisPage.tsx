@@ -308,7 +308,7 @@ export default function SessionAnalysisPage({ isAdmin }: { isAdmin: boolean }) {
         <header>
           <h1 className="text-xl font-semibold tracking-tight text-fg">Session Analysis</h1>
           <p className="mt-0.5 text-sm text-fg-muted">
-            The daily AI market analysis email, copied exactly as it arrived.
+            The daily sessions AI market analysis.
           </p>
         </header>
 
