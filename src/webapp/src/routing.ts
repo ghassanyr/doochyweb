@@ -13,6 +13,7 @@ export type ViewKey =
   | "learn"
   | "alerts"
   | "briefing"
+  | "coach"
   | "legal"
   | "terms"
   | "privacy"
@@ -36,6 +37,7 @@ export const VIEW_KEYS: readonly ViewKey[] = [
   "learn",
   "alerts",
   "briefing",
+  "coach",
   "legal",
   "terms",
   "privacy",

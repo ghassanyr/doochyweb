@@ -403,6 +403,38 @@ describe("parseBriefingSections", () => {
     assert.ok(parsed.sections.risks.length > 0);
   });
 
+  test("ignores prose after the JSON object", () => {
+    const snapshot = builtSnapshot();
+    const parsed = parseBriefingSections(
+      '{"headline":"Dollar firms"}\n\nThis is the extra text {not json}.',
+      snapshot
+    );
+    assert.equal(parsed.error, null);
+    assert.equal(parsed.sections.headline, "Dollar firms");
+  });
+
+  test("repairs raw newlines and trailing commas", () => {
+    const snapshot = builtSnapshot();
+    const parsed = parseBriefingSections(
+      '{"headline":"Dollar\nfirms","risks":["One",],}',
+      snapshot
+    );
+    assert.equal(parsed.error, null);
+    assert.equal(parsed.sections.headline, "Dollar firms");
+    assert.deepEqual(parsed.sections.risks, ["One"]);
+  });
+
+  test("keeps complete fields from a truncated object", () => {
+    const snapshot = builtSnapshot();
+    const raw =
+      '{"headline":"Dollar firms","overview":"Metals slipped.","watchlist":[{"symbol":"EURUSD","whatHappened":"Moved up",';
+    const parsed = parseBriefingSections(raw, snapshot);
+    assert.equal(parsed.sections.headline, "Dollar firms");
+    assert.equal(parsed.sections.overview, "Metals slipped.");
+    assert.equal(parsed.sections.watchlist[0].whatHappened, "Moved up");
+    assert.ok(parsed.sections.watchlist[0].whyItMatters.length > 0);
+  });
+
   test("falls back on malformed JSON", () => {
     const snapshot = builtSnapshot();
     const parsed = parseBriefingSections("not json at all", snapshot);

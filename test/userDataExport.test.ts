@@ -3,6 +3,7 @@ import { afterEach, describe, test } from "node:test";
 
 import { PriceAlert } from "../src/server/alerts/store";
 import { Briefing } from "../src/server/briefing/store";
+import { CoachReportModel } from "../src/server/coach/store";
 import { Credentials, User } from "../src/server/db";
 import { JournalEntry, JournalSync } from "../src/server/journal/store";
 import { UserWatchlist } from "../src/server/market/userWatchlist";
@@ -33,6 +34,7 @@ const originals = {
   syncFindOne: JournalSync.findOne,
   paperFind: PaperPosition.find,
   briefingFind: Briefing.find,
+  coachFind: CoachReportModel.find,
   telegramFindOne: TelegramLink.findOne,
   watchlistFindOne: UserWatchlist.findOne,
 };
@@ -45,6 +47,7 @@ afterEach(() => {
   (JournalSync as any).findOne = originals.syncFindOne;
   (PaperPosition as any).find = originals.paperFind;
   (Briefing as any).find = originals.briefingFind;
+  (CoachReportModel as any).find = originals.coachFind;
   (TelegramLink as any).findOne = originals.telegramFindOne;
   (UserWatchlist as any).findOne = originals.watchlistFindOne;
 });
@@ -132,6 +135,18 @@ describe("user data export", () => {
           },
         },
       ]);
+    (CoachReportModel as any).find = () =>
+      sortedQuery([
+        {
+          kind: "trade",
+          key: "journal-1",
+          generatedAt: new Date("2026-11-07T01:00:00.000Z"),
+          model: "test-model",
+          error: null,
+          facts: { id: "journal-1" },
+          sections: { summary: "review" },
+        },
+      ]);
     (TelegramLink as any).findOne = () =>
       leanQuery({
         userId: USER_ID,
@@ -163,6 +178,8 @@ describe("user data export", () => {
     assert.equal(data.journal.sync?.lastImported, 2);
     assert.equal(data.paperTrading.length, 1);
     assert.equal(data.briefings.length, 1);
+    assert.equal(data.coachReports.length, 1);
+    assert.equal(data.coachReports[0].key, "journal-1");
     assert.equal(data.telegram?.chatId, "chat-1");
     assert.deepEqual(data.watchlist, {
       mode: "mine",
@@ -191,6 +208,7 @@ describe("user data export", () => {
     (JournalSync as any).findOne = () => leanQuery(null);
     (PaperPosition as any).find = () => sortedQuery([]);
     (Briefing as any).find = () => sortedQuery([]);
+    (CoachReportModel as any).find = () => sortedQuery([]);
     (TelegramLink as any).findOne = () => leanQuery(null);
     (UserWatchlist as any).findOne = () => leanQuery(null);
     assert.equal(await exportUserData(USER_ID), null);

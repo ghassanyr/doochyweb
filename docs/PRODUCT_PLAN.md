@@ -11,7 +11,8 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 - P1 is complete: metadata, content copy, defaults, locale/formats, roles, templates and theme extras are implemented.
 - P2 is complete: PWA metadata, social links, webhooks and deployment version information are implemented.
 - The daily briefing is now a structured, per-user brief over the effective watchlist, active signals and open journal ideas, with saved focus sessions, deterministic fallback sections and legacy snapshot regeneration.
-- Last verified: `pnpm typecheck`, `pnpm test` with 861 tests, `pnpm build` and `git diff --check` all pass.
+- AI Coach adds manual individual trade reviews and fixed UTC weekly behaviour reports over the Trade Journal, with deterministic fallbacks and report invalidation on journal changes.
+- Last verified: `pnpm typecheck`, `pnpm test` with 890 tests, `pnpm build` and `git diff --check` all pass.
 
 ## P0: needed for a sellable self-hosted product
 

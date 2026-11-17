@@ -177,6 +177,7 @@ const EMPTY_FIELD_OPTIONS: { key: keyof ContentSettings["emptyStates"]; label: s
   { key: "trading", label: "Trading" },
   { key: "alerts", label: "Alerts" },
   { key: "briefing", label: "Briefing" },
+  { key: "coach", label: "Coach" },
 ];
 
 function TextField({

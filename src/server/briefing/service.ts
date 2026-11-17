@@ -223,12 +223,34 @@ export async function generateBriefing(
     error = NO_AI_MESSAGE;
   } else {
     try {
-      const reply = await aiChat(config, buildBriefingPrompt(snapshot, name), {
-        maxTokens: 1800,
+      const messages = buildBriefingPrompt(snapshot, name);
+      let reply = await aiChat(config, messages, {
+        maxTokens: 3000,
         temperature: 0.3,
         timeoutMs: 45_000,
       });
-      const parsed = parseBriefingSections(reply.text, snapshot);
+      let parsed = parseBriefingSections(reply.text, snapshot);
+
+      if (parsed.error) {
+        try {
+          reply = await aiChat(
+            config,
+            [
+              ...messages,
+              {
+                role: "user",
+                content:
+                  "Return the briefing again as one valid JSON object only. No markdown, no code fence and no text outside the JSON. Keep every sentence short.",
+              },
+            ],
+            { maxTokens: 3600, temperature: 0.1, timeoutMs: 45_000 }
+          );
+          parsed = parseBriefingSections(reply.text, snapshot);
+        } catch {
+          // Keep the first parse error and its deterministic fallback sections.
+        }
+      }
+
       sections = parsed.sections;
       error = parsed.error;
       model = reply.model;

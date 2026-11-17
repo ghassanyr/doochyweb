@@ -551,6 +551,7 @@ export function normalizeContent(patch: unknown, base: ContentSettings): Content
       trading: readString(empty, "trading", base.emptyStates.trading, 300),
       alerts: readString(empty, "alerts", base.emptyStates.alerts, 300),
       briefing: readString(empty, "briefing", base.emptyStates.briefing, 300),
+      coach: readString(empty, "coach", base.emptyStates.coach, 300),
     },
   };
 }

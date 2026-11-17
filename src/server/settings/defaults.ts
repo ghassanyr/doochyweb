@@ -103,6 +103,7 @@ export const DEFAULT_CONTENT: ContentSettings = {
     trading: "Connect a cTrader account to see balances, positions and orders here.",
     alerts: "No alerts yet. Create one to be notified when price reaches your level.",
     briefing: "No briefing has been generated yet.",
+    coach: "Close a few trades to build your first coaching review.",
   },
 };
 
@@ -185,6 +186,7 @@ export const MODULE_KEYS: readonly ModuleKey[] = [
   "trading",
   "alerts",
   "briefing",
+  "coach",
 ];
 
 /** Default tabs in the order the shell has always shown them. */
@@ -196,6 +198,7 @@ export const DEFAULT_MODULES: ModuleSettings[] = [
   { key: "trading", label: "Trading", hidden: false, access: "signed-in" },
   { key: "alerts", label: "Alerts", hidden: false, access: "signed-in" },
   { key: "briefing", label: "Briefing", hidden: false, access: "signed-in" },
+  { key: "coach", label: "Coach", hidden: false, access: "signed-in" },
 ];
 
 export const DEFAULT_NAVIGATION: NavigationSettings = {

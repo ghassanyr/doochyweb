@@ -3,10 +3,11 @@
 // deterministic and unit-tested; the network and database work lives in
 // service.ts.
 
+import type { AiMessage } from "../ai/client";
+import { cleanText, extractJsonObject, objectList, textList } from "../ai/json";
 import type { JournalEntryView } from "../journal/types";
 import type { Candle } from "../market/types";
 import type { SignalView } from "../signals/types";
-import type { AiMessage } from "../ai/client";
 import { buildSessionRows, focusSessionLabel } from "./sessions";
 import {
   BRIEFING_SNAPSHOT_VERSION,
@@ -550,50 +551,6 @@ export function buildBriefingPrompt(
   ];
 }
 
-function cleanText(value: unknown, max: number): string {
-  if (typeof value !== "string") return "";
-  return value
-    .replace(/\u2014/g, "-")
-    .replace(/\u2013/g, "-")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max);
-}
-
-function textList(value: unknown, maxItems: number, maxLength: number): string[] {
-  if (!Array.isArray(value)) return [];
-  const out: string[] = [];
-  for (const item of value) {
-    const text = cleanText(item, maxLength);
-    if (text && !out.includes(text)) out.push(text);
-    if (out.length >= maxItems) break;
-  }
-  return out;
-}
-
-function objectList(value: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item): item is Record<string, unknown> =>
-      Boolean(item) && typeof item === "object" && !Array.isArray(item)
-  );
-}
-
-function extractJson(raw: string): Record<string, unknown> | null {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(trimmed.slice(start, end + 1));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 export interface ParsedBriefing {
   sections: BriefingSections;
   error: string | null;
@@ -601,7 +558,7 @@ export interface ParsedBriefing {
 
 export function parseBriefingSections(raw: string, snapshot: BriefingSnapshot): ParsedBriefing {
   const fallback = buildFallbackSections(snapshot);
-  const parsed = extractJson(raw);
+  const parsed = extractJsonObject(raw);
   if (!parsed) {
     return {
       sections: fallback,

@@ -10,6 +10,7 @@ import AdminIntegrationsPage from "./admin/AdminIntegrationsPage";
 import LearnPage from "./learn/LearnPage";
 import AlertsPage from "./alerts/AlertsPage";
 import BriefingPage from "./briefing/BriefingPage";
+import CoachPage from "./coach/CoachPage";
 import LegalPage, { isLegalView } from "./legal/LegalPage";
 import HomePage from "./home/HomePage";
 import { isViewKey, pathForView, resolveRoute, type ViewKey } from "./routing";
@@ -33,11 +34,12 @@ const MODULE_VIEWS: readonly ModuleKey[] = [
   "trading",
   "alerts",
   "briefing",
+  "coach",
 ];
 
 // Personal data modules default to signed-in only even before /api/config has
 // resolved and the compiled navigation is in use.
-const SIGNED_IN_VIEWS: readonly ModuleKey[] = ["trading", "alerts", "briefing"];
+const SIGNED_IN_VIEWS: readonly ModuleKey[] = ["trading", "alerts", "briefing", "coach"];
 
 // The Analysis, Breakouts and Learn pages are public: market quotes, the shared
 // watchlist, the breakout feed and the anonymous drill carry no account data.
@@ -384,6 +386,8 @@ export default function App() {
           <AlertsPage />
         ) : view === "briefing" ? (
           <BriefingPage />
+        ) : view === "coach" ? (
+          <CoachPage />
         ) : isLegalView(view) ? (
           <LegalPage view={view} onNavigate={handleViewChange} />
         ) : view === "settings" ? (

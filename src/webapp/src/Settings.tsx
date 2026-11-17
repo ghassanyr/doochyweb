@@ -430,8 +430,8 @@ export default function SettingsPage({
               <h2 className="text-sm font-semibold tracking-tight text-fg">Your data</h2>
               <p className="text-sm text-fg-muted">
                 Download a JSON copy of your profile, cTrader account labels, alerts, journal,
-                paper trades, briefings and Telegram link. Password hashes and integration secrets
-                are never included.
+                paper trades, briefings, coaching reports and Telegram link. Password hashes and
+                integration secrets are never included.
               </p>
             </div>
             <div className="mt-3">

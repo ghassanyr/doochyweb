@@ -54,7 +54,7 @@ Backups are Extended JSON snapshots of every non-system MongoDB collection. They
 
 Old snapshots keep data that was later deleted from the database. Match retention to your own policy, then remove expired snapshots securely. On POSIX use `shred -u <file>` when the filesystem supports it; on SSDs, cloud volumes and snapshots, full-disk or volume encryption is the reliable protection because overwriting a file cannot guarantee every stored copy is gone.
 
-Signed-in users can download their own JSON export under **Settings → Your data**. Admins can download the same export from the user row in **Admin**. Exports include profile data, cTrader account labels, alerts, journal, paper trades, briefings and the Telegram link; password hashes and integration secrets are excluded.
+Signed-in users can download their own JSON export under **Settings → Your data**. Admins can download the same export from the user row in **Admin**. Exports include profile data, cTrader account labels, alerts, journal, paper trades, briefings, coaching reports and the Telegram link; password hashes and integration secrets are excluded.
 
 ## Common commands
 
@@ -106,6 +106,14 @@ AI features are optional and configured under **Admin → Integrations**. Pick O
 The Briefing page stores one brief per user per UTC day from the effective watchlist, active published signals and open journal ideas. The snapshot is frozen when the brief is generated, so the page keeps showing the numbers the write-up was based on until you refresh it. Each brief includes per-symbol notes, open ideas with recorded plan levels, active signals, key risks, levels to monitor, and data notes. Members choose their focus sessions under the briefing header; the default is London and New York.
 
 With an AI provider configured, the brief is written as structured JSON and validated against the snapshot. If no provider is saved or the response is unusable, the page still renders a deterministic data summary. No news feed is connected, so the brief never invents headlines or event context.
+
+### AI Coach
+
+The Coach page reviews the member's own Trade Journal. It uses fixed UTC weeks, Monday 00:00 through Sunday 23:59, so a report does not move with the viewer's timezone. Individual trade reviews are available for any closed trade. Weekly behaviour reports need at least five closed trades in the week.
+
+Generation is manual. Opening the page only reads stored reports and deterministically rebuilt facts; it never calls the AI provider. Press Generate or Regenerate to write a review. Weekly reports cover results, plan completeness, grouping by symbol, side, strategy, tag and weekday, and data quality. Trade reviews cover the recorded plan, execution, risk definition and journal quality. Journal mutations clear the affected coaching reports.
+
+With an AI provider configured, the review is written as structured JSON over a frozen fact snapshot. If no provider is saved or the response is unusable, the page still shows a deterministic review. P&L is shown as recorded and is never converted between account currencies. The coach does not predict markets, recommend trades or give financial advice, and note text is treated as untrusted data.
 
 ### Webhooks
 

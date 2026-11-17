@@ -250,6 +250,7 @@ const contentSchema = new mongoose.Schema(
       trading: { type: String, default: DEFAULT_CONTENT.emptyStates.trading },
       alerts: { type: String, default: DEFAULT_CONTENT.emptyStates.alerts },
       briefing: { type: String, default: DEFAULT_CONTENT.emptyStates.briefing },
+      coach: { type: String, default: DEFAULT_CONTENT.emptyStates.coach },
     },
   },
   { _id: false }

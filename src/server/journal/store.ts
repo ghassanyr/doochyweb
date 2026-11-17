@@ -9,6 +9,8 @@ import mongoose from "mongoose";
 
 import { briefingDateKey } from "../briefing/build";
 import { clearBriefing } from "../briefing/store";
+import { clearCoachTrade, clearCoachWeeks } from "../coach/store";
+import { coachWeekKey } from "../coach/weeks";
 import type {
   JournalEntryView,
   JournalImportResult,
@@ -83,6 +85,26 @@ async function invalidateBriefing(userId: string): Promise<void> {
     await clearBriefing(userId, briefingDateKey(new Date()));
   } catch {
     // The brief is regenerated on the next read if this fails.
+  }
+}
+
+function closedWeekKey(value: unknown): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? coachWeekKey(date) : null;
+}
+
+async function invalidateCoachForEntry(
+  userId: string,
+  entryId: string,
+  closedAts: unknown[] = []
+): Promise<void> {
+  try {
+    await clearCoachTrade(userId, entryId);
+    const weeks = [...new Set(closedAts.map(closedWeekKey).filter((key): key is string => Boolean(key)))];
+    if (weeks.length) await clearCoachWeeks(userId, weeks);
+  } catch {
+    // Reports stay readable; the member can regenerate after a transient error.
   }
 }
 
@@ -201,8 +223,10 @@ export async function createJournalEntry(
     accountLabel: null,
     verified: false,
   });
+  const view = toJournalView(doc.toObject());
   await invalidateBriefing(userId);
-  return toJournalView(doc.toObject());
+  await invalidateCoachForEntry(userId, view.id, [view.closedAt]);
+  return view;
 }
 
 export async function updateJournalEntry(
@@ -213,6 +237,7 @@ export async function updateJournalEntry(
   if (!mongoose.isValidObjectId(id)) throw new JournalError(404, "journal entry not found");
   const doc = await JournalEntry.findOne({ _id: id, ...ownerFilter(userId) }).exec();
   if (!doc) throw new JournalError(404, "journal entry not found");
+  const previousClosedAt = doc.closedAt ?? null;
 
   doc.symbol = input.symbol;
   doc.side = input.side;
@@ -230,8 +255,10 @@ export async function updateJournalEntry(
   doc.tags = input.tags;
   doc.note = input.note;
   await doc.save();
+  const view = toJournalView(doc.toObject());
   await invalidateBriefing(userId);
-  return toJournalView(doc.toObject());
+  await invalidateCoachForEntry(userId, view.id, [previousClosedAt, view.closedAt]);
+  return view;
 }
 
 /** Replace only the note. Used by the row action, which leaves broker data alone. */
@@ -245,8 +272,10 @@ export async function updateJournalNote(
   if (!doc) throw new JournalError(404, "journal entry not found");
   doc.note = note;
   await doc.save();
+  const view = toJournalView(doc.toObject());
   await invalidateBriefing(userId);
-  return toJournalView(doc.toObject());
+  await invalidateCoachForEntry(userId, view.id, [view.closedAt]);
+  return view;
 }
 
 /** When this user's journal last imported from the broker. */
@@ -279,11 +308,45 @@ export async function recordSync(
   ).exec();
 }
 
+export async function findJournalEntry(
+  userId: string,
+  id: string
+): Promise<JournalEntryView | null> {
+  if (!mongoose.isValidObjectId(id)) return null;
+  const doc = await JournalEntry.findOne({ _id: id, ...ownerFilter(userId) }).lean().exec();
+  return doc ? toJournalView(doc) : null;
+}
+
+export async function listClosedJournalEntries(
+  userId: string,
+  options: { from?: Date; to?: Date; limit?: number; order?: "asc" | "desc" } = {}
+): Promise<JournalEntryView[]> {
+  const filter: Record<string, unknown> = {
+    ...ownerFilter(userId),
+    status: "closed",
+    closedAt: { $ne: null },
+  };
+  if (options.from || options.to) {
+    const range: Record<string, Date> = {};
+    if (options.from) range.$gte = options.from;
+    if (options.to) range.$lt = options.to;
+    filter.closedAt = { ...(filter.closedAt as object), ...range };
+  }
+
+  let query = JournalEntry.find(filter).sort({ closedAt: options.order === "desc" ? -1 : 1 });
+  if (options.limit != null) query = query.limit(Math.max(1, options.limit));
+  const docs = await query.lean().exec();
+  return (docs as any[]).map(toJournalView);
+}
+
 export async function deleteJournalEntry(userId: string, id: string): Promise<void> {
   if (!mongoose.isValidObjectId(id)) throw new JournalError(404, "journal entry not found");
+  const doc = await JournalEntry.findOne({ _id: id, ...ownerFilter(userId) }).lean().exec();
+  if (!doc) throw new JournalError(404, "journal entry not found");
   const result = await JournalEntry.deleteOne({ _id: id, ...ownerFilter(userId) }).exec();
   if (!result.deletedCount) throw new JournalError(404, "journal entry not found");
   await invalidateBriefing(userId);
+  await invalidateCoachForEntry(userId, id, [(doc as any).closedAt]);
 }
 
 /**
@@ -309,6 +372,7 @@ export async function importCtraderHistory(
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
   let imported = 0;
+  const importedWeeks = new Set<string>();
   for (const row of history.trades) {
     if (!row.dealId) continue;
     const result = await JournalEntry.updateOne(
@@ -316,7 +380,16 @@ export async function importCtraderHistory(
       { $setOnInsert: historyRowToJournal(row, { ctid, label: accountLabel }) },
       { upsert: true }
     ).exec();
-    if (result.upsertedCount) imported++;
+    if (result.upsertedCount) {
+      imported++;
+      const week = closedWeekKey(new Date(row.closeTimestamp));
+      if (week) importedWeeks.add(week);
+    }
+  }
+  try {
+    await clearCoachWeeks(userId, [...importedWeeks]);
+  } catch {
+    // The next explicit report generation still uses the latest journal data.
   }
 
   return {

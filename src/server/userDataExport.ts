@@ -4,6 +4,8 @@ import { PriceAlert, toAlertView } from "./alerts/store";
 import type { AlertView } from "./alerts/types";
 import { Briefing, toBriefingRecord } from "./briefing/store";
 import type { BriefingRecord } from "./briefing/types";
+import { CoachReportModel, toCoachReport } from "./coach/store";
+import type { CoachReport } from "./coach/types";
 import { Credentials, User, type StoredAccount } from "./db";
 import { JournalEntry, JournalSync, toJournalView } from "./journal/store";
 import type { JournalEntryView } from "./journal/types";
@@ -13,7 +15,7 @@ import type { PaperPositionView } from "./simulation/types";
 import { TelegramLink, toLinkView, type TelegramLinkRecord } from "./telegram/store";
 
 export const USER_EXPORT_FORMAT = "doochy-user-data";
-export const USER_EXPORT_VERSION = 2;
+export const USER_EXPORT_VERSION = 3;
 
 export interface UserDataExport {
   format: typeof USER_EXPORT_FORMAT;
@@ -46,6 +48,7 @@ export interface UserDataExport {
   };
   paperTrading: PaperPositionView[];
   briefings: BriefingRecord[];
+  coachReports: CoachReport[];
   telegram: TelegramLinkRecord | null;
   watchlist: {
     mode: WatchlistMode;
@@ -77,7 +80,7 @@ export async function exportUserData(
   if (!mongoose.isValidObjectId(userId)) return null;
   const owner = new mongoose.Types.ObjectId(userId);
 
-  const [user, credentials, alerts, journal, sync, paper, briefings, telegram, watchlist] =
+  const [user, credentials, alerts, journal, sync, paper, briefings, coachReports, telegram, watchlist] =
     await Promise.all([
       User.findById(owner).lean().exec(),
       Credentials.findOne({ userId: owner }).lean().exec(),
@@ -86,6 +89,7 @@ export async function exportUserData(
       JournalSync.findOne({ userId: owner }).lean().exec(),
       PaperPosition.find({ userId: owner }).sort({ openedAt: 1 }).lean().exec(),
       Briefing.find({ userId: owner }).sort({ dateKey: 1 }).lean().exec(),
+      CoachReportModel.find({ userId: owner }).sort({ createdAt: 1 }).lean().exec(),
       TelegramLink.findOne({ userId: owner }).lean().exec(),
       UserWatchlist.findOne({ userId: owner }).lean().exec(),
     ]);
@@ -125,6 +129,9 @@ export async function exportUserData(
     },
     paperTrading: (paper as any[]).map(toPaperView),
     briefings: (briefings as any[]).map(toBriefingRecord),
+    coachReports: (coachReports as any[])
+      .map(toCoachReport)
+      .filter((report): report is CoachReport => Boolean(report)),
     telegram: telegram ? toLinkView(telegram) : null,
     watchlist: watchlist
       ? {

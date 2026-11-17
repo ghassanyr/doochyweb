@@ -26,6 +26,7 @@ import { startAlertRunner, stopAlertRunner } from "./alerts/runner";
 import { simulationRouter } from "./simulation/routes";
 import { startPaperRunner, stopPaperRunner } from "./simulation/runner";
 import { briefingRouter } from "./briefing/routes";
+import { coachRouter } from "./coach/routes";
 import { promoteConfiguredAdmins } from "./admin/roles";
 import { adminRouter } from "./admin/routes";
 import { siteConfigRouter } from "./settings/routes";
@@ -664,6 +665,7 @@ app.use("/api/alerts", maintenanceGate, moduleGate("alerts"), alertsRouter);
 // Paper trading is part of the Trading page, so it follows that access rule.
 app.use("/api/simulation", maintenanceGate, moduleGate("trading"), simulationRouter);
 app.use("/api/briefing", maintenanceGate, moduleGate("briefing"), briefingRouter);
+app.use("/api/coach", maintenanceGate, moduleGate("coach"), coachRouter);
 app.use("/api/trainer", maintenanceGate, moduleGate("learn"), createTrainerRouter());
 app.use("/api/telegram", telegramRouter);
 app.use("/api/auth", accountAuthRouter);

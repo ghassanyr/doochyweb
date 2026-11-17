@@ -56,7 +56,8 @@ export type ModuleKey =
   | "learn"
   | "trading"
   | "alerts"
-  | "briefing";
+  | "briefing"
+  | "coach";
 
 export type ModuleAccess = "public" | "signed-in" | "admin";
 
@@ -172,6 +173,7 @@ export interface ContentSettings {
     trading: string;
     alerts: string;
     briefing: string;
+    coach: string;
   };
 }
 
