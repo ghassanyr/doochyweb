@@ -7,6 +7,7 @@
 
 import mongoose from "mongoose";
 
+import { parseSessionName } from "./parse";
 import type {
   ParsedImage,
   ParsedSession,
@@ -38,6 +39,7 @@ const daySchema = new mongoose.Schema(
   {
     sessionKey: { type: String, required: true, unique: true },
     sessionDate: { type: String, required: true },
+    sessionName: { type: String, default: "" },
     subject: { type: String, default: "" },
     sender: { type: String, default: "" },
     receivedAt: { type: Date, default: null },
@@ -100,6 +102,18 @@ function publicMarket(market: any): SessionMarket {
   };
 }
 
+/**
+ * The stored label, or one derived from the subject for documents written
+ * before the label was persisted. Legacy documents used the date alone as their
+ * key, so they need this fallback to appear correctly in history.
+ */
+function sessionNameOf(doc: any): string {
+  if (typeof doc?.sessionName === "string" && doc.sessionName.trim()) {
+    return doc.sessionName.trim();
+  }
+  return parseSessionName(typeof doc?.subject === "string" ? doc.subject : "");
+}
+
 function publicDay(doc: any): SessionDay {
   const receivedAt =
     doc?.receivedAt instanceof Date
@@ -110,6 +124,7 @@ function publicDay(doc: any): SessionDay {
   return {
     sessionKey: String(doc?.sessionKey ?? ""),
     sessionDate: String(doc?.sessionDate ?? ""),
+    sessionName: sessionNameOf(doc),
     subject: typeof doc?.subject === "string" ? doc.subject : "",
     sender: typeof doc?.sender === "string" && doc.sender ? doc.sender : null,
     receivedAt,
@@ -122,6 +137,7 @@ function summary(doc: any): SessionDaySummary {
   return {
     sessionKey: String(doc?.sessionKey ?? ""),
     sessionDate: String(doc?.sessionDate ?? ""),
+    sessionName: sessionNameOf(doc),
     subject: typeof doc?.subject === "string" ? doc.subject : "",
     generatedAt: typeof doc?.generatedAt === "string" ? doc.generatedAt : null,
     marketCount: Array.isArray(doc?.markets) ? doc.markets.length : 0,
@@ -129,13 +145,43 @@ function summary(doc: any): SessionDaySummary {
 }
 
 /**
+ * True when a stored document is the date-only copy of this same session.
+ *
+ * The first import stored the US analysis under the bare date. Re-importing
+ * that same session would otherwise create a second copy next to the old one.
+ * A different session on the same date has a different label and must be kept
+ * as history.
+ */
+export function isLegacyDuplicate(
+  legacy: { sessionKey?: unknown; sessionName?: unknown; subject?: unknown },
+  session: Pick<ParsedSession, "sessionKey" | "sessionDate" | "sessionName">
+): boolean {
+  if (session.sessionKey === session.sessionDate) return false;
+  if (String(legacy.sessionKey ?? "") !== session.sessionDate) return false;
+  return sessionNameOf(legacy) === session.sessionName;
+}
+
+async function removeLegacyDuplicate(session: ParsedSession): Promise<void> {
+  if (session.sessionKey === session.sessionDate) return;
+  const legacy: any = await SessionAnalysisDayModel.findOne({
+    sessionKey: session.sessionDate,
+  })
+    .lean()
+    .exec();
+  if (!legacy || !isLegacyDuplicate(legacy, session)) return;
+  await SessionAnalysisImageModel.deleteMany({ dayKey: legacy.sessionKey }).exec();
+  await SessionAnalysisDayModel.deleteOne({ _id: legacy._id }).exec();
+}
+
+/**
  * Write one session and replace its chart images. Returns the stored day.
- * Re-importing the same session date updates it in place.
+ * Re-importing the same session updates it in place.
  */
 export async function saveSession(
   session: ParsedSession,
   images: (ParsedImage | null)[]
 ): Promise<SessionDay> {
+  await removeLegacyDuplicate(session);
   await SessionAnalysisImageModel.deleteMany({ dayKey: session.sessionKey }).exec();
 
   const imageIds: (mongoose.Types.ObjectId | null)[] = [];
@@ -169,6 +215,7 @@ export async function saveSession(
       $set: {
         sessionKey: session.sessionKey,
         sessionDate: session.sessionDate,
+        sessionName: session.sessionName,
         subject: session.subject,
         sender: session.sender,
         receivedAt: Number.isFinite(receivedAt.getTime()) ? receivedAt : new Date(),
@@ -199,7 +246,9 @@ export async function latestSession(): Promise<SessionDay | null> {
   return doc ? publicDay(doc) : null;
 }
 
-export async function listSessionDays(limit = 30): Promise<SessionDaySummary[]> {
+// Three sessions arrive each day, so 90 summaries keep roughly a month of
+// history without making the response heavy.
+export async function listSessionDays(limit = 90): Promise<SessionDaySummary[]> {
   const docs: any[] = await SessionAnalysisDayModel.find({})
     .sort({ sessionDate: -1, receivedAt: -1 })
     .limit(limit)

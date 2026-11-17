@@ -398,8 +398,41 @@ export interface ParseSessionInput {
 }
 
 /**
+ * The session label carried in the subject, for example "US Session" in
+ * "Fwd: AI Market Analysis (US Session)". Three emails arrive each day, one per
+ * session, so the label is part of the identity of a stored analysis.
+ */
+export function parseSessionName(subject: string | null | undefined): string {
+  const text = (subject ?? "").replace(/\s+/g, " ").trim();
+  const parenthetical = text.match(/\(\s*([^)]{0,40}?session[^)]{0,40}?)\s*\)/i);
+  const bare = text.match(/\b(asian|european|us)\s+session\b/i);
+  return normalizeSessionName(parenthetical?.[1] ?? bare?.[0] ?? "");
+}
+
+export function normalizeSessionName(value: string): string {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  const lower = cleaned.toLowerCase();
+  if (lower === "us session" || lower === "u.s. session") return "US Session";
+  if (lower === "asian session") return "Asian Session";
+  if (lower === "european session") return "European Session";
+  if (!cleaned) return "Session";
+  return cleaned.replace(/\b[a-z]/g, (char) => char.toUpperCase());
+}
+
+function sessionSlug(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "session"
+  );
+}
+
+/**
  * Build a session from a message. The session date comes from the analysis
- * stamp when present, because a forwarded copy can arrive the next day.
+ * stamp when present, because a forwarded copy can arrive the next day. The
+ * key also carries the session name so the Asian, European and US emails for
+ * the same day do not overwrite each other.
  */
 export function parseSession(input: ParseSessionInput): ParsedSession {
   // A forwarded message often carries a short plain-text part next to the real
@@ -413,10 +446,12 @@ export function parseSession(input: ParseSessionInput): ParsedSession {
   const received = input.receivedAt ? new Date(input.receivedAt) : new Date();
   const receivedDate = Number.isFinite(received.getTime()) ? received : new Date();
   const sessionDate = generated?.date ?? dateKey(receivedDate);
+  const sessionName = parseSessionName(input.subject);
 
   return {
-    sessionKey: sessionDate,
+    sessionKey: `${sessionDate}-${sessionSlug(sessionName)}`,
     sessionDate,
+    sessionName,
     subject: (input.subject ?? "").trim() || "AI Market Analysis",
     sender: (input.from ?? "").trim(),
     receivedAt: receivedDate.toISOString(),

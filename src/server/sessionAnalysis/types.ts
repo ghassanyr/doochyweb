@@ -33,6 +33,8 @@ export interface ParsedImage {
 export interface ParsedSession {
   sessionKey: string;
   sessionDate: string;
+  /** Session label from the subject: "Asian Session", "European Session" or "US Session". */
+  sessionName: string;
   subject: string;
   sender: string;
   receivedAt: string;
@@ -48,6 +50,7 @@ export interface SessionMarket extends ParsedMarket {
 export interface SessionDay {
   sessionKey: string;
   sessionDate: string;
+  sessionName: string;
   subject: string;
   sender: string | null;
   receivedAt: string | null;
@@ -58,6 +61,7 @@ export interface SessionDay {
 export interface SessionDaySummary {
   sessionKey: string;
   sessionDate: string;
+  sessionName: string;
   subject: string;
   generatedAt: string | null;
   marketCount: number;

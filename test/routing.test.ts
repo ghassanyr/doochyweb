@@ -78,6 +78,19 @@ describe("path routing", () => {
     });
   });
 
+  test("session history is a nested session analysis route", () => {
+    assert.equal(pathForView("session-analysis-history"), "/session-analysis/history");
+    assert.equal(viewFromPath("/session-analysis/history"), "session-analysis-history");
+    assert.deepEqual(
+      resolveRoute({ pathname: "/session-analysis/history", search: "", hostname: D }),
+      { view: "session-analysis-history", redirectTo: null }
+    );
+    assert.deepEqual(
+      resolveRoute({ pathname: "/session-analysis/history/", search: "", hostname: D }),
+      { view: "session-analysis-history", redirectTo: "/session-analysis/history" }
+    );
+  });
+
   test("renders Home at the root", () => {
     assert.deepEqual(resolveRoute({ pathname: "/", search: "", hostname: D }), {
       view: "home",

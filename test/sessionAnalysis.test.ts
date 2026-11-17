@@ -19,10 +19,17 @@ import {
   parseGeneratedAt,
   parseMarkets,
   parseSession,
+  parseSessionName,
+  normalizeSessionName,
   type ImageSize,
 } from "../src/server/sessionAnalysis/parse";
 import type { ParsedImage, ParsedMarket } from "../src/server/sessionAnalysis/types";
-import { storedBuffer, imageById, SessionAnalysisImageModel } from "../src/server/sessionAnalysis/store";
+import {
+  imageById,
+  isLegacyDuplicate,
+  SessionAnalysisImageModel,
+  storedBuffer,
+} from "../src/server/sessionAnalysis/store";
 
 const EMAIL_TEXT = `AI Market Analysis
 17-Nov-2026 06:14 EST
@@ -175,7 +182,8 @@ describe("session analysis parsing", () => {
       ].join(""),
       receivedAt: "2026-11-18T02:00:00.000Z",
     });
-    assert.equal(session.sessionKey, "2026-11-17");
+    assert.equal(session.sessionKey, "2026-11-17-session");
+    assert.equal(session.sessionName, "Session");
     assert.equal(session.markets.length, 1);
     assert.equal(session.markets[0]?.symbol, "BTCUSD");
   });
@@ -193,7 +201,8 @@ describe("session analysis parsing", () => {
       receivedAt: "2026-11-18T02:00:00.000Z",
       text: EMAIL_TEXT,
     });
-    assert.equal(session.sessionKey, "2026-11-17");
+    assert.equal(session.sessionKey, "2026-11-17-us-session");
+    assert.equal(session.sessionName, "US Session");
     assert.equal(session.generatedAt, "17-Nov-2026 06:14 EST");
     assert.equal(session.markets.length, 3);
   });
@@ -203,8 +212,80 @@ describe("session analysis parsing", () => {
       receivedAt: "2026-11-18T02:00:00.000Z",
       text: "BTCUSD | Target Level 63564.0977\nPattern\n: Support",
     });
-    assert.equal(session.sessionKey, "2026-11-18");
+    assert.equal(session.sessionKey, "2026-11-18-session");
+    assert.equal(session.sessionName, "Session");
     assert.equal(session.generatedAt, null);
+  });
+});
+
+describe("session names", () => {
+  test("reads the session label from the subject", () => {
+    assert.equal(parseSessionName("Fwd: AI Market Analysis (US Session)"), "US Session");
+    assert.equal(parseSessionName("AI Market Analysis (Asian Session)"), "Asian Session");
+    assert.equal(parseSessionName("AI Market Analysis (European Session)"), "European Session");
+    assert.equal(parseSessionName("AI Market Analysis - European Session"), "European Session");
+    assert.equal(parseSessionName("AI Market Analysis"), "Session");
+    assert.equal(parseSessionName(null), "Session");
+  });
+
+  test("normalizes known session labels", () => {
+    assert.equal(normalizeSessionName("us session"), "US Session");
+    assert.equal(normalizeSessionName("U.S. Session"), "US Session");
+    assert.equal(normalizeSessionName("asian session"), "Asian Session");
+    assert.equal(normalizeSessionName("european session"), "European Session");
+    assert.equal(normalizeSessionName("  "), "Session");
+  });
+
+  test("keeps the three sessions on one date apart", () => {
+    const text = "17-Nov-2026 06:14 EST\nBTCUSD | Target Level 63564.0977\nPattern : Support";
+    const keys = ["Asian Session", "European Session", "US Session"].map((name) => {
+      const session = parseSession({
+        subject: `AI Market Analysis (${name})`,
+        text,
+      });
+      assert.equal(session.sessionDate, "2026-11-17");
+      assert.equal(session.sessionName, name);
+      return session.sessionKey;
+    });
+    assert.deepEqual(keys, [
+      "2026-11-17-asian-session",
+      "2026-11-17-european-session",
+      "2026-11-17-us-session",
+    ]);
+    assert.equal(new Set(keys).size, 3);
+  });
+});
+
+describe("legacy session replacement", () => {
+  const session = {
+    sessionKey: "2026-11-17-us-session",
+    sessionDate: "2026-11-17",
+    sessionName: "US Session",
+  };
+
+  test("replaces a date-only document for the same session", () => {
+    assert.equal(
+      isLegacyDuplicate({ sessionKey: "2026-11-17", sessionName: "US Session" }, session),
+      true
+    );
+    assert.equal(
+      isLegacyDuplicate(
+        { sessionKey: "2026-11-17", subject: "Fwd: AI Market Analysis (US Session)" },
+        session
+      ),
+      true
+    );
+  });
+
+  test("keeps a different session on the same date", () => {
+    assert.equal(
+      isLegacyDuplicate({ sessionKey: "2026-11-17", sessionName: "Asian Session" }, session),
+      false
+    );
+  });
+
+  test("ignores a key that is already session-aware", () => {
+    assert.equal(isLegacyDuplicate({ sessionKey: "2026-11-17-us-session" }, session), false);
   });
 });
 
@@ -374,7 +455,7 @@ describe("forwarded analysis mail", () => {
       receivedAt: nested.date,
       text: nested.text,
     });
-    assert.equal(session.sessionKey, "2026-11-17");
+    assert.equal(session.sessionKey, "2026-11-17-session");
     assert.equal(session.markets.length, 1);
     assert.equal(session.markets[0]?.symbol, "BTCUSD");
   });
@@ -441,7 +522,8 @@ describe("inline forwarded analysis mail", () => {
       html: typeof parsed.html === "string" ? parsed.html : null,
       text: parsed.text,
     });
-    assert.equal(session.sessionKey, "2026-11-17");
+    assert.equal(session.sessionKey, "2026-11-17-us-session");
+    assert.equal(session.sessionName, "US Session");
     assert.equal(session.markets.length, 1);
     assert.equal(session.markets[0]?.symbol, "BTCUSD");
     assert.equal(session.markets[0]?.pattern, "Support");

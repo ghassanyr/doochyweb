@@ -112,7 +112,13 @@ export function AppSidebar({
   const groups = groupModules(modules, navGroups, { signedIn, isAdmin });
   const adminActive =
     view === "admin" || view === "admin-settings" || view === "admin-integrations";
-  const analysisActive = view === "analysis" || view === "session-analysis";
+  const analysisActive =
+    view === "analysis" ||
+    view === "session-analysis" ||
+    view === "session-analysis-history";
+  const analysisSubActive = (item: ViewKey) =>
+    view === item ||
+    (item === "session-analysis" && view === "session-analysis-history");
 
   function navigate(next: ViewKey) {
     onNavigate(next);
@@ -193,10 +199,10 @@ export function AppSidebar({
                           key={item.view}
                           view={item.view}
                           onNavigate={navigate}
-                          aria-current={view === item.view ? "page" : undefined}
+                          aria-current={analysisSubActive(item.view) ? "page" : undefined}
                           className={
                             "block rounded-md px-2 py-1.5 text-[12px] transition " +
-                            (view === item.view
+                            (analysisSubActive(item.view)
                               ? "bg-soft font-medium text-accent"
                               : "text-fg-muted hover:bg-soft hover:text-fg")
                           }

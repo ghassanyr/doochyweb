@@ -3,6 +3,7 @@ import { LogIn } from "lucide-react";
 import { api, getToken, setToken, type ConnectInput, type ModuleKey } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import SessionAnalysisPage from "./market/SessionAnalysisPage";
+import SessionAnalysisHistoryPage from "./market/SessionAnalysisHistoryPage";
 import SignalsPage from "./signals/SignalsPage";
 import BreakoutsPage from "./market/BreakoutsPage";
 import AdminPage from "./admin/AdminPage";
@@ -243,7 +244,7 @@ export default function App() {
 
   const viewModule = (MODULE_VIEWS as readonly string[]).includes(view)
     ? (view as ModuleKey)
-    : view === "session-analysis"
+    : view === "session-analysis" || view === "session-analysis-history"
       ? "analysis"
       : null;
   const viewAccess = viewModule
@@ -406,7 +407,14 @@ export default function App() {
         ) : view === "analysis" ? (
           <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
         ) : view === "session-analysis" ? (
-          <SessionAnalysisPage isAdmin={isAdmin} />
+          <SessionAnalysisPage
+            isAdmin={isAdmin}
+            onOpenHistory={() => handleViewChange("session-analysis-history")}
+          />
+        ) : view === "session-analysis-history" ? (
+          <SessionAnalysisHistoryPage
+            onOpenCurrent={() => handleViewChange("session-analysis")}
+          />
         ) : view === "signals" ? (
           <SignalsPage canRefresh={signedIn} canManageSignals={isAdmin} />
         ) : view === "breakouts" ? (

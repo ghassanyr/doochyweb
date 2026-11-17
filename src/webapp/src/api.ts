@@ -1817,6 +1817,7 @@ export interface SessionMarket {
 export interface SessionDay {
   sessionKey: string;
   sessionDate: string;
+  sessionName: string;
   subject: string;
   sender: string | null;
   receivedAt: string | null;
@@ -1827,6 +1828,7 @@ export interface SessionDay {
 export interface SessionDaySummary {
   sessionKey: string;
   sessionDate: string;
+  sessionName: string;
   subject: string;
   generatedAt: string | null;
   marketCount: number;
@@ -1849,6 +1851,8 @@ export interface SessionSyncResult {
 
 export const sessionAnalysisApi = {
   latest: () => request<SessionLatestResponse>("/api/session-analysis/latest"),
+
+  days: () => request<{ days: SessionDaySummary[] }>("/api/session-analysis/days"),
 
   day: (sessionKey: string) =>
     request<{ day: SessionDay }>(

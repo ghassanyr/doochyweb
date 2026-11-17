@@ -427,7 +427,7 @@ async function runSync(): Promise<SessionSyncResult> {
             imported: false,
             sessionKey: session.sessionKey,
             markets: session.markets.length,
-            message: `Session ${session.sessionKey} is already up to date.`,
+            message: `${session.sessionName} is already up to date.`,
           });
         }
 
@@ -439,7 +439,7 @@ async function runSync(): Promise<SessionSyncResult> {
           imported: true,
           sessionKey: session.sessionKey,
           markets: session.markets.length,
-          message: `Imported ${session.markets.length} market${session.markets.length === 1 ? "" : "s"} for ${session.sessionKey}.`,
+          message: `Imported ${session.markets.length} market${session.markets.length === 1 ? "" : "s"} for the ${session.sessionName}.`,
         });
       }
 
