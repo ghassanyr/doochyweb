@@ -1,9 +1,10 @@
 // Signed-in Today dashboard.
 //
 // One screen that answers "what needs me right now": balances, open signals,
-// alerts, the daily brief, the coach's weekly focus and the biggest watchlist
-// movers. Each card loads from its existing endpoint independently, so one slow
-// or failed service never blanks the rest of the page.
+// the latest session analysis, alerts, the daily brief, the coach's weekly
+// focus and the biggest watchlist movers. Each card loads from its existing
+// endpoint independently, so one slow or failed service never blanks the rest
+// of the page.
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -11,6 +12,7 @@ import {
   Bell,
   Briefcase,
   ChevronRight,
+  Globe,
   LineChart,
   Newspaper,
   Radio,
@@ -22,6 +24,7 @@ import {
   alertsApi,
   briefingApi,
   coachApi,
+  sessionAnalysisApi,
   signalsApi,
   type AccountView,
   type AlertListResponse,
@@ -29,11 +32,13 @@ import {
   type BriefingResponse,
   type CoachWeeklyResponse,
   type ModuleKey,
+  type SessionLatestResponse,
 } from "../api";
 import { FadeRise } from "../components/motion";
 import { RouteLink } from "../components/RouteLink";
 import { Badge, Card, Skeleton, buttonClass } from "../components/ui";
 import { formatCurrency, formatDisplayDate, formatNumber } from "../format";
+import { SessionBadge } from "../market/SessionAnalysisShared";
 import type { ViewKey } from "../routing";
 import type { Signal } from "../signals/types";
 import {
@@ -87,6 +92,7 @@ export default function TodayPage({
   const [alerts, setAlerts] = useState<Loadable<AlertListResponse>>(loading);
   const [briefing, setBriefing] = useState<Loadable<BriefingResponse>>(loading);
   const [coach, setCoach] = useState<Loadable<CoachWeeklyResponse>>(loading);
+  const [session, setSession] = useState<Loadable<SessionLatestResponse>>(loading);
 
   useEffect(() => {
     let alive = true;
@@ -125,6 +131,15 @@ export default function TodayPage({
       })
       .catch(() => {
         if (alive) setCoach({ loading: false, error: "Could not load the weekly review.", data: null });
+      });
+
+    sessionAnalysisApi
+      .latest()
+      .then((result) => {
+        if (alive) setSession({ loading: false, error: null, data: result });
+      })
+      .catch(() => {
+        if (alive) setSession({ loading: false, error: "Could not load session analysis.", data: null });
       });
 
     return () => {
@@ -260,7 +275,6 @@ export default function TodayPage({
             icon={<Radio className="h-4 w-4" />}
             view="signals"
             onNavigate={onNavigate}
-            className="md:col-span-2 xl:col-span-2"
           >
             <CardBody
               state={signals}
@@ -302,6 +316,99 @@ export default function TodayPage({
                   })}
                 </ul>
               )}
+            </CardBody>
+          </TodayCard>
+
+          <TodayCard
+            title="Session Analysis"
+            icon={<Globe className="h-4 w-4" />}
+            view="session-analysis"
+            onNavigate={onNavigate}
+          >
+            <CardBody
+              state={session}
+              empty="The next daily analysis will appear here after it is imported."
+              view="session-analysis"
+              onNavigate={onNavigate}
+              linkLabel="Open session analysis"
+            >
+              {(result) => {
+                const day = result.day;
+                if (!day || day.markets.length === 0) {
+                  return (
+                    <p className="text-sm text-fg-muted">
+                      The next daily analysis will appear here after it is imported.
+                    </p>
+                  );
+                }
+                const shown = day.markets.slice(0, 2);
+                const age = day.generatedAt ? relativeAgo(day.generatedAt) : null;
+                return (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <SessionBadge name={day.sessionName} />
+                      <span className="text-[11px] text-fg-faint">{day.sessionDate}</span>
+                      {age && <span className="ml-auto text-[11px] text-fg-faint">{age}</span>}
+                    </div>
+                    <ul className="space-y-1.5">
+                      {shown.map((market) => {
+                        const level =
+                          market.levelType === "support"
+                            ? "Support"
+                            : market.levelType === "resistance"
+                              ? "Resistance"
+                              : null;
+                        return (
+                          <li
+                            key={market.symbol}
+                            className="rounded-lg border border-hairline bg-soft px-2.5 py-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="text-[13px] font-semibold text-fg">
+                                  {market.symbol}
+                                </span>
+                                {market.pattern && (
+                                  <span className="truncate rounded-full border border-accent/20 bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent">
+                                    {market.pattern}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="shrink-0 text-sm font-semibold tabular-nums text-fg">
+                                {market.targetLevel || "-"}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-fg-faint">
+                              <span className="truncate">
+                                {level
+                                  ? `${level}${market.levelValue ? ` ${market.levelValue}` : ""}`
+                                  : market.targetPeriod || "Target level"}
+                              </span>
+                              {market.targetPeriod && level && (
+                                <span className="shrink-0">{market.targetPeriod}</span>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-fg-faint">
+                        {day.markets.length} {day.markets.length === 1 ? "market" : "markets"}
+                      </span>
+                      {day.markets.length > shown.length && (
+                        <RouteLink
+                          view="session-analysis"
+                          onNavigate={onNavigate}
+                          className="font-medium text-accent hover:underline"
+                        >
+                          View all
+                        </RouteLink>
+                      )}
+                    </div>
+                  </div>
+                );
+              }}
             </CardBody>
           </TodayCard>
 
@@ -552,12 +659,15 @@ function CardBody<T>({
   empty,
   view,
   onNavigate,
+  linkLabel,
   children,
 }: {
   state: Loadable<T>;
   empty: string;
   view: ViewKey;
   onNavigate: (view: ViewKey) => void;
+  /** Overrides the default "Open <view>" link text. */
+  linkLabel?: string;
   children: (data: T) => ReactNode;
 }) {
   if (state.loading) {
@@ -577,7 +687,7 @@ function CardBody<T>({
           onNavigate={onNavigate}
           className="text-[11px] font-medium text-accent hover:underline"
         >
-          Open {view}
+          {linkLabel ?? `Open ${view}`}
         </RouteLink>
       </div>
     );
