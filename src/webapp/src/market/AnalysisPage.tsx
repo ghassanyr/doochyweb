@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, RefreshCw, Settings2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, LogIn, RefreshCw, Settings2 } from "lucide-react";
 
 import { marketApi, type MarketWatchlist, type WatchlistMode } from "../api";
 import { FadeRise } from "../components/motion";
 import { Card } from "../components/ui";
-import { assetClass, type AssetFilter } from "./assetClass";
-import { AnalysisFilters } from "./AnalysisFilters";
+import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
 import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
 import { SortableGrid } from "./SortableGrid";
 import { pinSelectedTimeframe } from "./confluence";
 import { applyOrder } from "./order";
+import { SymbolSearch } from "./SymbolSearch";
 import { DEFAULT_TIMEFRAME, timeframes as staticTimeframes } from "./timeframes";
 import type { CatalogEntry, MarketResult, MarketSettings, SymbolType } from "./types";
 import { useSiteConfig } from "../siteConfig";
@@ -331,132 +331,250 @@ export default function AnalysisPage({
 
   return (
     <FadeRise>
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <aside
-          className="xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1"
-          aria-label="Analysis filters"
-        >
-          <AnalysisFilters
-            timeframes={timeframes}
-            timeframe={timeframe}
-            onTimeframeChange={setTimeframe}
-            assetFilter={assetFilter}
-            assetCounts={assetCounts}
-            onAssetFilterChange={setAssetFilter}
-            signedIn={signedIn}
-            mode={mode}
-            resultCount={results.length}
-            limit={limit}
-            onSwitchMode={(next) => void switchMode(next)}
-            onSignIn={onSignIn}
-            canEdit={canEdit}
-            catalog={config?.catalog ?? []}
-            onAddSymbol={(s) => void addSymbol(s)}
-          />
-        </aside>
+      <div className="space-y-3">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Analysis</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Live technical analysis for the markets you follow.
+          </p>
+        </header>
 
-        <div className="min-w-0 space-y-3 xl:col-start-1 xl:row-start-1">
-          <StatusLine
-            loading={loading}
-            okCount={okCount}
-            total={visibleResults.length}
-            secondsLeft={secondsLeft}
-            onOpenSettings={() => setShowSettings(true)}
-            onRefresh={() => void load()}
-          />
+        {/* Toolbar: timeframes + add market + refresh + settings */}
+        <Card className="flex flex-col gap-2.5 p-3">
+          <div className="flex flex-wrap items-center gap-1">
+            {timeframes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTimeframe(t.id)}
+                className={
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                  (t.id === timeframe
+                    ? "border border-accent/20 bg-accent-soft text-accent"
+                    : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
+                }
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-          {settings?.accountError && (
-            <Card className="border-danger/30 bg-danger-soft p-3.5 text-[13px] leading-relaxed text-fg-muted">
-              <AlertCircle className="mr-2 inline h-4 w-4 align-[-3px] text-danger" />
-              <span className="text-fg">{settings.accountError}</span>
-            </Card>
-          )}
+          <div
+            role="group"
+            aria-label="Filter by asset class"
+            className="flex flex-wrap items-center gap-1 border-t border-hairline pt-2.5"
+          >
+            <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
+              Asset class
+            </span>
+            {ASSET_FILTERS.map((f) => {
+              const active = f.id === assetFilter;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setAssetFilter(f.id)}
+                  className={
+                    "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                    (active
+                      ? "border border-accent/20 bg-accent-soft text-accent"
+                      : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
+                  }
+                >
+                  {f.label}
+                  <span
+                    className={
+                      "tabular-nums text-[10px] " + (active ? "opacity-70" : "text-fg-faint")
+                    }
+                  >
+                    {assetCounts[f.id]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-          {throttled > 0 && (
-            <div className="flex items-start gap-3 rounded-2xl border border-accent/25 bg-gradient-to-r from-accent/12 to-blue-500/8 p-3.5 text-[13px] leading-relaxed text-fg-muted">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-              <span>
-                cTrader throttled the last sweep, so {throttled} card
-                {throttled === 1 ? "" : "s"} {throttled === 1 ? "is" : "are"} showing cached bars.
-                Figures stay correct, just a few minutes behind.
-              </span>
-            </div>
-          )}
-
-          {error && (
-            <Card flat className="border-danger/30 bg-danger-soft p-3 text-sm text-danger">
-              {error}
-            </Card>
-          )}
-
-          {loading && results.length === 0 ? (
-            <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]">
-              {Array.from({ length: 10 }, (_, i) => (
-                <MarketCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : results.length === 0 ? (
-            <Card className="p-8 text-center">
-              <div className="text-sm text-fg-muted">{siteContent.emptyStates.analysis}</div>
-              <div className="mt-1 text-xs text-fg-faint">
-                {canEdit
-                  ? "Add a market in the filters panel to start analysing."
-                  : signedIn
-                    ? "Switch to My watchlist to add markets."
-                    : "Sign in to build your own watchlist."}
-              </div>
-            </Card>
-          ) : visibleResults.length === 0 ? (
-            <Card className="p-8 text-center">
-              <div className="text-sm text-fg-muted">No markets match this filter.</div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-hairline pt-2.5">
+            <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-faint">
+              Watchlist
+            </span>
+            {signedIn ? (
+              <>
+                <div
+                  role="group"
+                  aria-label="Watchlist source"
+                  className="flex rounded-md border border-hairline p-0.5"
+                >
+                  {(
+                    [
+                      { id: "site" as const, label: "Site list" },
+                      { id: "mine" as const, label: "My watchlist" },
+                    ]
+                  ).map((option) => {
+                    const active = mode === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => void switchMode(option.id)}
+                        className={
+                          "rounded px-2.5 py-1 text-xs font-medium transition " +
+                          (active
+                            ? "bg-accent-soft text-accent"
+                            : "text-fg-muted hover:bg-surface-hover hover:text-fg")
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {mode === "mine" && (
+                  <span className="tabular-nums text-[11px] text-fg-faint">
+                    {results.length}/{limit}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-[11px] text-fg-faint">This is the site watchlist.</span>
+            )}
+            {!signedIn && onSignIn && (
               <button
                 type="button"
-                onClick={() => setAssetFilter("all")}
-                className="mt-2 text-xs font-medium text-accent hover:underline"
+                onClick={onSignIn}
+                className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               >
-                Show all markets
+                <LogIn className="h-3.5 w-3.5" />
+                Sign in to build your own
               </button>
-            </Card>
-          ) : (
-            <SortableGrid
-              items={applyOrder(visibleResults, order)}
-              onReorder={persistOrder}
-              // A filtered grid is only part of the watchlist, so a drag would
-              // have no well-defined place for the hidden cards. Reorder on All.
-              canReorder={canEdit && assetFilter === "all"}
-              className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]"
-              renderItem={(r) =>
-                r.ok ? (
-                  <MarketCard
-                    analysis={r}
-                    strongRatio={strongRatio}
-                    refreshing={refreshing.has(r.symbol)}
-                    canRefresh={canRefresh}
-                    canRemove={canEdit}
-                    onOpen={openDetail}
-                    onRefresh={refreshOne}
-                    onRemove={removeSymbol}
-                  />
-                ) : (
-                  <MarketCardError
-                    symbol={r.symbol}
-                    error={r.error}
-                    refreshing={refreshing.has(r.symbol)}
-                    canRefresh={canRefresh}
-                    canRemove={canEdit}
-                    onRefresh={refreshOne}
-                    onRemove={removeSymbol}
-                  />
-                )
-              }
-            />
-          )}
+            )}
+          </div>
 
-          <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
-            Indicators computed server-side (RSI, STOCH, MACD, ADX, CCI, Williams %R, ATR, Ultimate
-            Oscillator, ROC, Bull/Bear Power, SMA/EMA 5-200). Read from your cTrader account. Not financial advice.
-          </p>
-        </div>
+          {canEdit ? (
+            <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
+          ) : (
+            <p className="flex-1 self-center px-1 text-xs text-fg-faint">
+              {signedIn ? (
+                <>
+                  The site list is curated by an admin. Switch to{" "}
+                  <button
+                    type="button"
+                    onClick={() => void switchMode("mine")}
+                    className="font-medium text-accent hover:underline"
+                  >
+                    My watchlist
+                  </button>{" "}
+                  to add, remove or reorder markets.
+                </>
+              ) : (
+                ""
+              )}
+            </p>
+          )}
+        </Card>
+
+        <StatusLine
+          loading={loading}
+          okCount={okCount}
+          total={visibleResults.length}
+          secondsLeft={secondsLeft}
+          onOpenSettings={() => setShowSettings(true)}
+          onRefresh={() => void load()}
+        />
+
+        {settings?.accountError && (
+          <Card className="border-danger/30 bg-danger-soft p-3.5 text-[13px] leading-relaxed text-fg-muted">
+            <AlertCircle className="mr-2 inline h-4 w-4 align-[-3px] text-danger" />
+            <span className="text-fg">{settings.accountError}</span>
+          </Card>
+        )}
+
+        {throttled > 0 && (
+          <div className="flex items-start gap-3 rounded-2xl border border-accent/25 bg-gradient-to-r from-accent/12 to-blue-500/8 p-3.5 text-[13px] leading-relaxed text-fg-muted">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <span>
+              cTrader throttled the last sweep, so {throttled} card
+              {throttled === 1 ? "" : "s"} {throttled === 1 ? "is" : "are"} showing cached bars.
+              Figures stay correct, just a few minutes behind.
+            </span>
+          </div>
+        )}
+
+        {error && (
+          <Card flat className="border-danger/30 bg-danger-soft p-3 text-sm text-danger">
+            {error}
+          </Card>
+        )}
+
+        {loading && results.length === 0 ? (
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]">
+            {Array.from({ length: 10 }, (_, i) => (
+              <MarketCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : results.length === 0 ? (
+          <Card className="p-8 text-center">
+            <div className="text-sm text-fg-muted">{siteContent.emptyStates.analysis}</div>
+            <div className="mt-1 text-xs text-fg-faint">
+              {canEdit
+                ? "Add a market above to start analysing."
+                : signedIn
+                  ? "Switch to My watchlist to add markets."
+                  : "Sign in to build your own watchlist."}
+            </div>
+          </Card>
+        ) : visibleResults.length === 0 ? (
+          <Card className="p-8 text-center">
+            <div className="text-sm text-fg-muted">No markets match this filter.</div>
+            <button
+              type="button"
+              onClick={() => setAssetFilter("all")}
+              className="mt-2 text-xs font-medium text-accent hover:underline"
+            >
+              Show all markets
+            </button>
+          </Card>
+        ) : (
+          <SortableGrid
+            items={applyOrder(visibleResults, order)}
+            onReorder={persistOrder}
+            // A filtered grid is only part of the watchlist, so a drag would
+            // have no well-defined place for the hidden cards. Reorder on All.
+            canReorder={canEdit && assetFilter === "all"}
+            className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]"
+            renderItem={(r) =>
+              r.ok ? (
+                <MarketCard
+                  analysis={r}
+                  strongRatio={strongRatio}
+                  refreshing={refreshing.has(r.symbol)}
+                  canRefresh={canRefresh}
+                  canRemove={canEdit}
+                  onOpen={openDetail}
+                  onRefresh={refreshOne}
+                  onRemove={removeSymbol}
+                />
+              ) : (
+                <MarketCardError
+                  symbol={r.symbol}
+                  error={r.error}
+                  refreshing={refreshing.has(r.symbol)}
+                  canRefresh={canRefresh}
+                  canRemove={canEdit}
+                  onRefresh={refreshOne}
+                  onRemove={removeSymbol}
+                />
+              )
+            }
+          />
+        )}
+
+        <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
+          Indicators computed server-side (RSI, STOCH, MACD, ADX, CCI, Williams %R, ATR, Ultimate
+          Oscillator, ROC, Bull/Bear Power, SMA/EMA 5-200). Read from your cTrader account. Not financial advice.
+        </p>
       </div>
 
       {detail && (
