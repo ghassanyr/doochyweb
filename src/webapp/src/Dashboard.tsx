@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ShieldAlert } from "lucide-react";
+import { Plus, RefreshCw, ShieldAlert } from "lucide-react";
 import { AccountView, BrokerAccountView } from "./api";
 import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
@@ -7,7 +7,7 @@ import JournalTab from "./journal/JournalPage";
 import Mt5TradingPanel from "./Mt5TradingPanel";
 import SimulationTab from "./simulation/SimulationTab";
 import { formatNumber, formatDisplayDate } from "./format";
-import { Card, accountColorHex } from "./components/ui";
+import { Button, Card, accountColorHex } from "./components/ui";
 import { FadeRise } from "./components/motion";
 import { useSiteConfig } from "./siteConfig";
 
@@ -199,26 +199,53 @@ function Tabs({
   isAdmin: boolean;
 }) {
   const [tab, setTab] = useState<PageKey>("positions");
+  const [ticketOpen, setTicketOpen] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
   const { config } = useSiteConfig();
   const disclaimer = config?.legal.riskDisclaimer?.trim() || TRADING_DISCLAIMER;
+  const showTradeActions = tab === "positions" || tab === "orders";
   return (
     <div className="space-y-5">
       <div className="space-y-1.5">
-        <div className="flex flex-wrap gap-1">
-          {PAGES.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setTab(p.key)}
-              className={
-                "rounded-md px-3 py-1.5 text-sm font-medium capitalize transition " +
-                (tab === p.key
-                  ? "border border-accent/20 bg-accent-soft text-accent"
-                  : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
-              }
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1">
+            {PAGES.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setTab(p.key)}
+                className={
+                  "rounded-md px-3 py-1.5 text-sm font-medium capitalize transition " +
+                  (tab === p.key
+                    ? "border border-accent/20 bg-accent-soft text-accent"
+                    : "border border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg")
+                }
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {showTradeActions && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<RefreshCw className="h-4 w-4" />}
+                onClick={() => setRefreshToken((t) => t + 1)}
+                aria-label="Refresh"
+                title="Refresh"
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Plus className="h-4 w-4" />}
+                disabled={accounts.length === 0}
+                title="New order"
+                onClick={() => setTicketOpen(true)}
+              >
+                New order
+              </Button>
+            </div>
+          )}
         </div>
         <p className="flex items-start gap-1.5 px-1 text-[11px] leading-relaxed text-fg-faint">
           <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -226,9 +253,25 @@ function Tabs({
         </p>
       </div>
       {tab === "positions" ? (
-        <PositionsTab mode={mode} accounts={accounts} ctid={ctid} isAdmin={isAdmin} />
+        <PositionsTab
+          mode={mode}
+          accounts={accounts}
+          ctid={ctid}
+          isAdmin={isAdmin}
+          ticketOpen={ticketOpen}
+          onTicketClose={() => setTicketOpen(false)}
+          refreshToken={refreshToken}
+        />
       ) : tab === "orders" ? (
-        <OrdersTab mode={mode} accounts={accounts} ctid={ctid} isAdmin={isAdmin} />
+        <OrdersTab
+          mode={mode}
+          accounts={accounts}
+          ctid={ctid}
+          isAdmin={isAdmin}
+          ticketOpen={ticketOpen}
+          onTicketClose={() => setTicketOpen(false)}
+          refreshToken={refreshToken}
+        />
       ) : tab === "journal" ? (
         // The journal replaced the old order-history tab. It imports closed
         // cTrader deals automatically, so the account selector above has no

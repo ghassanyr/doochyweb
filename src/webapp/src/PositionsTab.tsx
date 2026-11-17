@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowDownRight, ArrowUpRight, Megaphone, Plus, RefreshCw, XOctagon } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Megaphone, XOctagon } from "lucide-react";
 import { AccountView, ApiError, PositionRow, api } from "./api";
 import { ViewMode, fmtLots, fmtMoney, fmtPrice } from "./Dashboard";
 import FilterBar, {
@@ -46,19 +46,26 @@ export default function PositionsTab({
   accounts,
   ctid,
   isAdmin,
+  ticketOpen,
+  onTicketClose,
+  refreshToken,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
   /** Only admins can publish signals. */
   isAdmin: boolean;
+  /** The order ticket is owned by the trading tabs row. */
+  ticketOpen: boolean;
+  onTicketClose: () => void;
+  /** Increment to force a manual reload from the tabs row. */
+  refreshToken: number;
 }) {
   const [rows, setRows] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(() => loadFilter(false));
   const timer = useRef<number | null>(null);
-  const [ticketOpen, setTicketOpen] = useState(false);
   const [closePos, setClosePos] = useState<PositionRow | null>(null);
   // Only one card is expanded at a time; the poll must never collapse it or
   // clobber half-typed SL/TP, so expansion lives here keyed by position.
@@ -139,6 +146,13 @@ export default function PositionsTab({
     };
   }, [load]);
 
+  const refreshRef = useRef(refreshToken);
+  useEffect(() => {
+    if (refreshRef.current === refreshToken) return;
+    refreshRef.current = refreshToken;
+    void load();
+  }, [refreshToken, load]);
+
   const combined = mode === "combined";
   const shown = applyFilter(rows, filters);
   const sorted = sortRows(shown, filters.sortKey, filters.sortAsc);
@@ -158,40 +172,27 @@ export default function PositionsTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col items-end gap-2">
-        {totalPnl != null && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-fg-faint">Total P&L</span>
-            <span className={`font-semibold tabular-nums ${totalPnl > 0 ? "text-success" : totalPnl < 0 ? "text-danger" : "text-fg"}`}>
-              {totalPnl >= 0 ? "+" : ""}{fmtMoney(totalPnl)}
-            </span>
-          </div>
-        )}
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<RefreshCw className="h-4 w-4" />}
-            onClickAsync={load}
-            aria-label="Refresh"
-            title="Refresh"
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Plus className="h-4 w-4" />}
-            disabled={accounts.length === 0}
-            title="New order"
-            onClick={() => setTicketOpen(true)}
-          >
-            New order
-          </Button>
-        </div>
-      </div>
-
       {publishNotice && <Flash tone="success">{publishNotice}</Flash>}
 
-      <FilterBar mode={mode} positions orders={false} state={filters} onChange={patchFilters} symbols={symbols} orderTypes={[]} />
+      <FilterBar
+        mode={mode}
+        positions
+        orders={false}
+        state={filters}
+        onChange={patchFilters}
+        symbols={symbols}
+        orderTypes={[]}
+        leading={
+          totalPnl != null ? (
+            <div className="flex shrink-0 items-center gap-2 text-sm">
+              <span className="text-fg-faint">Total P&amp;L</span>
+              <span className={`font-semibold tabular-nums ${totalPnl > 0 ? "text-success" : totalPnl < 0 ? "text-danger" : "text-fg"}`}>
+                {totalPnl >= 0 ? "+" : ""}{fmtMoney(totalPnl)}
+              </span>
+            </div>
+          ) : null
+        }
+      />
 
       {error && (
         <Card className="border-danger/30 bg-danger-soft p-4">
@@ -253,7 +254,7 @@ export default function PositionsTab({
 
       <OrderTicket
         open={ticketOpen}
-        onClose={() => setTicketOpen(false)}
+        onClose={onTicketClose}
         onDone={load}
         accounts={accounts}
         defaultCtids={mode === "combined" ? accounts.map((a) => a.ctid) : ctid != null ? [ctid] : []}

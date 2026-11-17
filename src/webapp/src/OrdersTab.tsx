@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowDownRight, ArrowUpRight, Ban, Hourglass, Megaphone, Pencil, Plus, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Ban, Hourglass, Megaphone, Pencil } from "lucide-react";
 import { ApiError, AccountView, OrderRow, RowAccount, api } from "./api";
 import { ViewMode, fmtLots, fmtPrice } from "./Dashboard";
 import FilterBar, {
@@ -39,19 +39,26 @@ export default function OrdersTab({
   accounts,
   ctid,
   isAdmin,
+  ticketOpen,
+  onTicketClose,
+  refreshToken,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
   /** Only admins can publish signals. */
   isAdmin: boolean;
+  /** The order ticket is owned by the trading tabs row. */
+  ticketOpen: boolean;
+  onTicketClose: () => void;
+  /** Increment to force a manual reload from the tabs row. */
+  refreshToken: number;
 }) {
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orderFilters, setOrderFilters] = useState<FilterState>(() => loadFilter(true));
   const timer = useRef<number | null>(null);
-  const [ticketOpen, setTicketOpen] = useState(false);
   const [cancelOrder, setCancelOrder] = useState<OrderRow | null>(null);
   const [cancelErr, setCancelErr] = useState<string | null>(null);
   const [publishDraft, setPublishDraft] = useState<SignalDraft | null>(null);
@@ -132,35 +139,19 @@ export default function OrdersTab({
     };
   }, [load]);
 
+  const refreshRef = useRef(refreshToken);
+  useEffect(() => {
+    if (refreshRef.current === refreshToken) return;
+    refreshRef.current = refreshToken;
+    void load();
+  }, [refreshToken, load]);
+
   const combined = mode === "combined";
   const shownOrders = applyFilter(rows, orderFilters);
   const sortedOrders = sortRows(shownOrders, orderFilters.sortKey, orderFilters.sortAsc);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end gap-3">
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<RefreshCw className="h-4 w-4" />}
-            onClickAsync={load}
-            aria-label="Refresh"
-            title="Refresh"
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Plus className="h-4 w-4" />}
-            disabled={accounts.length === 0}
-            title="New order"
-            onClick={() => setTicketOpen(true)}
-          >
-            New order
-          </Button>
-        </div>
-      </div>
-
       {publishNotice && <Flash tone="success">{publishNotice}</Flash>}
 
       <FilterBar
@@ -238,7 +229,7 @@ export default function OrdersTab({
 
       <OrderTicket
         open={ticketOpen}
-        onClose={() => setTicketOpen(false)}
+        onClose={onTicketClose}
         onDone={load}
         accounts={accounts}
         defaultCtids={mode === "combined" ? accounts.map((a) => a.ctid) : ctid != null ? [ctid] : []}

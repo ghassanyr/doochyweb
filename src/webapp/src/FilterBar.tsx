@@ -256,6 +256,7 @@ export default function FilterBar({
   orderTypes,
   state,
   onChange,
+  leading,
 }: {
   mode: ViewMode;
   orders?: boolean;
@@ -264,6 +265,8 @@ export default function FilterBar({
   orderTypes?: string[];
   state: FilterState;
   onChange: (patch: FilterPatch) => void;
+  /** Optional content shown at the start of the row, before the search box. */
+  leading?: ReactNode;
 }) {
   const [symOpen, setSymOpen] = useState(false);
   const [symQuery, setSymQuery] = useState("");
@@ -332,8 +335,10 @@ export default function FilterBar({
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
+        {leading}
+
         {/* free-text search */}
-        <div className="relative flex min-w-[170px] flex-1 items-center">
+        <div className="relative flex w-full min-w-[170px] items-center sm:w-56 sm:flex-none">
           <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-fg-muted" />
           <input
             type="search"
