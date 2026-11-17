@@ -61,6 +61,12 @@ const imageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Chart responses are cached as immutable, so a fix that changes the bytes for
+// an existing image id needs a new URL. Version 2 is the first one that serves
+// real bytes: version 1 returned empty bodies because a lean read hands back a
+// BSON Binary instead of a Node Buffer.
+const CHART_URL_VERSION = "2";
+
 export const SessionAnalysisDayModel = mongoose.model("SessionAnalysisDay", daySchema);
 export const SessionAnalysisImageModel = mongoose.model(
   "SessionAnalysisImage",
@@ -88,7 +94,9 @@ function publicMarket(market: any): SessionMarket {
     levelType,
     levelValue: typeof market?.levelValue === "string" ? market.levelValue : null,
     levelNote: typeof market?.levelNote === "string" ? market.levelNote : null,
-    chartUrl: chartImageId ? `/api/session-analysis/chart/${chartImageId}` : null,
+    chartUrl: chartImageId
+      ? `/api/session-analysis/chart/${chartImageId}?v=${CHART_URL_VERSION}`
+      : null,
   };
 }
 
@@ -205,14 +213,52 @@ export async function sessionByKey(sessionKey: string): Promise<SessionDay | nul
   return doc ? publicDay(doc) : null;
 }
 
+/**
+ * Turn a stored binary field back into raw bytes.
+ *
+ * A lean read skips Mongoose casting, so the MongoDB driver can hand back a
+ * BSON `Binary` object rather than a Node Buffer. `Buffer.from(binary)` treats
+ * it as an array-like without a length and silently returns zero bytes, which
+ * made every chart load as an empty image. Handle both shapes explicitly.
+ */
+export function storedBuffer(value: unknown): Buffer | null {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (!value || typeof value !== "object") return null;
+
+  const binary = value as {
+    _bsontype?: string;
+    buffer?: unknown;
+    position?: unknown;
+    value?: unknown;
+    type?: unknown;
+    data?: unknown;
+  };
+
+  if (binary._bsontype === "Binary" && Buffer.isBuffer(binary.buffer)) {
+    const position =
+      typeof binary.position === "number" && binary.position >= 0
+        ? Math.min(binary.position, binary.buffer.length)
+        : binary.buffer.length;
+    return binary.buffer.subarray(0, position);
+  }
+  if (binary.type === "Buffer" && Array.isArray(binary.data)) {
+    return Buffer.from(binary.data as number[]);
+  }
+  if (Buffer.isBuffer(binary.value)) return binary.value;
+  return null;
+}
+
 export async function imageById(
   id: string
 ): Promise<{ contentType: string; data: Buffer } | null> {
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
   const doc: any = await SessionAnalysisImageModel.findById(id).lean().exec();
-  if (!doc || !doc.data) return null;
+  if (!doc) return null;
+  const data = storedBuffer(doc.data);
+  if (!data || data.length === 0) return null;
   return {
     contentType: typeof doc.contentType === "string" ? doc.contentType : "image/png",
-    data: Buffer.isBuffer(doc.data) ? doc.data : Buffer.from(doc.data),
+    data,
   };
 }

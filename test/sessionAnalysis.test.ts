@@ -22,6 +22,7 @@ import {
   type ImageSize,
 } from "../src/server/sessionAnalysis/parse";
 import type { ParsedImage, ParsedMarket } from "../src/server/sessionAnalysis/types";
+import { storedBuffer, imageById, SessionAnalysisImageModel } from "../src/server/sessionAnalysis/store";
 
 const EMAIL_TEXT = `AI Market Analysis
 17-Nov-2026 06:14 EST
@@ -450,5 +451,57 @@ describe("inline forwarded analysis mail", () => {
     const parsed = await simpleParser(Buffer.from(INLINE_FORWARD_RAW));
     const chain = await forwardChain(parsed);
     assert.equal(matchesFilters(chain, "", ""), true);
+  });
+});
+
+describe("stored chart bytes", () => {
+  test("returns a Node Buffer unchanged", () => {
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    assert.equal(storedBuffer(bytes), bytes);
+  });
+
+  test("unwraps a BSON Binary from a lean read", () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const binary = {
+      _bsontype: "Binary",
+      buffer: Buffer.concat([png, Buffer.from([0xff, 0xff])]),
+      position: png.length,
+      sub_type: 0,
+    };
+    assert.deepEqual(storedBuffer(binary), png);
+  });
+
+  test("unwraps a JSON-serialized buffer", () => {
+    assert.deepEqual(
+      storedBuffer({ type: "Buffer", data: [1, 2, 3] }),
+      Buffer.from([1, 2, 3])
+    );
+  });
+
+  test("returns null when the stored value is missing or empty", () => {
+    assert.equal(storedBuffer(null), null);
+    assert.equal(storedBuffer(undefined), null);
+    assert.equal(storedBuffer({}), null);
+  });
+
+  test("serves real bytes for a lean BSON Binary image document", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const original = SessionAnalysisImageModel.findById.bind(SessionAnalysisImageModel);
+    (SessionAnalysisImageModel as unknown as { findById: unknown }).findById = () => ({
+      lean: () => ({
+        exec: async () => ({
+          contentType: "image/png",
+          data: { _bsontype: "Binary", buffer: png, position: png.length },
+        }),
+      }),
+    });
+    try {
+      const image = await imageById("6afcbf7a5620d38a477f382f");
+      assert.ok(image);
+      assert.equal(image.contentType, "image/png");
+      assert.deepEqual(image.data, png);
+    } finally {
+      (SessionAnalysisImageModel as unknown as { findById: unknown }).findById = original;
+    }
   });
 });
