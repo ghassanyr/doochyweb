@@ -12,6 +12,8 @@ import {
   type BriefingJournalIdea,
   type BriefingJournalSection,
   type BriefingPreferences,
+  type BriefingProseSource,
+  type BriefingStatus,
   type BriefingQuote,
   type BriefingRecord,
   type BriefingSections,
@@ -31,6 +33,9 @@ const briefingSchema = new mongoose.Schema(
     narrative: { type: String, default: null },
     sections: { type: mongoose.Schema.Types.Mixed, default: null },
     error: { type: String, default: null },
+    status: { type: String, default: "ready" },
+    source: { type: String, default: "deterministic" },
+    statusUpdatedAt: { type: Date, default: Date.now },
     snapshot: {
       version: { type: Number, default: 1 },
       dateKey: { type: String, required: true },
@@ -269,6 +274,14 @@ function snapshotRecord(
 
 export function toBriefingRecord(doc: any): BriefingRecord {
   const generatedAt = iso(doc.generatedAt) ?? new Date(0).toISOString();
+  const statuses: BriefingStatus[] = ["building", "enhancing", "ready", "failed"];
+  const status = statuses.includes(doc.status) ? (doc.status as BriefingStatus) : "ready";
+  const sources: BriefingProseSource[] = ["deterministic", "ai"];
+  const source: BriefingProseSource = sources.includes(doc.source)
+    ? (doc.source as BriefingProseSource)
+    : typeof doc.model === "string" && doc.model
+      ? "ai"
+      : "deterministic";
   return {
     dateKey: String(doc.dateKey),
     generatedAt,
@@ -276,6 +289,8 @@ export function toBriefingRecord(doc: any): BriefingRecord {
     narrative: typeof doc.narrative === "string" ? doc.narrative : null,
     sections: sections(doc.sections),
     error: typeof doc.error === "string" ? doc.error : null,
+    status,
+    source,
     snapshot: snapshotRecord(record(doc.snapshot) ?? {}, String(doc.dateKey), generatedAt),
   };
 }
@@ -294,6 +309,39 @@ export async function clearBriefing(userId: string, dateKey: string): Promise<vo
   await Briefing.deleteOne({ ...owner(userId), dateKey }).exec();
 }
 
+export async function claimBriefingEnhancement(params: {
+  userId: string;
+  dateKey: string;
+  generatedAt: string;
+  at?: Date;
+  retry?: boolean;
+  leaseMs?: number;
+}): Promise<BriefingRecord | null> {
+  const at = params.at ?? new Date();
+  const staleBefore = new Date(at.getTime() - (params.leaseMs ?? 120_000));
+  const clauses: Record<string, unknown>[] = [
+    { status: "building" },
+    { status: "enhancing", statusUpdatedAt: { $lt: staleBefore } },
+  ];
+  if (params.retry) {
+    clauses.push({ status: "failed" });
+    clauses.push({ status: "ready", source: "deterministic" });
+  }
+  const doc = await Briefing.findOneAndUpdate(
+    {
+      ...owner(params.userId),
+      dateKey: params.dateKey,
+      generatedAt: new Date(params.generatedAt),
+      $or: clauses,
+    },
+    { $set: { status: "enhancing", statusUpdatedAt: at } },
+    { new: true }
+  )
+    .lean()
+    .exec();
+  return doc ? toBriefingRecord(doc) : null;
+}
+
 /** Replace today's brief. Used by generation and by an explicit refresh. */
 export async function saveBriefing(params: {
   userId: string;
@@ -309,6 +357,9 @@ export async function saveBriefing(params: {
         narrative: record.narrative,
         sections: record.sections,
         error: record.error,
+        status: record.status,
+        source: record.source,
+        statusUpdatedAt: new Date(),
         snapshot: record.snapshot,
       },
     },

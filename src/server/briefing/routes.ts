@@ -1,16 +1,17 @@
 // Express router for the daily briefing.
 //
 // Mounted at /api/briefing behind authRequired and the Briefing module gate.
-// GET returns today's brief (generating it on first open); POST /refresh
-// rebuilds it. PATCH /preferences changes the member's focus sessions and
-// clears today's brief. All routes are per user.
+// GET returns today's brief, building a deterministic snapshot when missing.
+// POST /refresh rebuilds that snapshot, and POST /enhance queues the AI prose.
+// PATCH /preferences changes the member's focus sessions and clears today's
+// brief. All routes are per user.
 
 import { Router, type Response } from "express";
 
 import { authRequired, type AuthedRequest } from "../auth";
 import { AiError } from "../ai/client";
 import { briefingDateKey } from "./build";
-import { getBriefing } from "./service";
+import { getBriefing, retryBriefingEnhancement } from "./service";
 import { parseFocusSessions } from "./sessions";
 import { clearBriefing, saveBriefingPreference } from "./store";
 
@@ -37,6 +38,14 @@ briefingRouter.get("/", async (req: AuthedRequest, res) => {
 briefingRouter.post("/refresh", async (req: AuthedRequest, res) => {
   try {
     res.json(await getBriefing(req.userId!, { refresh: true }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+briefingRouter.post("/enhance", async (req: AuthedRequest, res) => {
+  try {
+    res.json(await retryBriefingEnhancement(req.userId!));
   } catch (err) {
     fail(res, err);
   }

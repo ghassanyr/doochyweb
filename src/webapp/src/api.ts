@@ -799,6 +799,10 @@ export interface BriefingPreferences {
   focusSessions: BriefingFocusSession[];
 }
 
+export type BriefingStatus = "building" | "enhancing" | "ready" | "failed";
+
+export type BriefingProseSource = "deterministic" | "ai";
+
 export interface BriefingRecord {
   dateKey: string;
   generatedAt: string;
@@ -806,6 +810,8 @@ export interface BriefingRecord {
   narrative: string | null;
   sections: BriefingSections | null;
   error: string | null;
+  status: BriefingStatus;
+  source: BriefingProseSource;
   snapshot: BriefingSnapshot;
 }
 
@@ -820,6 +826,8 @@ export const briefingApi = {
 
   refresh: () =>
     request<BriefingResponse>("/api/briefing/refresh", { method: "POST" }),
+
+  enhance: () => request<BriefingResponse>("/api/briefing/enhance", { method: "POST" }),
 
   savePreferences: (focusSessions: BriefingFocusSession[]) =>
     request<{ preferences: BriefingPreferences }>("/api/briefing/preferences", {

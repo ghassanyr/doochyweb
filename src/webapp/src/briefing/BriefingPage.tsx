@@ -5,7 +5,7 @@
 // generated, so reopening the page later in the day shows the same numbers the
 // write-up was based on. Refresh rebuilds it.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   BookOpen,
@@ -66,22 +66,38 @@ export default function BriefingPage() {
   const [focus, setFocus] = useState<BriefingFocusSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
   const [savingFocus, setSavingFocus] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
+  const loadInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
+    if (!silent) setLoading(true);
     try {
-      setData(await briefingApi.get());
+      const next = await briefingApi.get();
+      if (!mountedRef.current) return;
+      setData(next);
       setError(null);
     } catch (err: any) {
+      if (!mountedRef.current) return;
       setError(err?.message || "Could not load today's briefing.");
     } finally {
-      setLoading(false);
+      loadInFlightRef.current = false;
+      if (!silent && mountedRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     void load();
+    return () => {
+      mountedRef.current = false;
+      if (pollRef.current !== null) window.clearInterval(pollRef.current);
+    };
   }, [load]);
 
   useEffect(() => {
@@ -91,12 +107,32 @@ export default function BriefingPage() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      setData(await briefingApi.refresh());
+      const next = await briefingApi.refresh();
+      if (!mountedRef.current) return;
+      setData(next);
       setError(null);
     } catch (err: any) {
+      if (!mountedRef.current) return;
       setError(err?.message || "Could not rebuild the briefing.");
     } finally {
-      setRefreshing(false);
+      if (mountedRef.current) setRefreshing(false);
+    }
+  }, []);
+
+  const retryEnhance = useCallback(async () => {
+    setEnhancing(true);
+    setRefreshing(true);
+    try {
+      const next = await briefingApi.enhance();
+      if (!mountedRef.current) return;
+      setData(next);
+      setError(null);
+    } catch (err: any) {
+      if (!mountedRef.current) return;
+      setEnhancing(false);
+      setError(err?.message || "Could not start the written summary.");
+    } finally {
+      if (mountedRef.current) setRefreshing(false);
     }
   }, []);
 
@@ -105,18 +141,44 @@ export default function BriefingPage() {
     setSavingFocus(true);
     try {
       await briefingApi.savePreferences(focus);
-      setData(await briefingApi.refresh());
+      const next = await briefingApi.refresh();
+      if (!mountedRef.current) return;
+      setData(next);
       setError(null);
     } catch (err: any) {
+      if (!mountedRef.current) return;
       setError(err?.message || "Could not save your focus sessions.");
     } finally {
-      setSavingFocus(false);
+      if (mountedRef.current) setSavingFocus(false);
     }
   }, [focus]);
 
   const briefing = data?.briefing ?? null;
   const sections = briefing?.sections ?? null;
   const focusDirty = data ? !sameSessions(focus, data.preferences.focusSessions) : false;
+  const pendingEnhancement =
+    enhancing || briefing?.status === "building" || briefing?.status === "enhancing";
+
+  useEffect(() => {
+    if (!pendingEnhancement) {
+      if (enhancing && mountedRef.current) setEnhancing(false);
+      if (pollRef.current !== null) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    if (pollRef.current !== null) return;
+    pollRef.current = window.setInterval(() => {
+      void load(true);
+    }, 2000);
+    return () => {
+      if (pollRef.current !== null) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [enhancing, pendingEnhancement, load]);
 
   function toggleFocus(key: BriefingFocusSession) {
     setFocus((current) => {
@@ -143,11 +205,11 @@ export default function BriefingPage() {
               size="sm"
               variant="secondary"
               className="ml-auto"
-              disabled={refreshing}
+              disabled={refreshing || pendingEnhancement}
               icon={<RefreshCw className="h-3.5 w-3.5" />}
               onClick={() => void refresh()}
             >
-              {refreshing ? "Rebuilding" : "Refresh"}
+              {refreshing ? "Rebuilding" : pendingEnhancement ? "Enhancing" : "Refresh"}
             </Button>
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
@@ -209,6 +271,14 @@ export default function BriefingPage() {
           </Card>
         ) : (
           <>
+            {pendingEnhancement && (
+              <Flash
+                tone="warning"
+                icon={<RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />}
+              >
+                Building the written summary. The structured data below is ready.
+              </Flash>
+            )}
             {!data?.aiReady && (
               <Flash tone="warning">
                 The written summary is off because no AI provider key is saved. Add one under Admin,
@@ -216,7 +286,14 @@ export default function BriefingPage() {
                 either way.
               </Flash>
             )}
-            {data?.aiReady && briefing.error && <Flash tone="warning">{briefing.error}</Flash>}
+            {data?.aiReady && !pendingEnhancement && briefing.error && (
+              <div className="space-y-2">
+                <Flash tone="warning">{briefing.error}</Flash>
+                <Button size="sm" variant="secondary" onClick={() => void retryEnhance()}>
+                  Retry written summary
+                </Button>
+              </div>
+            )}
 
             <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
               <div className="min-w-0 space-y-3">

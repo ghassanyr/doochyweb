@@ -211,7 +211,7 @@ export default function CoachPage() {
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
             Reviews use fixed UTC weeks, Monday 00:00 through Sunday 23:59. Your journal is the only
-            source of facts. Generate and regenerate are manual, so no AI call runs in the background.
+            source of facts.
           </p>
 
           {weekly && !weekly.aiReady && (
@@ -411,7 +411,7 @@ function WeeklyReviewCard({
         </div>
         {!aiReady && (
           <p className="mt-2 text-[11px] text-fg-faint">
-            Without an AI key, generation stores a deterministic review built from the facts.
+            {/* Without an AI key, generation stores a deterministic review built from the facts. */}
           </p>
         )}
       </Card>

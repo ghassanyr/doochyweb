@@ -12,6 +12,10 @@ export type BriefingFocusSession = "asia" | "london" | "newyork";
 
 export type BriefingSessionStatus = "open" | "closed";
 
+export type BriefingStatus = "building" | "enhancing" | "ready" | "failed";
+
+export type BriefingProseSource = "deterministic" | "ai";
+
 export interface BriefingSessionRow {
   key: BriefingFocusSession;
   label: string;
@@ -128,6 +132,8 @@ export interface BriefingRecord {
   sections: BriefingSections | null;
   /** Set when the AI call failed or the provider is not configured. */
   error: string | null;
+  status: BriefingStatus;
+  source: BriefingProseSource;
   snapshot: BriefingSnapshot;
 }
 

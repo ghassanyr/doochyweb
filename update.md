@@ -245,10 +245,28 @@ started, `later` means deliberately deferred, `skip` means not planned.
   the models that were not checked yet. Reasoning models that put their answer
   in `reasoning_content` no longer surface as an empty reply.
 
+## Briefing load path
+
+- `GET /api/briefing` no longer waits for the AI provider. When no brief exists,
+  it builds a time-boxed deterministic snapshot from cached data and returns it
+  right away. The market fetches run with bounded concurrency and short timeouts,
+  so slow providers cannot hold the first render.
+- AI prose is generated in the background after a per-user and per-day claim.
+  `POST /api/briefing/enhance` retries a failed written summary, and
+  `POST /api/briefing/refresh` rebuilds the deterministic snapshot and queues a
+  fresh AI pass.
+- Stored briefs now carry `status` and `source`. The page shows the deterministic
+  data immediately, polls while the summary is building, and offers a retry when
+  the AI step fails. Old briefs normalize to `ready`.
+- The background pass rebuilds the snapshot without the first-open time budget,
+  so the final AI prose is written against fresher data. Invalidation still
+  clears the stored brief, and an in-flight pass will not overwrite a replaced
+  brief.
+
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 890 tests, all passing.
+- `pnpm test`: 893 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

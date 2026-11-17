@@ -18,7 +18,12 @@ import {
   normalizeFocusSessions,
   parseFocusSessions,
 } from "../src/server/briefing/sessions";
-import { toBriefingRecord } from "../src/server/briefing/store";
+import { enqueueBriefingEnhancement } from "../src/server/briefing/enhance";
+import {
+  Briefing,
+  claimBriefingEnhancement,
+  toBriefingRecord,
+} from "../src/server/briefing/store";
 import type { BriefingSnapshot } from "../src/server/briefing/types";
 import type { JournalEntryView } from "../src/server/journal/types";
 import {
@@ -808,6 +813,97 @@ describe("aiChat", () => {
       );
     } finally {
       globalThis.fetch = original;
+    }
+  });
+});
+
+describe("briefing generation state", () => {
+  function leanQuery(value: unknown) {
+    return { lean: () => ({ exec: async () => value }) };
+  }
+
+  function generationDoc(status?: string, source?: string, model: string | null = "test-model") {
+    const snapshot = builtSnapshot();
+    return {
+      dateKey: snapshot.dateKey,
+      generatedAt: new Date(snapshot.generatedAt),
+      model,
+      narrative: null,
+      sections: buildFallbackSections(snapshot),
+      error: null,
+      status,
+      source,
+      snapshot,
+    };
+  }
+
+  test("normalizes current and legacy generation state", () => {
+    const current = toBriefingRecord(generationDoc("enhancing", "deterministic"));
+    assert.equal(current.status, "enhancing");
+    assert.equal(current.source, "deterministic");
+
+    const legacyAi = toBriefingRecord(generationDoc(undefined, undefined));
+    assert.equal(legacyAi.status, "ready");
+    assert.equal(legacyAi.source, "ai");
+
+    const legacyDeterministic = toBriefingRecord(generationDoc(undefined, undefined, null));
+    assert.equal(legacyDeterministic.status, "ready");
+    assert.equal(legacyDeterministic.source, "deterministic");
+  });
+
+  test("claims one generation and allows manual retries", async () => {
+    const original = Briefing.findOneAndUpdate;
+    let filter: any;
+    let update: any;
+    const doc = generationDoc("building", "deterministic");
+    (Briefing as any).findOneAndUpdate = (nextFilter: any, nextUpdate: any) => {
+      filter = nextFilter;
+      update = nextUpdate;
+      return leanQuery({ ...doc, status: "enhancing" });
+    };
+    try {
+      const claimed = await claimBriefingEnhancement({
+        userId: "507f1f77bcf86cd799439011",
+        dateKey: doc.dateKey,
+        generatedAt: doc.generatedAt.toISOString(),
+        retry: true,
+        at: new Date("2026-01-10T12:00:00.000Z"),
+      });
+      assert.equal(claimed?.status, "enhancing");
+      assert.deepEqual(filter.generatedAt, doc.generatedAt);
+      assert.equal(update.$set.status, "enhancing");
+      assert.ok(filter.$or.some((clause: any) => clause.status === "failed"));
+      assert.ok(
+        filter.$or.some(
+          (clause: any) => clause.status === "ready" && clause.source === "deterministic"
+        )
+      );
+    } finally {
+      (Briefing as any).findOneAndUpdate = original;
+    }
+  });
+
+  test("keeps one enhancement in flight per user and day", async () => {
+    const original = Briefing.findOneAndUpdate;
+    let claims = 0;
+    (Briefing as any).findOneAndUpdate = () => {
+      claims++;
+      return leanQuery(null);
+    };
+    try {
+      const params = {
+        userId: "507f1f77bcf86cd799439011",
+        dateKey: "2026-01-10",
+        generatedAt: "2026-01-10T12:00:00.000Z",
+        config: { apiKey: "test", baseUrl: "https://api.openai.com/v1", model: "test-model" },
+        focusSessions: ["london" as const],
+      };
+      enqueueBriefingEnhancement(params);
+      enqueueBriefingEnhancement(params);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(claims, 1);
+    } finally {
+      (Briefing as any).findOneAndUpdate = original;
     }
   });
 });
