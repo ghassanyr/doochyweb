@@ -1182,16 +1182,24 @@ export type ModuleKey =
 
 export type ModuleAccess = "public" | "signed-in" | "admin";
 
+export interface NavGroupSettings {
+  key: string;
+  label: string;
+}
+
 export interface ModuleSettings {
   key: ModuleKey;
   label: string;
   hidden: boolean;
   access: ModuleAccess;
+  /** Key of the sidebar group this module belongs to. */
+  group: string;
 }
 
 export type LandingKey = "home" | "analysis" | "signals";
 
 export interface NavigationSettings {
+  groups: NavGroupSettings[];
   modules: ModuleSettings[];
   landing: {
     signedIn: LandingKey;

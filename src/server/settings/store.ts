@@ -16,6 +16,7 @@ import {
   DEFAULT_LOCALE,
   DEFAULT_MAINTENANCE,
   DEFAULT_MODULES,
+  DEFAULT_NAV_GROUPS,
   DEFAULT_NAVIGATION,
   DEFAULT_PWA,
   DEFAULT_REGISTRATION,
@@ -39,6 +40,7 @@ import type {
   MaintenanceSettings,
   ModuleKey,
   ModuleSettings,
+  NavGroupSettings,
   NavigationSettings,
   PwaSettings,
   RegistrationMode,
@@ -148,12 +150,21 @@ const legalSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const groupSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true },
+    label: { type: String, required: true },
+  },
+  { _id: false }
+);
+
 const moduleSchema = new mongoose.Schema(
   {
     key: { type: String, enum: MODULE_KEYS, required: true },
     label: { type: String, required: true },
     hidden: { type: Boolean, default: false },
     access: { type: String, enum: ["public", "signed-in", "admin"], default: "public" },
+    group: { type: String, default: "market" },
   },
   { _id: false }
 );
@@ -176,6 +187,10 @@ const landingSchema = new mongoose.Schema(
 
 const navigationSchema = new mongoose.Schema(
   {
+    groups: {
+      type: [groupSchema],
+      default: () => DEFAULT_NAV_GROUPS.map((group) => ({ ...group })),
+    },
     modules: {
       type: [moduleSchema],
       default: () => DEFAULT_MODULES.map((module) => ({ ...module })),
@@ -384,6 +399,7 @@ const siteSettingsSchema = new mongoose.Schema(
     navigation: {
       type: navigationSchema,
       default: () => ({
+        groups: DEFAULT_NAV_GROUPS.map((group) => ({ ...group })),
         modules: DEFAULT_MODULES.map((module) => ({ ...module })),
         landing: { ...DEFAULT_NAVIGATION.landing },
       }),
@@ -440,6 +456,8 @@ function isModuleKey(value: unknown): value is ModuleKey {
   return typeof value === "string" && (MODULE_KEYS as readonly string[]).includes(value);
 }
 
+const GROUP_KEY = /^[a-z0-9][a-z0-9-]{0,23}$/;
+
 function isLanding(value: unknown): value is LandingKey {
   return value === "home" || value === "analysis" || value === "signals";
 }
@@ -491,13 +509,51 @@ export function mergeLegal(stored: any): LegalSettings {
 }
 
 /**
+ * Merge a stored group list over the defaults. Unknown keys, duplicates and
+ * malformed rows are dropped; an empty result falls back to the defaults so the
+ * sidebar always has somewhere to put a module.
+ */
+export function mergeGroups(
+  stored: unknown,
+  base: NavGroupSettings[] = DEFAULT_NAV_GROUPS
+): NavGroupSettings[] {
+  const rows = Array.isArray(stored) ? stored : [];
+  const seen = new Set<string>();
+  const groups: NavGroupSettings[] = [];
+
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as Record<string, unknown>;
+    if (typeof row.key !== "string" || !GROUP_KEY.test(row.key) || seen.has(row.key)) continue;
+    const fallback = base.find((group) => group.key === row.key);
+    const label =
+      typeof row.label === "string" && row.label.trim()
+        ? row.label.trim()
+        : fallback?.label ?? row.key;
+    seen.add(row.key);
+    groups.push({ key: row.key, label });
+  }
+
+  if (groups.length === 0) return base.map((group) => ({ ...group }));
+  return groups;
+}
+
+/** Keep a stored module inside a group that exists, preferring its default. */
+function groupForModule(key: ModuleKey, group: unknown, groupKeys: string[]): string {
+  if (typeof group === "string" && groupKeys.includes(group)) return group;
+  const preferred = DEFAULT_MODULES.find((module) => module.key === key)?.group;
+  return preferred && groupKeys.includes(preferred) ? preferred : groupKeys[0];
+}
+
+/**
  * Merge a stored module list over the defaults. Unknown or duplicate keys are
  * dropped, missing modules are appended in the default order, and trading is
  * always signed-in because its API is auth-only.
  */
 export function mergeModules(
   stored: unknown,
-  base: ModuleSettings[] = DEFAULT_MODULES
+  base: ModuleSettings[] = DEFAULT_MODULES,
+  groupKeys: string[] = DEFAULT_NAV_GROUPS.map((group) => group.key)
 ): ModuleSettings[] {
   const rows = Array.isArray(stored) ? stored : [];
   const seen = new Set<ModuleKey>();
@@ -523,6 +579,7 @@ export function mergeModules(
             : row.access === "signed-in"
               ? "signed-in"
               : "public",
+      group: groupForModule(key, row.group, groupKeys),
     });
   }
 
@@ -531,6 +588,7 @@ export function mergeModules(
     const current = base.find((module) => module.key === fallback.key) ?? fallback;
     modules.push({
       ...current,
+      group: groupForModule(fallback.key, current.group, groupKeys),
       access: fallback.key === "trading" ? "signed-in" : current.access,
     });
   }
@@ -541,8 +599,14 @@ export function mergeModules(
 export function mergeNavigation(stored: any): NavigationSettings {
   const navigation = stored && typeof stored === "object" ? stored : {};
   const landing = navigation.landing && typeof navigation.landing === "object" ? navigation.landing : {};
+  const groups = mergeGroups(navigation.groups);
   return {
-    modules: mergeModules(navigation.modules),
+    groups,
+    modules: mergeModules(
+      navigation.modules,
+      DEFAULT_MODULES,
+      groups.map((group) => group.key)
+    ),
     landing: {
       signedIn: isLanding(landing.signedIn)
         ? landing.signedIn

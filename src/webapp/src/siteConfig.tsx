@@ -30,6 +30,7 @@ import {
   type MaintenanceSettings,
   type LegalSettings,
   type ModuleSettings,
+  type NavGroupSettings,
   type NavigationSettings,
   type PublicRegistrationSettings,
   type PwaSettings,
@@ -149,18 +150,25 @@ export const LIGHT_THEME: ThemeSettings = {
 const MODE_KEY = "doochyweb_theme_mode";
 
 /** Compiled navigation used before /api/config resolves. */
+export const FALLBACK_NAV_GROUPS: NavGroupSettings[] = [
+  { key: "market", label: "Market" },
+  { key: "workspace", label: "Workspace" },
+  { key: "learn", label: "Learn" },
+];
+
 export const FALLBACK_MODULES: ModuleSettings[] = [
-  { key: "analysis", label: "Analysis", hidden: false, access: "public" },
-  { key: "signals", label: "Signals", hidden: false, access: "public" },
-  { key: "breakouts", label: "Breakouts", hidden: false, access: "public" },
-  { key: "learn", label: "Learn", hidden: false, access: "public" },
-  { key: "trading", label: "Trading", hidden: false, access: "signed-in" },
-  { key: "alerts", label: "Alerts", hidden: false, access: "signed-in" },
-  { key: "briefing", label: "Briefing", hidden: false, access: "signed-in" },
-  { key: "coach", label: "Coach", hidden: false, access: "signed-in" },
+  { key: "analysis", label: "Analysis", hidden: false, access: "public", group: "market" },
+  { key: "signals", label: "Signals", hidden: false, access: "public", group: "market" },
+  { key: "breakouts", label: "Breakouts", hidden: false, access: "public", group: "market" },
+  { key: "learn", label: "Learn", hidden: false, access: "public", group: "learn" },
+  { key: "trading", label: "Trading", hidden: false, access: "signed-in", group: "workspace" },
+  { key: "alerts", label: "Alerts", hidden: false, access: "signed-in", group: "workspace" },
+  { key: "briefing", label: "Briefing", hidden: false, access: "signed-in", group: "workspace" },
+  { key: "coach", label: "Coach", hidden: false, access: "signed-in", group: "workspace" },
 ];
 
 export const FALLBACK_NAVIGATION: NavigationSettings = {
+  groups: FALLBACK_NAV_GROUPS,
   modules: FALLBACK_MODULES,
   landing: { signedIn: "home", signedOut: "home" },
 };

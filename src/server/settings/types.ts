@@ -61,17 +61,28 @@ export type ModuleKey =
 
 export type ModuleAccess = "public" | "signed-in" | "admin";
 
+/** A sidebar section. Modules reference it by key. */
+export interface NavGroupSettings {
+  /** Stable slug, unique within the navigation settings. */
+  key: string;
+  label: string;
+}
+
 export interface ModuleSettings {
   key: ModuleKey;
   label: string;
   /** Hidden tabs stay reachable by URL but disappear from the header. */
   hidden: boolean;
   access: ModuleAccess;
+  /** Key of the sidebar group this module belongs to. */
+  group: string;
 }
 
 export type LandingKey = "home" | "analysis" | "signals";
 
 export interface NavigationSettings {
+  /** Ordered sidebar sections. A module with an unknown group falls back. */
+  groups: NavGroupSettings[];
   /** Ordered tabs. Missing modules are appended from the defaults on read. */
   modules: ModuleSettings[];
   landing: {

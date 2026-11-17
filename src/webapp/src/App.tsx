@@ -13,6 +13,7 @@ import BriefingPage from "./briefing/BriefingPage";
 import CoachPage from "./coach/CoachPage";
 import LegalPage, { isLegalView } from "./legal/LegalPage";
 import HomePage from "./home/HomePage";
+import TodayPage from "./today/TodayPage";
 import { isViewKey, pathForView, resolveRoute, type ViewKey } from "./routing";
 import AppShell from "./AppShell";
 import Dashboard from "./Dashboard";
@@ -336,16 +337,29 @@ export default function App() {
         onViewChange={handleViewChange}
         signedIn={signedIn}
         isAdmin={isAdmin}
+        username={me?.username ?? null}
+        hasCredentials={hasCredentials}
+        accountCount={accounts.length}
         onOpenSettings={openSettings}
         onSignIn={openLogin}
+        onRegister={() => openAuth("register")}
         onLogout={handleLogout}
       >
         {view === "home" ? (
-          <HomePage
-            signedIn={signedIn}
-            onRegister={() => openAuth("register")}
-            onNavigate={handleViewChange}
-          />
+          signedIn ? (
+            <TodayPage
+              username={me?.username ?? null}
+              accounts={accounts}
+              hasCredentials={hasCredentials}
+              onNavigate={handleViewChange}
+            />
+          ) : (
+            <HomePage
+              signedIn={signedIn}
+              onRegister={() => openAuth("register")}
+              onNavigate={handleViewChange}
+            />
+          )
         ) : moduleLocked ? (
           <SignInPrompt
             title={moduleAdminOnly ? `${lockedLabel} is restricted` : `Sign in to view ${lockedLabel}`}

@@ -5,7 +5,7 @@
 // Anything that reaches the database has been trimmed, length-checked and, for
 // colours and URLs, format-checked.
 
-import { DEFAULT_MODULES, MODULE_KEYS } from "./defaults";
+import { DEFAULT_MODULES, DEFAULT_NAV_GROUPS, MODULE_KEYS } from "./defaults";
 import type {
   AnalysisSettings,
   AnnouncementSettings,
@@ -20,6 +20,7 @@ import type {
   ModuleAccess,
   ModuleKey,
   ModuleSettings,
+  NavGroupSettings,
   NavigationSettings,
   NumberFormat,
   PwaSettings,
@@ -343,13 +344,71 @@ function defaultModule(key: ModuleKey): ModuleSettings {
   return DEFAULT_MODULES.find((module) => module.key === key) ?? DEFAULT_MODULES[0];
 }
 
+const GROUP_KEY = /^[a-z0-9][a-z0-9-]{0,23}$/;
+
+function slugifyGroup(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  return slug || "group";
+}
+
+/**
+ * Normalise the ordered sidebar sections. The client always sends the full
+ * list, so removing a group is allowed. Keys are stable slugs; a label that
+ * arrives without one gets a slug derived from the label.
+ */
+export function normalizeGroups(patch: unknown, base: NavGroupSettings[]): NavGroupSettings[] {
+  if (patch === undefined) return base.map((group) => ({ ...group }));
+  if (!Array.isArray(patch) || patch.length === 0) {
+    throw new SettingsValidationError("groups must be a non-empty array");
+  }
+
+  const seen = new Set<string>();
+  const next: NavGroupSettings[] = [];
+
+  for (const entry of patch) {
+    const source = plainObject(entry);
+    const label = readString(source, "label", "", 24);
+    if (!label) throw new SettingsValidationError("group labels cannot be empty");
+
+    const rawKey = typeof source.key === "string" ? source.key.trim().toLowerCase() : "";
+    const key = GROUP_KEY.test(rawKey) ? rawKey : slugifyGroup(label);
+    if (seen.has(key)) {
+      throw new SettingsValidationError(`duplicate group: ${key}`);
+    }
+    seen.add(key);
+    next.push({ key, label });
+  }
+
+  return next;
+}
+
+/** Keep a module inside a group that exists, preferring its default section. */
+function groupFor(moduleKey: ModuleKey, group: string, groupKeys: string[]): string {
+  if (groupKeys.includes(group)) return group;
+  const fallback = defaultModule(moduleKey).group;
+  return groupKeys.includes(fallback) ? fallback : groupKeys[0];
+}
+
 /**
  * Normalise the ordered module list. The client always sends the full list;
  * any module it omits is appended in the default order so a partial patch can
  * never make a tab disappear from the shell entirely.
  */
-export function normalizeModules(patch: unknown, base: ModuleSettings[]): ModuleSettings[] {
-  if (patch === undefined) return base.map((module) => ({ ...module }));
+export function normalizeModules(
+  patch: unknown,
+  base: ModuleSettings[],
+  groupKeys: string[] = DEFAULT_NAV_GROUPS.map((group) => group.key)
+): ModuleSettings[] {
+  if (patch === undefined) {
+    return base.map((module) => ({
+      ...module,
+      group: groupFor(module.key, module.group, groupKeys),
+    }));
+  }
   if (!Array.isArray(patch)) {
     throw new SettingsValidationError("modules must be an array");
   }
@@ -383,18 +442,25 @@ export function normalizeModules(patch: unknown, base: ModuleSettings[]): Module
     // Trading always needs a session; the trading API is auth-only.
     if (moduleKey === "trading") access = "signed-in";
 
+    const requestedGroup = typeof source.group === "string" ? source.group : current.group;
+
     next.push({
       key: moduleKey,
       label,
       hidden: readBoolean(source, "hidden", current.hidden),
       access,
+      group: groupFor(moduleKey, requestedGroup, groupKeys),
     });
   }
 
   for (const fallback of DEFAULT_MODULES) {
     if (seen.has(fallback.key)) continue;
     const current = base.find((module) => module.key === fallback.key) ?? fallback;
-    next.push({ ...current, access: fallback.key === "trading" ? "signed-in" : current.access });
+    next.push({
+      ...current,
+      group: groupFor(fallback.key, current.group, groupKeys),
+      access: fallback.key === "trading" ? "signed-in" : current.access,
+    });
   }
 
   return next;
@@ -406,9 +472,15 @@ export function normalizeNavigation(
 ): NavigationSettings {
   const source = plainObject(patch);
   const landingSource = plainObject(source.landing);
+  const groups = normalizeGroups(source.groups, base.groups);
 
   return {
-    modules: normalizeModules(source.modules, base.modules),
+    groups,
+    modules: normalizeModules(
+      source.modules,
+      base.modules,
+      groups.map((group) => group.key)
+    ),
     landing: {
       signedIn: readLanding(landingSource, "signedIn", base.landing.signedIn),
       signedOut: readLanding(landingSource, "signedOut", base.landing.signedOut),

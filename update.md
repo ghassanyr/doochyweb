@@ -250,6 +250,54 @@ started, `later` means deliberately deferred, `skip` means not planned.
   the models that were not checked yet. Reasoning models that put their answer
   in `reasoning_content` no longer surface as an empty reply.
 
+## Sidebar navigation
+
+- The app pages now use a persistent left sidebar instead of the scrolling top
+  pill bar. The signed-out marketing Home keeps the top bar.
+- Sections are stored settings, not hard-coded. Admin, Site settings can add,
+  rename, reorder and remove sections, and assign each module to a section.
+  The shipped default is Market (Analysis, Signals, Breakouts), Workspace
+  (Trading, Alerts, Briefing, Coach) and Learn. Module labels, visibility,
+  access and order still apply inside each section.
+- Section keys are stable slugs. Renaming a label keeps the key, so a rename
+  never moves a module. Removing a section reassigns its modules to the first
+  remaining section, and a stored module whose section disappeared falls back
+  the same way on read.
+- Signed-out visitors see signed-in destinations with a lock. Clicking one opens
+  the sign-in modal instead of navigating to a dead end.
+- The rail collapses to icons. Widths are 248px expanded and 72px collapsed, and
+  the choice is stored in `doochyweb_sidebar_collapsed`.
+- Mobile uses a compact top bar and an off-canvas drawer. Escape, the scrim, the
+  close button and any navigation close it. Focus is trapped while it is open.
+- The footer block shows the member, cTrader connection status, theme, settings
+  and sign out. Signed-out visitors get Sign in and Create account.
+- Admin sub-pages (Overview, Site settings, Integrations) expand under Admin
+  while one of those views is active. The rail only shows the Admin icon.
+- On small screens the drawer is backed by a bottom bar: Home, the first three
+  visible modules and More. More opens the same drawer, so every destination
+  stays one tap away. Signed-in modules keep the lock behavior in both places.
+- The bar hides at `lg`, where the rail takes over, and the page reserves space
+  for it plus `env(safe-area-inset-bottom)` so content never hides behind it.
+- Self-tested by `test/navigation.test.ts` (grouping, configured order, hidden
+  modules, admin-only access, orphaned groups, quick destinations, locks).
+
+## Today dashboard
+
+- Signed-in Home is now Today. Signed-out Home keeps the marketing page and its
+  top bar, so the pitch is still the first thing a visitor sees.
+- Cards: greeting and date, quick actions, account balances and cTrader status,
+  active signals, alerts, the daily briefing, the coach's weekly focus and the
+  biggest watchlist movers.
+- Every card loads from its existing endpoint on its own. One slow or failing
+  service shows a card-level error and a link to the full page; the rest of the
+  page keeps working. There is no aggregation endpoint.
+- Quick actions and card links follow the configured modules, so hiding a module
+  in Admin also removes its shortcut here.
+- A signal with no entry price reads "Entry at market" instead of a dash.
+- Movers are ranked by absolute daily change and drop rows with no change, so a
+  stale snapshot never invents a move.
+- Self-tested by `test/today.test.ts` (greeting boundaries, mover ranking, limit).
+
 ## Briefing load path
 
 - `GET /api/briefing` no longer waits for the AI provider. When no brief exists,
@@ -284,7 +332,7 @@ started, `later` means deliberately deferred, `skip` means not planned.
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 903 tests, all passing.
+- `pnpm test`: 921 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

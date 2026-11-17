@@ -7,6 +7,7 @@ import {
   DEFAULT_BRANDING,
   DEFAULT_LEGAL,
   DEFAULT_MAINTENANCE,
+  DEFAULT_NAV_GROUPS,
   DEFAULT_NAVIGATION,
   DEFAULT_REGISTRATION,
   DEFAULT_SITE,
@@ -63,6 +64,25 @@ describe("site settings defaults", () => {
     assert.equal(settings.version, "2026-01-02T03:04:05.000Z");
     assert.equal(settings.updatedAt, "2026-01-02T03:04:05.000Z");
     assert.equal(settings.updatedBy, "alice");
+  });
+
+  test("legacy stored navigation gains default groups", () => {
+    const settings = mergeSiteSettings({
+      navigation: {
+        modules: [{ key: "signals", label: "Signals", hidden: false, access: "public" }],
+      },
+    });
+
+    assert.deepEqual(settings.navigation.groups, DEFAULT_NAV_GROUPS);
+    assert.equal(
+      settings.navigation.modules.find((module) => module.key === "signals")?.group,
+      "market"
+    );
+    assert.ok(
+      settings.navigation.modules.every((module) =>
+        settings.navigation.groups.some((group) => group.key === module.group)
+      )
+    );
   });
 
   test("the public config omits audit fields", () => {
@@ -355,6 +375,72 @@ describe("normalizeNavigation", () => {
       DEFAULT_NAVIGATION
     );
     assert.deepEqual(navigation.landing, { signedIn: "analysis", signedOut: "signals" });
+  });
+
+  test("keeps configured groups and assigns modules to them", () => {
+    const navigation = normalizeNavigation(
+      {
+        groups: [
+          { key: "trade", label: "Trade" },
+          { key: "read", label: "Read" },
+        ],
+        modules: [
+          { key: "trading", group: "trade" },
+          { key: "analysis", group: "read" },
+          { key: "signals", group: "missing" },
+        ],
+      },
+      DEFAULT_NAVIGATION
+    );
+
+    assert.deepEqual(navigation.groups, [
+      { key: "trade", label: "Trade" },
+      { key: "read", label: "Read" },
+    ]);
+    assert.equal(navigation.modules.find((module) => module.key === "trading")?.group, "trade");
+    assert.equal(navigation.modules.find((module) => module.key === "analysis")?.group, "read");
+    // An unknown group falls back to the module's default section when it
+    // exists, otherwise the first configured section.
+    assert.equal(navigation.modules.find((module) => module.key === "signals")?.group, "trade");
+  });
+
+  test("derives a slug when a group key is missing", () => {
+    const navigation = normalizeNavigation(
+      { groups: [{ label: "My Desk" }] },
+      DEFAULT_NAVIGATION
+    );
+    assert.deepEqual(navigation.groups, [{ key: "my-desk", label: "My Desk" }]);
+  });
+
+  test("removing a group moves its modules into a surviving group", () => {
+    const navigation = normalizeNavigation(
+      { groups: [{ key: "main", label: "Main" }] },
+      DEFAULT_NAVIGATION
+    );
+    assert.ok(navigation.modules.every((module) => module.group === "main"));
+  });
+
+  test("rejects an empty group list", () => {
+    assert.throws(
+      () => normalizeNavigation({ groups: [] }, DEFAULT_NAVIGATION),
+      SettingsValidationError
+    );
+  });
+
+  test("rejects duplicate groups", () => {
+    assert.throws(
+      () =>
+        normalizeNavigation(
+          {
+            groups: [
+              { key: "market", label: "Market" },
+              { key: "market", label: "Also market" },
+            ],
+          },
+          DEFAULT_NAVIGATION
+        ),
+      SettingsValidationError
+    );
   });
 
   test("rejects an unknown module", () => {

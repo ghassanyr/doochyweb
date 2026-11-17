@@ -72,6 +72,21 @@ body {
 
 ::selection { background: rgb(var(--accent) / 0.24); }
 
+/* Mobile navigation drawer: a short slide from the left and a plain fade on
+   the scrim. The reduced-motion rule below shortens both to a single frame. */
+@keyframes sidebar-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes sidebar-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sidebar-slide-in { animation: sidebar-slide-in 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+.sidebar-scrim-in { animation: sidebar-scrim-in 160ms ease-out; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

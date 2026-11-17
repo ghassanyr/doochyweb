@@ -11,12 +11,14 @@ import {
   Megaphone,
   Navigation,
   Palette,
+  Plus,
   RotateCcw,
   Save,
   Search,
   Share2,
   ShieldCheck,
   Smartphone,
+  Trash2,
   Type,
   Upload,
   UserPlus,
@@ -713,6 +715,56 @@ export default function AdminSettingsPage({
       const modules = [...current.modules];
       [modules[index], modules[target]] = [modules[target], modules[index]];
       return { ...current, modules };
+    });
+  }
+
+  function updateGroup(index: number, patch: { label?: string }) {
+    setNavigation((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        groups: current.groups.map((group, i) =>
+          i === index ? { ...group, ...patch } : group
+        ),
+      };
+    });
+  }
+
+  function moveGroup(index: number, delta: number) {
+    setNavigation((current) => {
+      if (!current) return current;
+      const target = index + delta;
+      if (target < 0 || target >= current.groups.length) return current;
+      const groups = [...current.groups];
+      [groups[index], groups[target]] = [groups[target], groups[index]];
+      return { ...current, groups };
+    });
+  }
+
+  function addGroup() {
+    setNavigation((current) => {
+      if (!current) return current;
+      let suffix = current.groups.length + 1;
+      while (current.groups.some((group) => group.key === `section-${suffix}`)) suffix += 1;
+      return {
+        ...current,
+        groups: [...current.groups, { key: `section-${suffix}`, label: "New section" }],
+      };
+    });
+  }
+
+  function removeGroup(index: number) {
+    setNavigation((current) => {
+      if (!current || current.groups.length <= 1) return current;
+      const removed = current.groups[index];
+      const fallback = current.groups[index === 0 ? 1 : 0].key;
+      return {
+        ...current,
+        groups: current.groups.filter((_, i) => i !== index),
+        modules: current.modules.map((module) =>
+          module.group === removed.key ? { ...module, group: fallback } : module
+        ),
+      };
     });
   }
 
@@ -1613,12 +1665,84 @@ export default function AdminSettingsPage({
             <div>
               <h2 className="text-sm font-semibold tracking-tight text-fg">Navigation</h2>
               <p className="text-xs text-fg-muted">
-                Rename, reorder and hide tabs. Hidden tabs stay reachable by direct link.
+                Group, rename, reorder and hide tabs. Hidden tabs stay reachable by direct link.
               </p>
             </div>
           </div>
 
           <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-faint">
+                Sections
+              </h3>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Plus className="h-3.5 w-3.5" />}
+                onClick={addGroup}
+              >
+                Add section
+              </Button>
+            </div>
+            {navigation.groups.map((group, index) => (
+              <div
+                key={group.key}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-hairline bg-soft px-2.5 py-2"
+              >
+                <span className="w-[74px] shrink-0 font-mono text-[10px] uppercase tracking-wide text-fg-faint">
+                  {group.key}
+                </span>
+                <input
+                  value={group.label}
+                  onChange={(event) => updateGroup(index, { label: event.target.value })}
+                  maxLength={24}
+                  aria-label={`${group.key} section label`}
+                  className={`${compactInput} min-w-[120px] flex-1`}
+                />
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === 0}
+                    onClick={() => moveGroup(index, -1)}
+                    aria-label={`Move ${group.label} section up`}
+                    title="Move up"
+                    icon={<ArrowUp className="h-3.5 w-3.5" />}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === navigation.groups.length - 1}
+                    onClick={() => moveGroup(index, 1)}
+                    aria-label={`Move ${group.label} section down`}
+                    title="Move down"
+                    icon={<ArrowDown className="h-3.5 w-3.5" />}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={navigation.groups.length <= 1}
+                    onClick={() => removeGroup(index)}
+                    aria-label={`Remove ${group.label} section`}
+                    title={
+                      navigation.groups.length <= 1
+                        ? "Keep at least one section"
+                        : "Remove section"
+                    }
+                    icon={<Trash2 className="h-3.5 w-3.5" />}
+                  />
+                </div>
+              </div>
+            ))}
+            <p className="text-[11px] text-fg-faint">
+              Removing a section moves its tabs into the first remaining section.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-faint">
+              Tabs
+            </h3>
             {navigation.modules.map((module, index) => (
               <div
                 key={module.key}
@@ -1646,6 +1770,18 @@ export default function AdminSettingsPage({
                   {ACCESS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={module.group}
+                  onChange={(event) => updateModule(index, { group: event.target.value })}
+                  aria-label={`${module.key} section`}
+                  className={`${compactInput} w-[128px]`}
+                >
+                  {navigation.groups.map((group) => (
+                    <option key={group.key} value={group.key}>
+                      {group.label}
                     </option>
                   ))}
                 </select>
