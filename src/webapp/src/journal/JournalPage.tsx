@@ -163,8 +163,8 @@ export default function JournalPage() {
             <h3 className="text-sm font-semibold text-fg">Trade journal</h3>
             <span className="text-[11px] text-fg-faint">
               {synced
-                ? `Closed cTrader trades import automatically · last synced ${formatLocalDateTime(synced)}`
-                : "Closed cTrader trades import automatically once an account is connected."}
+                ? `Closed cTrader and MT5 trades import automatically · last synced ${formatLocalDateTime(synced)}`
+                : "Closed cTrader and MT5 trades import automatically once an account is connected."}
             </span>
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button
@@ -221,6 +221,7 @@ export default function JournalPage() {
               <option value="">All sources</option>
               <option value="manual">Manual</option>
               <option value="ctrader">cTrader</option>
+              <option value="mt5">MT5</option>
             </select>
           </div>
 
@@ -245,8 +246,8 @@ export default function JournalPage() {
             <div className="p-6">
               <p className="text-sm font-medium text-fg">No entries yet</p>
               <p className="mt-1 text-[12.5px] leading-relaxed text-fg-muted">
-                Add a trade by hand, or wait for the next automatic import: closed cTrader deals appear here
-                with verified P&amp;L.
+                Add a trade by hand, or wait for the next automatic import: closed cTrader and MT5 deals
+                appear here with verified P&amp;L.
               </p>
             </div>
           ) : (
@@ -310,11 +311,19 @@ export default function JournalPage() {
                         {entry.closedAt ? formatLocalDateTime(entry.closedAt) : "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {entry.verified ? (
-                          <Badge tone="success">Verified</Badge>
-                        ) : (
-                          <Badge tone="muted">Self-reported</Badge>
-                        )}
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge tone={entry.source === "mt5" ? "accent" : "muted"}>
+                            {entry.source === "ctrader" ? "cTrader" : entry.source === "mt5" ? "MT5" : "Manual"}
+                          </Badge>
+                          <span className="text-[10.5px] text-fg-faint">
+                            {entry.verified ? "Verified" : "Self-reported"}
+                          </span>
+                          {entry.accountLabel && (
+                            <span className="max-w-[10rem] truncate text-[10px] text-fg-faint">
+                              {entry.accountLabel}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-1">

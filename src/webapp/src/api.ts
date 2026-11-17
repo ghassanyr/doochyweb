@@ -99,6 +99,47 @@ export interface AccountView {
   color: string | null;
 }
 
+export interface BrokerAccountView {
+  id: string;
+  broker: "ctrader" | "mt5";
+  login: string;
+  name: string;
+  mode: "demo" | "live";
+  balance: number | null;
+  currency: string | null;
+  nickname: string | null;
+  color: string | null;
+}
+
+export interface Mt5AccountInput {
+  login: string;
+  server: string;
+  password: string;
+  investorPassword?: string | null;
+  mode: "demo" | "live";
+  currency?: string | null;
+  nickname?: string | null;
+  color?: string | null;
+}
+
+export interface Mt5AccountView {
+  id: string;
+  broker: "mt5";
+  login: string;
+  server: string;
+  name: string;
+  mode: "demo" | "live";
+  balance: null;
+  currency: string | null;
+  nickname: string | null;
+  color: string | null;
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 // Account carried on a row when its data is shown in combined mode, so the
 // table can say which account a position/order belongs to.
 export interface RowAccount {
@@ -457,13 +498,16 @@ export const telegramApi = {
 // Trade Journal, see src/server/journal
 // ---------------------------------------------------------------------------
 
-export type JournalSource = "manual" | "ctrader";
+export type JournalSource = "manual" | "ctrader" | "mt5";
 export type JournalSide = "buy" | "sell";
 export type JournalStatus = "open" | "closed";
 
 export interface JournalEntry {
   id: string;
   source: JournalSource;
+  broker: "ctrader" | "mt5" | null;
+  accountId: string | null;
+  externalId: string | null;
   dealId: number | null;
   accountCtid: number | null;
   accountLabel: string | null;
@@ -1096,6 +1140,29 @@ export interface AdminCtraderHealth {
   };
 }
 
+export interface AdminMt5HealthRow {
+  userId: string;
+  username: string;
+  accountId: string;
+  login: string;
+  server: string;
+  mode: "demo" | "live";
+  nickname: string | null;
+  color: string | null;
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+}
+
+export interface AdminMt5Health {
+  connections: AdminMt5HealthRow[];
+  summary: {
+    accounts: number;
+    users: number;
+    failing: number;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Site presentation, see src/server/settings
 // ---------------------------------------------------------------------------
@@ -1465,6 +1532,8 @@ export const adminApi = {
 
   ctraderHealth: () => request<AdminCtraderHealth>("/api/admin/ctrader/health"),
 
+  mt5Health: () => request<AdminMt5Health>("/api/admin/mt5/health"),
+
   createUser: (input: {
     username: string;
     email: string;
@@ -1606,10 +1675,12 @@ export const api = {
       emailVerified: boolean;
       role: UserRole;
       hasCredentials: boolean;
+      hasMt5Accounts: boolean;
       clientIdMasked: string | null;
       ctraderOAuth: boolean;
       ctraderManual: boolean;
       accounts: AccountView[];
+      brokerAccounts: BrokerAccountView[];
     }>("/api/me", { token }),
 
   exportMyData: () => downloadFile("/api/me/export", "doochy-my-data.json"),
@@ -1628,7 +1699,8 @@ export const api = {
   ctraderOAuthStart: () =>
     request<{ url: string }>("/api/ctrader/oauth/start", { method: "POST" }),
 
-  accounts: () => request<{ accounts: AccountView[] }>("/api/accounts"),
+  accounts: () =>
+    request<{ accounts: AccountView[]; brokerAccounts: BrokerAccountView[] }>("/api/accounts"),
 
   positions: (ctid: number) => request<{ positions: PositionRow[] }>(`/api/accounts/${ctid}/positions`),
 
@@ -1650,6 +1722,42 @@ export const api = {
       body: prefs,
       token,
     }),
+
+  mt5Accounts: () => request<{ accounts: Mt5AccountView[] }>("/api/mt5/accounts"),
+
+  connectMt5: (input: Mt5AccountInput) =>
+    request<{ account: Mt5AccountView }>("/api/mt5/accounts", {
+      method: "POST",
+      body: input,
+    }),
+
+  setMt5Prefs: (id: string, prefs: { nickname?: string; color?: string | null }) =>
+    request<{ account: Mt5AccountView }>(`/api/mt5/accounts/${encodeURIComponent(id)}/prefs`, {
+      method: "PUT",
+      body: prefs,
+    }),
+
+  deleteMt5Account: (id: string) =>
+    request<{ ok: boolean }>(`/api/mt5/accounts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  mt5Positions: (id: string) =>
+    request<{ positions: PositionRow[] }>(`/api/mt5/accounts/${encodeURIComponent(id)}/positions`),
+
+  mt5Orders: (id: string) =>
+    request<{ orders: OrderRow[] }>(`/api/mt5/accounts/${encodeURIComponent(id)}/orders`),
+
+  mt5History: (id: string, days = 7) =>
+    request<OrderHistoryResult>(
+      `/api/mt5/accounts/${encodeURIComponent(id)}/history?days=${encodeURIComponent(String(days))}`
+    ),
+
+  mt5Symbols: (id: string) =>
+    request<{ symbols: string[] }>(`/api/mt5/accounts/${encodeURIComponent(id)}/symbols`),
+
+  mt5Quote: (id: string, symbol: string) =>
+    request<{ quote: SymbolQuote | null }>(
+      `/api/mt5/accounts/${encodeURIComponent(id)}/quote?symbol=${encodeURIComponent(symbol)}`
+    ),
 
   // ---- manual order management (phase 2) ----
 

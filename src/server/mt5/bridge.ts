@@ -1,5 +1,19 @@
-import type { BrokerMode } from "../broker/types";
+import type {
+  BrokerHistoryResult,
+  BrokerHistoryTrade,
+  BrokerMode,
+  BrokerOrder,
+  BrokerPosition,
+  BrokerSide,
+} from "../broker/types";
 import type { IntegrationTestResult } from "../integrations/types";
+
+export interface Mt5BridgeCredentials {
+  login: string;
+  server: string;
+  password: string;
+  investorPassword?: string | null;
+}
 
 export interface Mt5BridgeConfig {
   bridgeUrl: string;
@@ -8,6 +22,7 @@ export interface Mt5BridgeConfig {
   mode: BrokerMode;
   enabled: boolean;
   userId: string;
+  credentials?: Mt5BridgeCredentials | null;
 }
 
 export interface Mt5SymbolRecord {
@@ -141,6 +156,15 @@ async function requestJson<T>(
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+  if (config.credentials) {
+    headers["X-MT5-Login"] = config.credentials.login;
+    headers["X-MT5-Server"] = config.credentials.server;
+    headers["X-MT5-Mode"] = config.mode;
+    headers["X-MT5-Password"] = config.credentials.password;
+    if (config.credentials.investorPassword) {
+      headers["X-MT5-Investor-Password"] = config.credentials.investorPassword;
+    }
+  }
   const res = await fetch(requestUrl(config, path, params), {
     method: "GET",
     headers,
@@ -234,6 +258,134 @@ export function parseMt5Candles(payload: unknown): {
     });
   }
   return out.sort((a, b) => a.time - b.time);
+}
+
+function optionalNumber(value: unknown, fallback: number | null = null): number | null {
+  if (value == null || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function timeFrom(value: unknown): number | null {
+  const parsed = optionalNumber(value);
+  if (parsed == null || parsed <= 0) return null;
+  return parsed < 1e12 ? parsed * 1000 : parsed;
+}
+
+function sideOf(value: unknown): BrokerSide {
+  return text(value).toUpperCase().startsWith("S") ? "SELL" : "BUY";
+}
+
+function idOf(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  return "";
+}
+
+export function parseMt5Positions(payload: unknown): BrokerPosition[] {
+  const out: BrokerPosition[] = [];
+  for (const row of rows(payload, "positions")) {
+    if (!row || typeof row !== "object") continue;
+    const item = row as Record<string, unknown>;
+    const id = idOf(item.id ?? item.positionId ?? item.ticket);
+    const symbol = text(item.symbol ?? item.symbolName);
+    const entryPrice = optionalNumber(item.entryPrice ?? item.price ?? item.openPrice);
+    if (!id || !symbol || entryPrice == null) continue;
+    out.push({
+      id,
+      symbol,
+      side: sideOf(item.side ?? item.type ?? item.direction),
+      lots: optionalNumber(item.lots ?? item.volume, 0) ?? 0,
+      entryPrice,
+      stopLoss: optionalNumber(item.stopLoss ?? item.sl),
+      takeProfit: optionalNumber(item.takeProfit ?? item.tp),
+      profitUsd: optionalNumber(item.profitUsd ?? item.profit),
+      digits: optionalNumber(item.digits, 2) ?? 2,
+      openedAt: timeFrom(item.openedAt ?? item.openTime ?? item.time),
+    });
+  }
+  return out;
+}
+
+export function parseMt5Orders(payload: unknown): BrokerOrder[] {
+  const out: BrokerOrder[] = [];
+  for (const row of rows(payload, "orders")) {
+    if (!row || typeof row !== "object") continue;
+    const item = row as Record<string, unknown>;
+    const id = idOf(item.id ?? item.orderId ?? item.ticket);
+    const symbol = text(item.symbol ?? item.symbolName);
+    const price = optionalNumber(item.price ?? item.openPrice ?? item.entryPrice);
+    if (!id || !symbol || price == null) continue;
+    out.push({
+      id,
+      symbol,
+      side: sideOf(item.side ?? item.type ?? item.direction),
+      type: text(item.orderType ?? item.typeName) || "MARKET",
+      price,
+      lots: optionalNumber(item.lots ?? item.volume, 0) ?? 0,
+      stopLoss: optionalNumber(item.stopLoss ?? item.sl),
+      takeProfit: optionalNumber(item.takeProfit ?? item.tp),
+      digits: optionalNumber(item.digits, 2) ?? 2,
+      expiresAt: timeFrom(item.expiresAt ?? item.expiration ?? item.expirationTime),
+      expirationType: text(item.expirationType).toUpperCase() === "GTD" ? "GTD" : "GTC",
+    });
+  }
+  return out;
+}
+
+export function parseMt5History(payload: unknown, days: number): BrokerHistoryResult {
+  const trades: BrokerHistoryTrade[] = [];
+  const source = (payload ?? {}) as Record<string, unknown>;
+  const items = rows(payload, "history").concat(rows(payload, "trades"));
+  for (const row of items) {
+    if (!row || typeof row !== "object") continue;
+    const item = row as Record<string, unknown>;
+    const id = idOf(item.id ?? item.dealId ?? item.ticket);
+    const symbol = text(item.symbol ?? item.symbolName);
+    const closedAt = timeFrom(item.closedAt ?? item.closeTime ?? item.time);
+    if (!id || !symbol || closedAt == null) continue;
+    const entryPrice = optionalNumber(item.entryPrice ?? item.openPrice, 0) ?? 0;
+    const exitPrice = optionalNumber(item.exitPrice ?? item.price ?? item.closePrice, 0) ?? 0;
+    const grossProfit = optionalNumber(item.grossProfit ?? item.profit, 0) ?? 0;
+    const swap = optionalNumber(item.swap, 0) ?? 0;
+    const commission = optionalNumber(item.commission, 0) ?? 0;
+    trades.push({
+      id,
+      orderId: item.orderId == null ? null : idOf(item.orderId),
+      positionId: item.positionId == null ? null : idOf(item.positionId),
+      symbol,
+      side: sideOf(item.side ?? item.type ?? item.direction),
+      lots: optionalNumber(item.lots ?? item.volume, 0) ?? 0,
+      entryPrice,
+      exitPrice,
+      grossProfit,
+      swap,
+      commission,
+      net: optionalNumber(item.net, grossProfit + swap + commission) ?? grossProfit,
+      digits: optionalNumber(item.digits, 2) ?? 2,
+      closedAt,
+    });
+  }
+  return {
+    trades,
+    days,
+    truncated: source.truncated === true,
+  };
+}
+
+export async function mt5ListPositions(config: Mt5BridgeConfig): Promise<BrokerPosition[]> {
+  const payload = await requestJson<unknown>(config, "/positions");
+  return parseMt5Positions(payload);
+}
+
+export async function mt5ListOrders(config: Mt5BridgeConfig): Promise<BrokerOrder[]> {
+  const payload = await requestJson<unknown>(config, "/orders");
+  return parseMt5Orders(payload);
+}
+
+export async function mt5FetchHistory(config: Mt5BridgeConfig, requestedDays: number): Promise<BrokerHistoryResult> {
+  const days = Math.min(30, Math.max(1, Math.round(Number(requestedDays) || 7)));
+  const payload = await requestJson<unknown>(config, "/history", { days });
+  return parseMt5History(payload, days);
 }
 
 export async function mt5ListSymbols(config: Mt5BridgeConfig): Promise<Mt5SymbolRecord[]> {

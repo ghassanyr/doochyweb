@@ -12,6 +12,7 @@ import { revokeAuthTokens } from "../authTokens";
 import { Credentials, User, type StoredAccount, type UserRole, type UserStatus } from "../db";
 import { dropUserSockets } from "../ctrader/connection";
 import { UserWatchlist } from "../market/userWatchlist";
+import { Mt5AccountModel } from "../mt5/accounts";
 import { TelegramLink, TelegramLinkCode } from "../telegram/store";
 
 export interface AdminUserRow {
@@ -43,6 +44,29 @@ export interface AdminCtraderHealth {
   summary: {
     connected: number;
     reauthRequired: number;
+    failing: number;
+  };
+}
+
+export interface AdminMt5HealthRow {
+  userId: string;
+  username: string;
+  accountId: string;
+  login: string;
+  server: string;
+  mode: "demo" | "live";
+  nickname: string | null;
+  color: string | null;
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+}
+
+export interface AdminMt5Health {
+  connections: AdminMt5HealthRow[];
+  summary: {
+    accounts: number;
+    users: number;
     failing: number;
   };
 }
@@ -97,6 +121,41 @@ export async function listCtraderHealth(): Promise<AdminCtraderHealth> {
     summary: {
       connected: connections.length,
       reauthRequired: connections.filter((row) => row.reauthRequired).length,
+      failing: connections.filter((row) => row.lastError !== null).length,
+    },
+  };
+}
+
+/** Per-user MT5 account state without passwords or investor passwords. */
+export async function listMt5Health(): Promise<AdminMt5Health> {
+  const docs = await Mt5AccountModel.find({}).sort({ createdAt: -1 }).lean().exec();
+  if (docs.length === 0) {
+    return { connections: [], summary: { accounts: 0, users: 0, failing: 0 } };
+  }
+  const userIds = Array.from(new Set((docs as any[]).map((doc) => String(doc.userId))));
+  const users = await User.find({ _id: { $in: userIds.map((id) => new mongoose.Types.ObjectId(id)) } })
+    .select({ username: 1 })
+    .lean()
+    .exec();
+  const names = new Map(users.map((user: any) => [String(user._id), String(user.username ?? "unknown")]));
+  const connections = (docs as any[]).map((doc): AdminMt5HealthRow => ({
+    userId: String(doc.userId),
+    username: names.get(String(doc.userId)) ?? "unknown",
+    accountId: String(doc.accountId),
+    login: String(doc.login ?? ""),
+    server: String(doc.server ?? ""),
+    mode: doc.mode === "live" ? "live" : "demo",
+    nickname: typeof doc.nickname === "string" && doc.nickname ? doc.nickname : null,
+    color: typeof doc.color === "string" && doc.color ? doc.color : null,
+    lastOkAt: iso(doc.lastOkAt),
+    lastError: typeof doc.lastError === "string" && doc.lastError ? doc.lastError : null,
+    lastErrorAt: iso(doc.lastErrorAt),
+  }));
+  return {
+    connections,
+    summary: {
+      accounts: connections.length,
+      users: new Set(connections.map((row) => row.userId)).size,
       failing: connections.filter((row) => row.lastError !== null).length,
     },
   };
@@ -208,6 +267,7 @@ export async function deleteUser(userId: string, actorId: string): Promise<Delet
   const objectId = new mongoose.Types.ObjectId(userId);
   await Promise.all([
     Credentials.deleteMany({ userId: objectId }).exec(),
+    Mt5AccountModel.deleteMany({ userId: objectId }).exec(),
     TelegramLink.deleteMany({ userId: objectId }).exec(),
     TelegramLinkCode.deleteMany({ userId: objectId }).exec(),
     UserWatchlist.deleteMany({ userId: objectId }).exec(),

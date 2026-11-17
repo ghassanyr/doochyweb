@@ -30,11 +30,16 @@ Add MT5 as a broker option in phases, without destabilising the current cTrader 
 - Generalize paper trading lot specs so they come from the configured broker adapter instead of cTrader directly.
 - Keep the paper trading USD/Lots UI. Lots stays disabled when the active provider has no spec for the symbol.
 
-## Phase 2 - Per-user MT5 accounts, read-only
+## Phase 2 - Per-user MT5 accounts, read-only - done
 
-- Add encrypted MT5 credential storage and namespaced routes such as `/api/mt5/accounts/:id/{positions,orders,history,symbols,quote}`.
-- Show cTrader and MT5 accounts side by side in Trading, Today, Settings, Connect, Journal, user data export, and admin health.
-- Keep legacy cTrader routes available while the UI learns the provider-aware account reference.
+- Added an `Mt5Account` store with UUID account ids. Login, server, password and investor password are encrypted with `INTEGRATIONS_ENCRYPTION_KEY` and AES-GCM AAD bound to user, account and field.
+- Extended the bridge with read-only `/positions`, `/orders` and `/history?days=` endpoints. Per-user calls send credentials in `X-MT5-*` headers; the `account` query value stays the MT5 account id.
+- Added authenticated `/api/mt5/accounts` management and `/api/mt5/accounts/:id/{positions,orders,history,symbols,quote}` read routes. cTrader routes remain unchanged.
+- Added additive `brokerAccounts` to `/api/me` and `/api/accounts`, keeping the legacy numeric `ctid` account shape intact.
+- Added MT5 connection and management controls to Trading, Today, Settings and Connect. MT5 appears as read-only alongside cTrader; positions, pending orders and history are shown through the bridge without enabling writes.
+- Added MT5 closed-deal import to the journal with `source: "mt5"` and string external ids. Existing cTrader deal ids and unique constraints remain intact.
+- Added MT5 data to the user export at version 5 and MT5 account health to the admin dashboard and status checks.
+- Admin cleanup removes encrypted MT5 accounts when a user is deleted.
 
 ## Phase 3 - MT5 trading parity
 

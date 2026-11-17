@@ -12,7 +12,8 @@
 // runs can never duplicate a trade.
 
 import { Credentials, loadCredentials } from "../db";
-import { importCtraderHistory, readSyncState, recordSync } from "./store";
+import { listMt5Accounts, Mt5AccountModel } from "../mt5/accounts";
+import { importCtraderHistory, importMt5History, readSyncState, recordSync } from "./store";
 
 /** How often the background pass looks at every user. */
 const SYNC_INTERVAL_MS = 10 * 60_000;
@@ -49,9 +50,12 @@ export async function syncUserJournal(
     }
   }
 
-  const credentials = await loadCredentials(userId);
+  const [credentials, mt5Accounts] = await Promise.all([
+    loadCredentials(userId),
+    listMt5Accounts(userId),
+  ]);
   const accounts = credentials?.accounts ?? [];
-  if (!accounts.length) {
+  if (!accounts.length && !mt5Accounts.length) {
     await recordSync(userId, { at: now, imported: 0, error: null });
     return { imported: 0, accounts: 0, skipped: false, error: null };
   }
@@ -69,8 +73,17 @@ export async function syncUserJournal(
     }
   }
 
+  for (const account of mt5Accounts) {
+    try {
+      const result = await importMt5History(userId, account.id, SYNC_DAYS);
+      imported += result.imported;
+    } catch (err) {
+      error = errorText(err);
+    }
+  }
+
   await recordSync(userId, { at: now, imported, error });
-  return { imported, accounts: accounts.length, skipped: false, error };
+  return { imported, accounts: accounts.length + mt5Accounts.length, skipped: false, error };
 }
 
 let stopFn: (() => void) | null = null;
@@ -87,12 +100,18 @@ export function startJournalSync(log: (msg: string) => void = console.log): void
     if (stopped || running) return;
     running = true;
     try {
-      const rows = await Credentials.find({}).select({ userId: 1 }).lean().exec();
+      const [credentialRows, mt5Rows] = await Promise.all([
+        Credentials.find({}).select({ userId: 1 }).lean().exec(),
+        Mt5AccountModel.find({}).select({ userId: 1 }).lean().exec(),
+      ]);
+      const userIds = new Set([
+        ...credentialRows.map((row: any) => String(row.userId)),
+        ...mt5Rows.map((row: any) => String(row.userId)),
+      ]);
       let imported = 0;
       let users = 0;
-      for (const row of rows) {
+      for (const userId of userIds) {
         if (stopped) break;
-        const userId = String((row as any).userId);
         try {
           const result = await syncUserJournal(userId);
           if (result.skipped) continue;

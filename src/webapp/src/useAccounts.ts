@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { api, type AccountView, type ConnectInput, type UserRole } from "./api";
+import {
+  api,
+  type AccountView,
+  type BrokerAccountView,
+  type ConnectInput,
+  type UserRole,
+} from "./api";
 
 // Account state is shared by the trading view and the Settings takeover, so it
 // lives here rather than inside either component. Owned by App and passed down.
@@ -10,7 +16,9 @@ import { api, type AccountView, type ConnectInput, type UserRole } from "./api";
 
 export function useAccounts(enabled: boolean) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
+  const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccountView[]>([]);
   const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
+  const [hasMt5Accounts, setHasMt5Accounts] = useState(false);
   const [me, setMe] = useState<{
     username: string;
     role: UserRole;
@@ -21,14 +29,18 @@ export function useAccounts(enabled: boolean) {
   const load = useCallback(async () => {
     if (!enabled) {
       setAccounts([]);
+      setBrokerAccounts([]);
       setHasCredentials(null);
+      setHasMt5Accounts(false);
       setMe(null);
       return [];
     }
     try {
       const res = await api.me();
       setHasCredentials(res.hasCredentials);
+      setHasMt5Accounts(res.hasMt5Accounts);
       setAccounts(res.accounts);
+      setBrokerAccounts(res.brokerAccounts);
       setMe({
         username: res.username,
         role: res.role,
@@ -38,6 +50,7 @@ export function useAccounts(enabled: boolean) {
       return res.accounts;
     } catch {
       setHasCredentials(false);
+      setHasMt5Accounts(false);
       return [];
     }
   }, [enabled]);
@@ -52,8 +65,10 @@ export function useAccounts(enabled: boolean) {
   const refreshBalances = useCallback(async () => {
     if (!enabled) return;
     try {
-      const { accounts: fresh } = await api.accounts();
+      const { accounts: fresh, brokerAccounts: freshBrokerAccounts } = await api.accounts();
       setAccounts(fresh);
+      setBrokerAccounts(freshBrokerAccounts);
+      setHasMt5Accounts(freshBrokerAccounts.some((account) => account.broker === "mt5"));
     } catch {
       /* leave the previous balances on screen */
     }
@@ -65,10 +80,22 @@ export function useAccounts(enabled: boolean) {
       const { accounts: fresh } = await api.connect(creds);
       setHasCredentials(true);
       setAccounts(fresh);
+      await refreshBalances();
       return fresh;
     },
-    []
+    [refreshBalances]
   );
 
-  return { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect };
+  return {
+    accounts,
+    brokerAccounts,
+    setAccounts,
+    setBrokerAccounts,
+    hasCredentials,
+    hasMt5Accounts,
+    me,
+    load,
+    refreshBalances,
+    connect,
+  };
 }

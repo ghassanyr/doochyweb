@@ -54,6 +54,9 @@ function journal(overrides: Partial<JournalEntryView> = {}): JournalEntryView {
   return {
     id: "j1",
     source: "manual",
+    broker: null,
+    accountId: null,
+    externalId: null,
     dealId: null,
     accountCtid: null,
     accountLabel: null,

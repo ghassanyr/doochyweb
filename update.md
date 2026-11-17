@@ -360,10 +360,25 @@ started, `later` means deliberately deferred, `skip` means not planned.
   carry the broker id and symbol id as strings, so MT5 symbols do not need a fake
   cTrader `ctid`.
 
+## Per-user MT5 accounts
+
+- Members can add encrypted MT5 credentials from Connect and Settings. Passwords
+  are AES-GCM encrypted with `INTEGRATIONS_ENCRYPTION_KEY` and account-bound AAD,
+  and are never returned to the browser.
+- Added namespaced MT5 account management and read-only bridge routes under
+  `/api/mt5`. The bridge now exposes positions, pending orders and closed history
+  in addition to health, symbols, quotes and candles.
+- cTrader and MT5 accounts are shown side by side in Trading, Today, Settings and
+  Connect. cTrader keeps the numeric `ctid` routes; MT5 uses UUID account ids.
+- The journal imports MT5 closed deals as verified rows with an `mt5` source.
+  The user export includes MT5 accounts at export version 5.
+- Admin status now includes MT5 bridge health, and user deletion removes owned
+  encrypted MT5 accounts.
+
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 932 tests, all passing.
+- `pnpm test`: 935 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

@@ -25,6 +25,7 @@ import {
   signalsApi,
   type AccountView,
   type AlertListResponse,
+  type BrokerAccountView,
   type BriefingResponse,
   type CoachWeeklyResponse,
   type ModuleKey,
@@ -70,11 +71,13 @@ const QUICK_ACTIONS: {
 export default function TodayPage({
   username,
   accounts,
+  brokerAccounts,
   hasCredentials,
   onNavigate,
 }: {
   username: string | null;
   accounts: AccountView[];
+  brokerAccounts: BrokerAccountView[];
   /** Null while /api/me is still loading. */
   hasCredentials: boolean | null;
   onNavigate: (view: ViewKey) => void;
@@ -139,6 +142,26 @@ export default function TodayPage({
   const actions = QUICK_ACTIONS.filter((action) => moduleVisible(action.module));
   const date = formatDisplayDate(new Date());
   const greeting = greetingFor();
+  const mt5Accounts = brokerAccounts.filter((account) => account.broker === "mt5");
+  const accountRows = [
+    ...accounts.map((account) => ({
+      key: `ctrader:${account.ctid}`,
+      label: account.nickname ?? String(account.login),
+      subtitle: account.broker || "cTrader",
+      live: account.isLive,
+      balance: account.balance,
+      currency: account.currency ?? "USD",
+    })),
+    ...mt5Accounts.map((account) => ({
+      key: `mt5:${account.id}`,
+      label: account.nickname ?? account.login,
+      subtitle: `MT5 · ${account.name}`,
+      live: account.mode === "live",
+      balance: account.balance,
+      currency: account.currency ?? "USD",
+    })),
+  ];
+  const accountsConnected = hasCredentials === true || mt5Accounts.length > 0;
 
   return (
     <FadeRise>
@@ -185,25 +208,25 @@ export default function TodayPage({
                 <Skeleton className="h-5 w-3/4" />
                 <Skeleton className="h-5 w-1/2" />
               </div>
-            ) : !hasCredentials ? (
+            ) : !accountsConnected ? (
               <div className="space-y-3">
                 <p className="text-sm text-fg-muted">
-                  Connect cTrader to see balances, positions and orders here.
+                  Connect cTrader or MT5 to see accounts here.
                 </p>
                 <RouteLink
                   view="trading"
                   onNavigate={onNavigate}
                   className={buttonClass("primary", "sm", "w-full")}
                 >
-                  Connect cTrader
+                  Connect a trading account
                 </RouteLink>
               </div>
-            ) : accounts.length === 0 ? (
+            ) : accountRows.length === 0 ? (
               <p className="text-sm text-fg-muted">No accounts found yet.</p>
             ) : (
               <ul className="space-y-1.5">
-                {accounts.slice(0, 4).map((account) => (
-                  <li key={account.ctid}>
+                {accountRows.slice(0, 4).map((account) => (
+                  <li key={account.key}>
                     <RouteLink
                       view="trading"
                       onNavigate={onNavigate}
@@ -212,18 +235,18 @@ export default function TodayPage({
                       <span className="min-w-0">
                         <span className="flex items-center gap-1.5">
                           <span className="truncate text-[13px] font-medium text-fg">
-                            {account.nickname ?? account.login}
+                            {account.label}
                           </span>
-                          <Badge tone={account.isLive ? "danger" : "muted"}>
-                            {account.isLive ? "Live" : "Demo"}
+                          <Badge tone={account.live ? "danger" : "muted"}>
+                            {account.live ? "Live" : "Demo"}
                           </Badge>
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] text-fg-faint">
-                          {account.broker}
+                          {account.subtitle}
                         </span>
                       </span>
                       <span className="shrink-0 text-sm font-semibold tabular-nums text-fg">
-                        {formatCurrency(account.balance, account.currency ?? "USD")}
+                        {account.balance == null ? "-" : formatCurrency(account.balance, account.currency)}
                       </span>
                     </RouteLink>
                   </li>

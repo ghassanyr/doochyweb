@@ -10,12 +10,13 @@ import { Credentials, User, type StoredAccount } from "./db";
 import { JournalEntry, JournalSync, toJournalView } from "./journal/store";
 import type { JournalEntryView } from "./journal/types";
 import { UserWatchlist, type WatchlistMode } from "./market/userWatchlist";
+import { listMt5Accounts, type Mt5AccountView } from "./mt5/accounts";
 import { PaperPosition, toPaperView } from "./simulation/store";
 import type { PaperPositionView } from "./simulation/types";
 import { TelegramLink, toLinkView, type TelegramLinkRecord } from "./telegram/store";
 
 export const USER_EXPORT_FORMAT = "doochy-user-data";
-export const USER_EXPORT_VERSION = 4;
+export const USER_EXPORT_VERSION = 5;
 
 export interface UserDataExport {
   format: typeof USER_EXPORT_FORMAT;
@@ -36,6 +37,10 @@ export interface UserDataExport {
     mode: "oauth" | "manual" | null;
     accounts: StoredAccount[];
     updatedAt: string | null;
+  };
+  mt5: {
+    connected: boolean;
+    accounts: Mt5AccountView[];
   };
   alerts: AlertView[];
   journal: {
@@ -80,10 +85,11 @@ export async function exportUserData(
   if (!mongoose.isValidObjectId(userId)) return null;
   const owner = new mongoose.Types.ObjectId(userId);
 
-  const [user, credentials, alerts, journal, sync, paper, briefings, coachReports, telegram, watchlist] =
+  const [user, credentials, mt5Accounts, alerts, journal, sync, paper, briefings, coachReports, telegram, watchlist] =
     await Promise.all([
       User.findById(owner).lean().exec(),
       Credentials.findOne({ userId: owner }).lean().exec(),
+      listMt5Accounts(userId),
       PriceAlert.find({ userId: owner }).sort({ createdAt: 1 }).lean().exec(),
       JournalEntry.find({ userId: owner }).sort({ createdAt: 1 }).lean().exec(),
       JournalSync.findOne({ userId: owner }).lean().exec(),
@@ -115,6 +121,10 @@ export async function exportUserData(
       mode: credentials ? (credentials.clientId ? "manual" : "oauth") : null,
       accounts: (credentials?.accounts ?? []) as StoredAccount[],
       updatedAt: iso(credentials?.updatedAt),
+    },
+    mt5: {
+      connected: mt5Accounts.length > 0,
+      accounts: mt5Accounts,
     },
     alerts: (alerts as any[]).map(toAlertView),
     journal: {

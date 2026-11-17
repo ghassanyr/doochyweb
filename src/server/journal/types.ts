@@ -4,13 +4,16 @@
 // imported from cTrader closed-deal history (`ctrader`, verified P&L). The
 // browser never sees the owner id: every route is scoped to the session user.
 
-export type JournalSource = "manual" | "ctrader";
+export type JournalSource = "manual" | "ctrader" | "mt5";
 export type JournalSide = "buy" | "sell";
 export type JournalStatus = "open" | "closed";
 
 export interface JournalEntryView {
   id: string;
   source: JournalSource;
+  broker: "ctrader" | "mt5" | null;
+  accountId: string | null;
+  externalId: string | null;
   dealId: number | null;
   accountCtid: number | null;
   accountLabel: string | null;

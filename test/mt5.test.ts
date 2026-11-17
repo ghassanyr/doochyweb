@@ -4,8 +4,13 @@ import { describe, test } from "node:test";
 import { createMt5BrokerAdapter, mt5AccountRef, getBrokerAdapter } from "../src/server/broker";
 import {
   mt5ConfigFromValues,
+  mt5FetchHistory,
+  mt5ListPositions,
   mt5SetupIssues,
   parseMt5Candles,
+  parseMt5History,
+  parseMt5Orders,
+  parseMt5Positions,
   parseMt5Symbols,
   testMt5Bridge,
   type Mt5BridgeConfig,
@@ -84,6 +89,86 @@ describe("MT5 bridge payloads", () => {
     assert.equal(candles[0].time, 1_700_000_000_000);
     assert.equal(candles[0].close, 1.5);
   });
+
+  test("parses positions, orders and closed deals", () => {
+    const positions = parseMt5Positions({
+      positions: [
+        {
+          ticket: 11,
+          symbolName: "EURUSD",
+          type: "buy",
+          volume: 0.25,
+          openPrice: 1.1,
+          profit: 12.5,
+          openTime: 1_700_000_000,
+        },
+      ],
+    });
+    assert.equal(positions[0].id, "11");
+    assert.equal(positions[0].symbol, "EURUSD");
+    assert.equal(positions[0].side, "BUY");
+    assert.equal(positions[0].profitUsd, 12.5);
+
+    const orders = parseMt5Orders({
+      orders: [
+        { ticket: 12, symbol: "XAUUSD", type: "sell limit", volume: 0.1, openPrice: 4100 },
+      ],
+    });
+    assert.equal(orders[0].id, "12");
+    assert.equal(orders[0].side, "SELL");
+    assert.equal(orders[0].price, 4100);
+
+    const history = parseMt5History(
+      {
+        history: [
+          {
+            dealId: 99,
+            symbol: "EURUSD",
+            type: "sell",
+            volume: 1,
+            entryPrice: 1.2,
+            closePrice: 1.1,
+            profit: 100,
+            swap: -2,
+            commission: -3,
+            closeTime: 1_700_000_000,
+          },
+        ],
+      },
+      7
+    );
+    assert.equal(history.trades.length, 1);
+    assert.equal(history.trades[0].id, "99");
+    assert.equal(history.trades[0].net, 95);
+    assert.equal(history.days, 7);
+  });
+
+  test("sends per-user credentials as headers", async () => {
+    const original = globalThis.fetch;
+    let headers = new Headers();
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      headers = new Headers(init?.headers);
+      return jsonResponse({ positions: [] });
+    }) as typeof fetch;
+    try {
+      await mt5ListPositions({
+        ...CONFIG,
+        credentials: {
+          login: "12345",
+          server: "Broker-Demo",
+          password: "secret",
+          investorPassword: "viewer",
+        },
+      });
+      assert.equal(headers.get("X-MT5-Login"), "12345");
+      assert.equal(headers.get("X-MT5-Server"), "Broker-Demo");
+      assert.equal(headers.get("X-MT5-Mode"), "demo");
+      assert.equal(headers.get("X-MT5-Password"), "secret");
+      assert.equal(headers.get("X-MT5-Investor-Password"), "viewer");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
 });
 
 describe("MT5 read-only adapter", () => {
@@ -119,6 +204,50 @@ describe("MT5 read-only adapter", () => {
           candles: [{ time: 1_700_000_000_000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 4 }],
         });
       }
+      if (url.pathname === "/positions") {
+        return jsonResponse({
+          positions: [
+            {
+              ticket: 1,
+              symbol: "XAUUSD",
+              side: "BUY",
+              lots: 0.1,
+              entryPrice: 4100,
+              profit: 10,
+            },
+          ],
+        });
+      }
+      if (url.pathname === "/orders") {
+        return jsonResponse({
+          orders: [
+            {
+              ticket: 2,
+              symbol: "XAUUSD",
+              side: "SELL",
+              orderType: "LIMIT",
+              lots: 0.1,
+              price: 4200,
+            },
+          ],
+        });
+      }
+      if (url.pathname === "/history") {
+        return jsonResponse({
+          history: [
+            {
+              ticket: 3,
+              symbol: "XAUUSD",
+              side: "BUY",
+              lots: 0.1,
+              entryPrice: 4000,
+              closePrice: 4100,
+              profit: 10,
+              closeTime: 1_700_000_000,
+            },
+          ],
+        });
+      }
       throw new Error(`unexpected path ${url.pathname}`);
     }) as typeof fetch;
 
@@ -136,6 +265,15 @@ describe("MT5 read-only adapter", () => {
       });
       assert.equal(candles.length, 1);
       assert.equal(candles[0].close, 1.5);
+      const reconciliation = await adapter.reconcile(ref);
+      assert.equal(reconciliation.positions[0].id, "1");
+      assert.equal(reconciliation.orders[0].id, "2");
+      const history = await adapter.fetchHistory(ref, 7);
+      assert.equal(history.trades[0].id, "3");
+      assert.equal(
+        requests.some((url) => url.pathname === "/history" && url.searchParams.get("days") === "7"),
+        true
+      );
 
       const result = await testMt5Bridge({
         bridgeUrl: CONFIG.bridgeUrl,
@@ -159,6 +297,5 @@ describe("MT5 read-only adapter", () => {
     const adapter = createMt5BrokerAdapter(async () => CONFIG);
     const ref = mt5AccountRef(CONFIG);
     await assert.rejects(() => adapter.placeOrder(ref, {}), /read-only phase/);
-    await assert.rejects(() => adapter.fetchHistory(ref, 7), /read-only phase/);
   });
 });

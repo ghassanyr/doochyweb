@@ -7,6 +7,7 @@ import {
   ConnectInput,
 } from "./api";
 import ConnectPanel from "./ConnectPanel";
+import Mt5AccountsPanel from "./Mt5AccountsPanel";
 import { fmtMoney } from "./Dashboard";
 import { ACCOUNT_COLORS, Button, Card, Flash, inputCls } from "./components/ui";
 import { FadeRise } from "./components/motion";
@@ -22,15 +23,19 @@ function prefsFrom(accounts: AccountView[]): Record<number, AccountPrefs> {
 export default function SettingsPage({
   accounts,
   hasCredentials,
+  hasMt5Accounts,
   onConnected,
   onAccountsChanged,
+  onMt5Changed,
   onClose,
 }: {
   accounts: AccountView[];
   /** False for a fresh account that has never linked cTrader. */
   hasCredentials: boolean;
+  hasMt5Accounts: boolean;
   onConnected: (creds: ConnectInput) => Promise<void>;
   onAccountsChanged: (accounts: AccountView[]) => void;
+  onMt5Changed: () => Promise<void>;
   onClose: () => void;
 }) {
   const [prefs, setPrefs] = useState<Record<number, AccountPrefs>>(() => prefsFrom(accounts));
@@ -228,7 +233,10 @@ export default function SettingsPage({
         <FadeRise>
           <div className="space-y-1">
             <h1 className="text-lg font-semibold tracking-tight text-fg">Settings</h1>
-            <p className="text-sm text-fg-muted">Manage how accounts appear and how {branding.name} connects.</p>
+            <p className="text-sm text-fg-muted">
+              Manage how {hasMt5Accounts ? "cTrader and MT5 accounts" : "accounts"} appear and how{" "}
+              {branding.name} connects.
+            </p>
           </div>
         </FadeRise>
 
@@ -327,6 +335,10 @@ export default function SettingsPage({
               </Button>
             </div>
           </Card>
+        </FadeRise>
+
+        <FadeRise>
+          <Mt5AccountsPanel onChanged={onMt5Changed} />
         </FadeRise>
 
         <FadeRise>

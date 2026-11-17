@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Circle, Download, GripVertical, KeyRound, Mail, Palette, Plug, Trash2, UserPlus, X } from "lucide-react";
 
-import { adminApi, marketApi, type AdminCtraderHealth, type AdminSetupCheck, type AdminUser, type UserRole } from "../api";
+import { adminApi, marketApi, type AdminCtraderHealth, type AdminMt5Health, type AdminSetupCheck, type AdminUser, type UserRole } from "../api";
 import { ConfirmModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
 import { RouteLink } from "../components/RouteLink";
@@ -41,6 +41,7 @@ export default function AdminPage({
 
   const [checks, setChecks] = useState<AdminSetupCheck[]>([]);
   const [ctraderHealth, setCtraderHealth] = useState<AdminCtraderHealth | null>(null);
+  const [mt5Health, setMt5Health] = useState<AdminMt5Health | null>(null);
   const [registrationMode, setRegistrationMode] = useState<string | null>(null);
   const [buildInfo, setBuildInfo] = useState<{
     version: string;
@@ -119,11 +120,20 @@ export default function AdminPage({
     }
   }, []);
 
+  const loadMt5Health = useCallback(async () => {
+    try {
+      setMt5Health(await adminApi.mt5Health());
+    } catch {
+      setMt5Health(null);
+    }
+  }, []);
+
   useEffect(() => {
     void loadUsers();
     void loadChecks();
     void loadCtraderHealth();
-  }, [loadUsers, loadChecks, loadCtraderHealth]);
+    void loadMt5Health();
+  }, [loadUsers, loadChecks, loadCtraderHealth, loadMt5Health]);
 
   const add = useCallback(
     async (raw: string) => {
@@ -405,6 +415,69 @@ export default function AdminPage({
                             {row.accounts.length} account{row.accounts.length === 1 ? "" : "s"}
                           </span>
                         )}
+                      </div>
+                      {row.lastError ? (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-danger">{row.lastError}</p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-fg-muted">
+                          Last successful connection
+                          {row.lastOkAt ? ` ${formatLocalDateTime(row.lastOkAt)}` : " not recorded"}.
+                        </p>
+                      )}
+                      {row.lastErrorAt && (
+                        <p className="text-[11px] text-fg-faint">
+                          Failed {formatLocalDateTime(row.lastErrorAt)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card className="space-y-3 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold tracking-tight text-fg">MT5 connections</h2>
+              <p className="mt-0.5 text-xs text-fg-muted">
+                Latest successful bridge check per encrypted MT5 account. Passwords and investor passwords
+                are never shown.
+              </p>
+            </div>
+            <Button size="sm" variant="ghost" onClickAsync={loadMt5Health} disabled={!mt5Health}>
+              Refresh
+            </Button>
+          </div>
+          {!mt5Health ? (
+            <p className="text-xs text-fg-faint">MT5 connection health is unavailable.</p>
+          ) : mt5Health.connections.length === 0 ? (
+            <p className="text-xs text-fg-muted">No user has connected MT5 yet.</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge tone="muted">{mt5Health.summary.accounts} accounts</Badge>
+                <Badge tone="muted">{mt5Health.summary.users} users</Badge>
+                {mt5Health.summary.failing > 0 && (
+                  <Badge tone="danger">{mt5Health.summary.failing} failing</Badge>
+                )}
+              </div>
+              <div className="divide-y divide-hairline">
+                {mt5Health.connections.map((row) => (
+                  <div key={`${row.userId}:${row.accountId}`} className="flex flex-wrap items-start gap-2 py-2.5">
+                    {row.lastError ? (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+                    ) : (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-fg">{row.username}</span>
+                        <span className="text-xs tabular-nums text-fg-muted">{row.login}</span>
+                        <Badge tone="muted">{row.server}</Badge>
+                        <Badge tone={row.mode === "live" ? "danger" : "muted"}>{row.mode}</Badge>
+                        {row.nickname && <span className="text-[11px] text-fg-faint">{row.nickname}</span>}
                       </div>
                       {row.lastError ? (
                         <p className="mt-0.5 line-clamp-2 text-xs text-danger">{row.lastError}</p>

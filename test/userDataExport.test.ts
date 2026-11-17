@@ -7,6 +7,7 @@ import { CoachReportModel } from "../src/server/coach/store";
 import { Credentials, User } from "../src/server/db";
 import { JournalEntry, JournalSync } from "../src/server/journal/store";
 import { UserWatchlist } from "../src/server/market/userWatchlist";
+import { Mt5AccountModel } from "../src/server/mt5/accounts";
 import { PaperPosition } from "../src/server/simulation/store";
 import { TelegramLink } from "../src/server/telegram/store";
 import {
@@ -37,6 +38,7 @@ const originals = {
   coachFind: CoachReportModel.find,
   telegramFindOne: TelegramLink.findOne,
   watchlistFindOne: UserWatchlist.findOne,
+  mt5Find: Mt5AccountModel.find,
 };
 
 afterEach(() => {
@@ -50,6 +52,7 @@ afterEach(() => {
   (CoachReportModel as any).find = originals.coachFind;
   (TelegramLink as any).findOne = originals.telegramFindOne;
   (UserWatchlist as any).findOne = originals.watchlistFindOne;
+  (Mt5AccountModel as any).find = originals.mt5Find;
 });
 
 describe("user data export", () => {
@@ -79,6 +82,27 @@ describe("user data export", () => {
         ],
         updatedAt: new Date("2026-11-02T00:00:00.000Z"),
       });
+    (Mt5AccountModel as any).find = () =>
+      sortedQuery([
+        {
+          _id: "mt5-1",
+          userId: USER_ID,
+          accountId: "acct-1",
+          login: "12345",
+          server: "Broker-Demo",
+          mode: "demo",
+          password: "mt5-secret",
+          investorPassword: null,
+          currency: "USD",
+          nickname: "MT5 Main",
+          color: "teal",
+          lastOkAt: new Date("2026-11-14T00:00:00.000Z"),
+          lastError: null,
+          lastErrorAt: null,
+          createdAt: new Date("2026-11-03T00:00:00.000Z"),
+          updatedAt: new Date("2026-11-04T00:00:00.000Z"),
+        },
+      ]);
     (PriceAlert as any).find = () =>
       sortedQuery([
         {
@@ -173,6 +197,8 @@ describe("user data export", () => {
     assert.equal(data.ctrader.connected, true);
     assert.equal(data.ctrader.mode, "manual");
     assert.equal(data.ctrader.accounts[0].nickname, "Main");
+    assert.equal(data.mt5.connected, true);
+    assert.equal(data.mt5.accounts[0].login, "12345");
     assert.equal(data.alerts.length, 1);
     assert.equal(data.journal.entries.length, 1);
     assert.equal(data.journal.sync?.lastImported, 2);
@@ -195,6 +221,7 @@ describe("user data export", () => {
       "client-secret",
       "access-token-secret",
       "refresh-token-secret",
+      "mt5-secret",
     ]) {
       assert.equal(text.includes(secret), false);
     }
@@ -205,6 +232,7 @@ describe("user data export", () => {
     assert.equal(await exportUserData("not-an-object-id"), null);
     (User as any).findById = () => leanQuery(null);
     (Credentials as any).findOne = () => leanQuery(null);
+    (Mt5AccountModel as any).find = () => sortedQuery([]);
     (PriceAlert as any).find = () => sortedQuery([]);
     (JournalEntry as any).find = () => sortedQuery([]);
     (JournalSync as any).findOne = () => leanQuery(null);

@@ -18,12 +18,15 @@ import type {
   JournalListResponse,
   JournalStats,
 } from "./types";
-import { historyRowToJournal } from "./import";
+import { historyRowToJournal, mt5HistoryToJournal } from "./import";
 
 const entrySchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    source: { type: String, enum: ["manual", "ctrader"], required: true },
+    source: { type: String, enum: ["manual", "ctrader", "mt5"], required: true },
+    broker: { type: String, enum: ["ctrader", "mt5"], default: null },
+    accountId: { type: String, default: null },
+    externalId: { type: String, default: null },
     dealId: { type: Number, default: null },
     accountCtid: { type: Number, default: null },
     accountLabel: { type: String, default: null },
@@ -50,6 +53,10 @@ const entrySchema = new mongoose.Schema(
 entrySchema.index(
   { userId: 1, dealId: 1 },
   { unique: true, partialFilterExpression: { dealId: { $type: "number" } } }
+);
+entrySchema.index(
+  { userId: 1, broker: 1, externalId: 1 },
+  { unique: true, partialFilterExpression: { externalId: { $type: "string" } } }
 );
 entrySchema.index({ userId: 1, closedAt: -1 });
 entrySchema.index({ userId: 1, createdAt: -1 });
@@ -118,6 +125,9 @@ export function toJournalView(doc: any): JournalEntryView {
   return {
     id: String(doc._id),
     source: doc.source,
+    broker: doc.broker ?? null,
+    accountId: doc.accountId ?? null,
+    externalId: doc.externalId ?? null,
     dealId: doc.dealId ?? null,
     accountCtid: doc.accountCtid ?? null,
     accountLabel: doc.accountLabel ?? null,
@@ -390,6 +400,55 @@ export async function importCtraderHistory(
     await clearCoachWeeks(userId, [...importedWeeks]);
   } catch {
     // The next explicit report generation still uses the latest journal data.
+  }
+
+  return {
+    imported,
+    skipped: history.trades.length - imported,
+    total: history.trades.length,
+    accountLabel,
+  };
+}
+
+export async function importMt5History(
+  userId: string,
+  accountId: string,
+  days: number
+): Promise<JournalImportResult> {
+  const [{ getMt5Account }, { mt5BrokerAdapter }] = await Promise.all([
+    import("../mt5/accounts"),
+    import("../broker"),
+  ]);
+  const account = await getMt5Account(userId, accountId);
+  if (!account) throw new JournalError(404, "account not found");
+
+  const history = await mt5BrokerAdapter.fetchHistory(
+    { userId, broker: "mt5", accountId: account.id, mode: account.mode },
+    days
+  );
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const accountLabel = account.nickname || account.login || `MT5 ${account.id}`;
+
+  let imported = 0;
+
+  const importedWeeks = new Set<string>();
+  for (const row of history.trades) {
+    if (!row.id) continue;
+    const result = await JournalEntry.updateOne(
+      { userId: userObjectId, broker: "mt5", externalId: row.id },
+      { $setOnInsert: mt5HistoryToJournal(row, { id: account.id, label: accountLabel }) },
+      { upsert: true }
+    ).exec();
+    if (result.upsertedCount) {
+      imported++;
+      const week = closedWeekKey(new Date(row.closedAt));
+      if (week) importedWeeks.add(week);
+    }
+  }
+  try {
+    await clearCoachWeeks(userId, [...importedWeeks]);
+  } catch {
+    void 0;
   }
 
   return {

@@ -4,6 +4,7 @@ import { afterEach, describe, test } from "node:test";
 import {
   deleteUser,
   inviteUser,
+  listMt5Health,
   listUsers,
   resetUserPassword,
   updateUser,
@@ -11,6 +12,7 @@ import {
 import { AuthToken } from "../src/server/authTokens";
 import { Credentials, User } from "../src/server/db";
 import { UserWatchlist } from "../src/server/market/userWatchlist";
+import { Mt5AccountModel } from "../src/server/mt5/accounts";
 import { TelegramLink, TelegramLinkCode } from "../src/server/telegram/store";
 
 const USER_ID = "507f1f77bcf86cd799439011";
@@ -41,6 +43,8 @@ const originals = {
   codeDeleteMany: TelegramLinkCode.deleteMany,
   tokenDeleteMany: AuthToken.deleteMany,
   watchlistDeleteMany: UserWatchlist.deleteMany,
+  mt5DeleteMany: Mt5AccountModel.deleteMany,
+  mt5Find: Mt5AccountModel.find,
 };
 
 afterEach(() => {
@@ -55,6 +59,8 @@ afterEach(() => {
   (TelegramLinkCode as any).deleteMany = originals.codeDeleteMany;
   (AuthToken as any).deleteMany = originals.tokenDeleteMany;
   (UserWatchlist as any).deleteMany = originals.watchlistDeleteMany;
+  (Mt5AccountModel as any).deleteMany = originals.mt5DeleteMany;
+  (Mt5AccountModel as any).find = originals.mt5Find;
 });
 
 function stubFindById(user: any) {
@@ -93,6 +99,10 @@ function stubDeletes() {
   };
   (UserWatchlist as any).deleteMany = (filter: any) => {
     calls.push(`watchlist:${String(filter.userId)}`);
+    return execQuery({});
+  };
+  (Mt5AccountModel as any).deleteMany = (filter: any) => {
+    calls.push(`mt5:${String(filter.userId)}`);
     return execQuery({});
   };
   return calls;
@@ -137,6 +147,41 @@ describe("listUsers", () => {
   });
 });
 
+describe("listMt5Health", () => {
+  test("returns safe account health without credentials", async () => {
+    (Mt5AccountModel as any).find = () => ({
+      sort: () =>
+        leanQuery([
+          {
+            userId: USER_ID,
+            accountId: "acct-1",
+            login: "12345",
+            server: "Broker-Demo",
+            mode: "live",
+            nickname: "Main",
+            password: "secret",
+            investorPassword: "viewer-secret",
+            lastOkAt: new Date("2026-11-14T00:00:00.000Z"),
+            lastError: "bridge offline",
+            lastErrorAt: new Date("2026-11-15T00:00:00.000Z"),
+          },
+        ]),
+    });
+    (User as any).find = () => ({ select: () => leanQuery([{ _id: USER_ID, username: "alice" }]) });
+
+    const result = await listMt5Health();
+    assert.equal(result.summary.accounts, 1);
+    assert.equal(result.summary.users, 1);
+    assert.equal(result.summary.failing, 1);
+    assert.equal(result.connections[0].username, "alice");
+    assert.equal(result.connections[0].login, "12345");
+    assert.equal(result.connections[0].lastError, "bridge offline");
+    const text = JSON.stringify(result);
+    assert.equal(text.includes("secret"), false);
+    assert.equal(text.includes("viewer-secret"), false);
+  });
+});
+
 describe("deleteUser", () => {
   test("rejects an invalid id", async () => {
     assert.equal(await deleteUser("not-an-object-id", OTHER_ID), "missing");
@@ -168,6 +213,7 @@ describe("deleteUser", () => {
       `code:${USER_ID}`,
       `credentials:${USER_ID}`,
       `link:${USER_ID}`,
+      `mt5:${USER_ID}`,
       `user:${USER_ID}`,
       `watchlist:${USER_ID}`,
     ]);

@@ -16,6 +16,9 @@ function entry(overrides: Partial<JournalEntryView> = {}): JournalEntryView {
   return {
     id: "e1",
     source: "manual",
+    broker: null,
+    accountId: null,
+    externalId: null,
     dealId: null,
     accountCtid: null,
     accountLabel: null,

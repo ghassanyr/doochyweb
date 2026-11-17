@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ShieldAlert } from "lucide-react";
-import { AccountView } from "./api";
+import { AccountView, BrokerAccountView } from "./api";
 import PositionsTab from "./PositionsTab";
 import OrdersTab from "./OrdersTab";
 import JournalTab from "./journal/JournalPage";
+import Mt5TradingPanel from "./Mt5TradingPanel";
 import SimulationTab from "./simulation/SimulationTab";
 import { formatNumber, formatDisplayDate } from "./format";
 import { Card, accountColorHex } from "./components/ui";
@@ -32,9 +33,11 @@ type PageKey = (typeof PAGES)[number]["key"];
 // settings are full-screen takeovers owned by App.
 export default function Dashboard({
   accounts,
+  brokerAccounts,
   isAdmin,
 }: {
   accounts: AccountView[];
+  brokerAccounts: BrokerAccountView[];
   isAdmin: boolean;
 }) {
   // The trading view opens on "All accounts", with every individual pill
@@ -58,6 +61,7 @@ export default function Dashboard({
     ? accounts
     : accounts.filter((a) => selectedCtids.includes(a.ctid));
   const single = activeAccounts.length === 1 ? activeAccounts[0] : null;
+  const mt5Accounts = brokerAccounts.filter((account) => account.broker === "mt5");
 
   function toggleAccount(ctid: number) {
     if (allSelected) {
@@ -125,9 +129,28 @@ export default function Dashboard({
                 </button>
               );
             })}
-            {accounts.length === 0 && (
+            {accounts.length === 0 && mt5Accounts.length === 0 && (
               <span className="text-sm text-fg-faint">No accounts</span>
             )}
+            {mt5Accounts.map((account) => {
+              const hex = accountColorHex(account.color);
+              return (
+                <span
+                  key={`mt5-${account.id}`}
+                  title="MT5 read-only"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-soft/60 px-2.5 py-1 text-[11px] text-fg-muted"
+                >
+                  {hex && (
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: hex }}
+                    />
+                  )}
+                  <span className="max-w-[14rem] truncate">{account.nickname?.trim() || account.login}</span>
+                  <span className="text-fg-faint">· MT5 read-only</span>
+                </span>
+              );
+            })}
           </div>
         </Card>
 
@@ -152,6 +175,7 @@ export default function Dashboard({
             isAdmin={isAdmin}
           />
         )}
+        <Mt5TradingPanel accounts={mt5Accounts} />
       </div>
     </FadeRise>
   );

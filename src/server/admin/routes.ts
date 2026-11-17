@@ -25,6 +25,7 @@ import {
   deleteUser,
   inviteUser,
   listCtraderHealth,
+  listMt5Health,
   listUsers,
   resetUserPassword,
   updateUser,
@@ -54,6 +55,7 @@ adminRouter.get("/status", adminRequired, async (_req, res) => {
       backupStatus(),
     ]);
     const ctrader = integrations.find((entry) => entry.provider === "ctrader");
+    const mt5 = integrations.find((entry) => entry.provider === "mt5");
     const telegram = integrations.find((entry) => entry.provider === "telegram");
     const smtp = integrations.find((entry) => entry.provider === "smtp");
     const ai = integrations.find((entry) => entry.provider === "ai");
@@ -106,6 +108,14 @@ adminRouter.get("/status", adminRequired, async (_req, res) => {
         detail: ctrader?.ready
           ? "Platform app and callback are configured."
           : ctrader?.errors[0] ?? "Add the platform Open API app and callback URL.",
+      },
+      {
+        key: "mt5",
+        label: "MT5 bridge",
+        status: mt5?.ready ? "ok" : "optional",
+        detail: mt5?.ready
+          ? "Bridge connection and market account are configured."
+          : mt5?.errors[0] ?? "Optional: add a self-hosted bridge URL and market account.",
       },
       {
         key: "telegram",
@@ -183,6 +193,14 @@ adminRouter.get("/ctrader/health", adminRequired, async (_req, res) => {
     res.json(await listCtraderHealth());
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "failed to load cTrader connection health" });
+  }
+});
+
+adminRouter.get("/mt5/health", adminRequired, async (_req, res) => {
+  try {
+    res.json(await listMt5Health());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to load MT5 account health" });
   }
 });
 

@@ -1,5 +1,13 @@
 import {
+  brokerAccountView,
+  listMt5Accounts,
+  resolveMt5AccountConfig,
+} from "../mt5/accounts";
+import {
   mt5FetchCandles,
+  mt5FetchHistory,
+  mt5ListOrders,
+  mt5ListPositions,
   mt5ListSymbols,
   mt5Quote,
   mt5ResolveSymbol,
@@ -16,6 +24,7 @@ import type {
   BrokerHistoryResult,
   BrokerOrderResult,
   BrokerQuote,
+  BrokerReconciliation,
   BrokerSymbol,
   BrokerSymbolSpec,
 } from "./types";
@@ -50,51 +59,67 @@ export function mt5AccountRef(config: Mt5BridgeConfig): BrokerAccountRef {
 }
 
 export function createMt5BrokerAdapter(
-  getConfig: () => Promise<Mt5BridgeConfig> = resolveMt5Config
+  getConfig: () => Promise<Mt5BridgeConfig> = resolveMt5Config,
+  getAccountConfig: (userId: string, accountId: string) => Promise<Mt5BridgeConfig> =
+    resolveMt5AccountConfig
 ): BrokerAdapter {
+  async function configFor(ref?: BrokerAccountRef): Promise<Mt5BridgeConfig> {
+    if (!ref || ref.userId === "market") return getConfig();
+    return getAccountConfig(ref.userId, ref.accountId);
+  }
+
   return {
     id: "mt5",
 
-    async listAccounts(): Promise<BrokerAccountView[]> {
-      const config = await getConfig();
-      return [
-        {
-          id: config.accountId,
-          broker: "mt5",
-          login: config.accountId,
-          name: "MetaTrader 5",
-          mode: config.mode,
-          balance: null,
-          currency: null,
-          nickname: null,
-          color: null,
-        },
-      ];
+    async listAccounts(userId): Promise<BrokerAccountView[]> {
+      if (!userId || userId === "market") {
+        const config = await getConfig();
+        return [
+          {
+            id: config.accountId,
+            broker: "mt5",
+            login: config.accountId,
+            name: "MetaTrader 5",
+            mode: config.mode,
+            balance: null,
+            currency: null,
+            nickname: null,
+            color: null,
+          },
+        ];
+      }
+      const accounts = await listMt5Accounts(userId);
+      return accounts.map(brokerAccountView);
     },
 
-    async reconcile(): Promise<never> {
-      return unsupported("reconciliation");
+    async reconcile(ref): Promise<BrokerReconciliation> {
+      const config = await configFor(ref);
+      const [positions, orders] = await Promise.all([
+        mt5ListPositions(config),
+        mt5ListOrders(config),
+      ]);
+      return { positions, orders };
     },
 
-    async resolveSymbol(_ref, symbol): Promise<BrokerSymbol | null> {
-      const config = await getConfig();
+    async resolveSymbol(ref, symbol): Promise<BrokerSymbol | null> {
+      const config = await configFor(ref);
       const row = await mt5ResolveSymbol(config, symbol);
       return row ? { id: row.symbol, spec: specOf(row) } : null;
     },
 
-    async listSymbolNames(): Promise<string[]> {
-      const config = await getConfig();
+    async listSymbolNames(ref): Promise<string[]> {
+      const config = await configFor(ref);
       const symbols = await mt5ListSymbols(config);
       return symbols.map((row) => row.symbol);
     },
 
-    async quote(_ref, symbol): Promise<BrokerQuote | null> {
-      const config = await getConfig();
+    async quote(ref, symbol): Promise<BrokerQuote | null> {
+      const config = await configFor(ref);
       return mt5Quote(config, symbol);
     },
 
-    async quoteUsdFactor(_ref, symbol) {
-      const config = await getConfig();
+    async quoteUsdFactor(ref, symbol) {
+      const config = await configFor(ref);
       const row = await mt5ResolveSymbol(config, symbol);
       if (!row) return null;
       if (typeof row.quoteUsdFactor === "number" && row.quoteUsdFactor > 0) {
@@ -103,12 +128,13 @@ export function createMt5BrokerAdapter(
       return isUsd(row.quoteAsset) ? 1 : null;
     },
 
-    async fetchHistory(): Promise<BrokerHistoryResult> {
-      return unsupported("trade history");
+    async fetchHistory(ref, days): Promise<BrokerHistoryResult> {
+      const config = await configFor(ref);
+      return mt5FetchHistory(config, days);
     },
 
-    async fetchCandles(_ref, query: BrokerCandleQuery): Promise<BrokerCandle[]> {
-      const config = await getConfig();
+    async fetchCandles(ref, query: BrokerCandleQuery): Promise<BrokerCandle[]> {
+      const config = await configFor(ref);
       const timeframe = String(query.timeframe.native?.mt5 ?? query.timeframe.id);
       return mt5FetchCandles(config, query.symbol, timeframe, {
         from: query.from,

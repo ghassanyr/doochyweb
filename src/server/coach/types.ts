@@ -17,7 +17,7 @@ export interface CoachTradeFacts {
   id: string;
   symbol: string;
   side: CoachSide;
-  source: "manual" | "ctrader";
+  source: "manual" | "ctrader" | "mt5";
   verified: boolean;
   accountLabel: string | null;
   openedAt: string | null;
@@ -158,7 +158,7 @@ export interface CoachTradeListItem {
   id: string;
   symbol: string;
   side: CoachSide;
-  source: "manual" | "ctrader";
+  source: "manual" | "ctrader" | "mt5";
   verified: boolean;
   closedAt: string | null;
   pnl: number | null;

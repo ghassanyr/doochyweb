@@ -76,8 +76,17 @@ export default function App() {
     }
   );
   const signedIn = !!token;
-  const { accounts, setAccounts, hasCredentials, me, load, refreshBalances, connect } =
-    useAccounts(signedIn);
+  const {
+    accounts,
+    brokerAccounts,
+    setAccounts,
+    hasCredentials,
+    hasMt5Accounts,
+    me,
+    load,
+    refreshBalances,
+    connect,
+  } = useAccounts(signedIn);
   const isAdmin = me?.role === "admin";
   const { config, content } = useSiteConfig();
   const navigation = config?.navigation ?? FALLBACK_NAVIGATION;
@@ -323,7 +332,9 @@ export default function App() {
       <SettingsPage
         accounts={accounts}
         hasCredentials={hasCredentials === true}
+        hasMt5Accounts={hasMt5Accounts}
         onAccountsChanged={setAccounts}
+        onMt5Changed={refreshBalances}
         onConnected={handleConnected}
         onClose={closeSettings}
       />
@@ -339,7 +350,7 @@ export default function App() {
         isAdmin={isAdmin}
         username={me?.username ?? null}
         hasCredentials={hasCredentials}
-        accountCount={accounts.length}
+        accountCount={brokerAccounts.length}
         onOpenSettings={openSettings}
         onSignIn={openLogin}
         onRegister={() => openAuth("register")}
@@ -350,6 +361,7 @@ export default function App() {
             <TodayPage
               username={me?.username ?? null}
               accounts={accounts}
+              brokerAccounts={brokerAccounts}
               hasCredentials={hasCredentials}
               onNavigate={handleViewChange}
             />
@@ -423,14 +435,16 @@ export default function App() {
                 <Skeleton className="h-10 w-full" />
               </div>
             ) : !hasCredentials ? (
-              <TradingConnect
-                oauthAvailable={me?.ctraderOAuth ?? false}
-                manualAvailable={me?.ctraderManual ?? false}
-                onConnected={handleConnected}
-                onSkip={() => handleViewChange("analysis")}
-              />
+                <TradingConnect
+                  oauthAvailable={me?.ctraderOAuth ?? false}
+                  manualAvailable={me?.ctraderManual ?? false}
+                  hasMt5Accounts={hasMt5Accounts}
+                  onConnected={handleConnected}
+                  onMt5Changed={refreshBalances}
+                  onSkip={() => handleViewChange("analysis")}
+                />
             ) : (
-              <Dashboard accounts={accounts} isAdmin={isAdmin} />
+              <Dashboard accounts={accounts} brokerAccounts={brokerAccounts} isAdmin={isAdmin} />
             )}
           </>
         )}

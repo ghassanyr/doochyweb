@@ -13,7 +13,13 @@ import { userSockets } from "./ctrader/connection";
 import { ctraderAppCredentials, ctraderManualAvailable } from "./ctrader/appConfig";
 import { discoverAccounts } from "./ctrader/auth";
 import { ctraderOAuthAvailable, ctraderOAuthCallback, ctraderOAuthRouter } from "./ctrader/oauth";
-import { reconcileAccount, listAccounts, listTradableNames, symbolQuote } from "./ctrader/reads";
+import {
+  reconcileAccount,
+  listAccounts,
+  listTradableNames,
+  symbolQuote,
+  type AccountView as CtraderAccountView,
+} from "./ctrader/reads";
 import { fetchOrderHistory } from "./ctrader/history";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
@@ -41,6 +47,8 @@ import { startScraperScheduler } from "./market/scraperRunner";
 import { createTrainerRouter } from "./trainer/routes";
 import { telegramRouter } from "./telegram/routes";
 import { startTelegram, stopTelegram } from "./telegram/index";
+import { listMt5Accounts, type Mt5AccountView } from "./mt5/accounts";
+import { mt5Router } from "./mt5/routes";
 
 const app = express();
 // The app binds to loopback behind nginx, so trust exactly one proxy hop for
@@ -52,10 +60,52 @@ app.use(express.json({ limit: "1mb" }));
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type BrokerAccountResponse = {
+  id: string;
+  broker: "ctrader" | "mt5";
+  login: string;
+  name: string;
+  mode: "demo" | "live";
+  balance: number | null;
+  currency: string | null;
+  nickname: string | null;
+  color: string | null;
+};
+
+function brokerAccountViews(
+  ctrader: CtraderAccountView[],
+  mt5: Mt5AccountView[]
+): BrokerAccountResponse[] {
+  return [
+    ...ctrader.map((account) => ({
+      id: String(account.ctid),
+      broker: "ctrader" as const,
+      login: String(account.login),
+      name: account.broker || "cTrader",
+      mode: account.isLive ? ("live" as const) : ("demo" as const),
+      balance: account.balance,
+      currency: account.currency,
+      nickname: account.nickname,
+      color: account.color,
+    })),
+    ...mt5.map((account) => ({
+      id: account.id,
+      broker: "mt5" as const,
+      login: account.login,
+      name: account.name,
+      mode: account.mode,
+      balance: account.balance,
+      currency: account.currency,
+      nickname: account.nickname,
+      color: account.color,
+    })),
+  ];
+}
+
 // Trading data is unavailable during maintenance. Auth, /api/me, /api/config,
 // /api/admin and the OAuth callback stay reachable so an admin can sign in and
 // turn maintenance off again.
-app.use(["/api/accounts", "/api/connect", "/api/credentials"], maintenanceGate);
+app.use(["/api/accounts", "/api/connect", "/api/credentials", "/api/mt5"], maintenanceGate);
 
 app.post("/api/auth/register", async (req: Request, res: Response) => {
   try {
@@ -207,18 +257,21 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
     // need a per-account broker round-trip), so /api/me returns the same shape
     // as /api/accounts rather than the raw stored rows.
     const accounts = creds && !blocked ? await listAccounts(req.userId!) : [];
+    const mt5Accounts = !blocked ? await listMt5Accounts(req.userId!) : [];
     res.json({
       username: user.username,
       email: user.email ?? null,
       emailVerified: user.emailVerified !== false,
       role: (user.role as string | undefined) ?? "user",
       hasCredentials: !!creds,
+      hasMt5Accounts: mt5Accounts.length > 0,
       // Enough for Settings to say which OpenAPI app is connected without ever
       // sending the secret, or even the whole client id, to the browser.
       clientIdMasked: creds?.clientId ? maskClientId(creds.clientId) : null,
       ctraderOAuth: await ctraderOAuthAvailable(),
       ctraderManual: await ctraderManualAvailable(),
       accounts,
+      brokerAccounts: brokerAccountViews(accounts, mt5Accounts),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? "failed" });
@@ -326,8 +379,11 @@ app.post("/api/connect", authRequired, async (req: AuthedRequest, res: Response)
 
 app.get("/api/accounts", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
-    const accounts = await listAccounts(req.userId!);
-    res.json({ accounts });
+    const [accounts, mt5Accounts] = await Promise.all([
+      listAccounts(req.userId!),
+      listMt5Accounts(req.userId!),
+    ]);
+    res.json({ accounts, brokerAccounts: brokerAccountViews(accounts, mt5Accounts) });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? "failed" });
   }
@@ -673,6 +729,7 @@ app.use("/api/admin", adminRouter);
 app.use("/api/config", siteConfigRouter);
 app.use(siteMetaRouter);
 app.use("/api/ctrader/oauth", ctraderOAuthRouter);
+app.use("/api/mt5", mt5Router);
 
 // Short callback route registered on the cTrader app. The full URL is derived
 // from the canonical site address (saved setting, PUBLIC_BASE_URL, or the
