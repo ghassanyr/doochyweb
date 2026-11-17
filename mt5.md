@@ -14,6 +14,72 @@ Add MT5 as a broker option in phases, without destabilising the current cTrader 
 - Secrets stay server side, encrypted through the integration registry where applicable.
 - No em dashes. No commit or deploy without explicit approval.
 
+## Current pause note - 2026-11-17
+
+MT5 work is paused after Phase 2. Phases 0, 1 and 2 are complete and committed. The shipped implementation is still read-only and still expects an external HTTP bridge. Do not describe MT5 as one-click, self-contained or fully productized yet.
+
+### What exists now
+
+- Provider-neutral broker adapter seam.
+- MT5 integration registry fields and admin UI.
+- MT5 market provider wiring and paper lot specs.
+- Encrypted per-user MT5 accounts with UUID account ids.
+- Namespaced `/api/mt5/accounts` management and read routes.
+- Read-only positions, orders, history, symbols and quote through a bridge.
+- MT5 journal import, user export and admin health.
+- Tests cover config parsing, payload parsers, credential headers, encrypted account storage, adapter reads, export and admin cleanup.
+- Live database, real bridge and real broker behavior have not been validated.
+
+### Current bridge contract
+
+The current implementation in `src/server/mt5/bridge.ts` calls these endpoints:
+
+- `/health`
+- `/symbols`
+- `/quote`
+- `/candles`
+- `/positions`
+- `/orders`
+- `/history`
+
+Every request appends `account=<bridge account id>`. Per-user requests also send `X-MT5-Login`, `X-MT5-Server`, `X-MT5-Mode`, `X-MT5-Password` and `X-MT5-Investor-Password`.
+
+No bridge daemon ships in this repo. The repo contains only the HTTP client. Tests stub `fetch`; they do not prove a real bridge works.
+
+### Decisions made while paused
+
+- Python venv is accepted for a future managed runtime.
+- Official MT5 or Wine installer launch from the admin panel is accepted.
+- On Windows, the managed helper can use native Python plus `MetaTrader5`.
+- On Linux, the managed helper must use Windows Python inside Wine plus `MetaTrader5`, because the official package has Windows-only wheels.
+- Buyer/admin may still need the MT5 terminal installed once, but the admin panel should automate the installer, runtime preparation and status checks.
+- One MT5 terminal can only hold one logged-in account. A single shared terminal is unsafe for concurrent multi-user account access.
+- True multi-user MT5 needs a per-account worker pool: one terminal process or terminal profile per active MT5 account.
+- Docker can be supported, but not inside the current Node app container. It needs a product-managed `mt5-runtime` service with Wine, Windows Python, Xvfb and persistent terminal state.
+- Hosted/cloud MT5 API remains the fallback for very large installs where terminal pools become too heavy.
+
+### Why paused
+
+The external bridge model is technically complete but not product-ready for a buyer who expects everything to work from `/admin/integrations`. Making it product-ready means adding a managed runtime, per-account worker pool, installer automation, Docker runtime support and then MT5 write parity. That is a separate phase.
+
+### Pickup checklist
+
+1. Ask for expected maximum concurrent MT5 accounts per install.
+2. Choose the first target tier:
+   - 1 to 5 accounts: serialized single-terminal mode is simplest.
+   - 5 to 20 accounts: per-account native or Wine worker pool.
+   - 20+ accounts: Docker worker pool or hosted/cloud MT5 API.
+3. Add a transport abstraction around `src/server/mt5/bridge.ts`:
+   - `managed`
+   - `external`
+   - `cloud`
+4. Build the bundled Python helper, likely `bridge/mt5_bridge.py`.
+5. Build the per-account worker pool with locks, lazy start, idle timeout and health restart.
+6. Extend `/admin/integrations` with runtime preparation, installer launch, status and recovery views.
+7. Add Docker `mt5-runtime` support only after the host mode works.
+8. Implement MT5 write parity only after live demo reads are stable.
+9. Update README and setup docs before advertising MT5 as a buyer-facing feature.
+
 ## Phase 0 - Broker adapter seam - done
 
 - Add `src/server/broker/` with provider-neutral adapter types.
@@ -41,18 +107,28 @@ Add MT5 as a broker option in phases, without destabilising the current cTrader 
 - Added MT5 data to the user export at version 5 and MT5 account health to the admin dashboard and status checks.
 - Admin cleanup removes encrypted MT5 accounts when a user is deleted.
 
-## Phase 3 - MT5 trading parity
+## Phase 3 - MT5 trading parity - not started
 
 - Implement adapter writes: preview, place, modify, cancel, close, and amend SL/TP.
 - Normalise lot sizes, volume steps, price digits, order types, expiry, fill rules, event correlation, and timeout behaviour.
 - Use per-account operation locks like the current cTrader execution path.
 - Add mapping tests for every order action and failure mode.
 
-## Phase 4 - Polish and rollout
+## Phase 4 - Polish and rollout - not started
 
-- Update README, update.md, admin setup checklist, and verification notes.
-- Extend tests for registry, setup, export, admin cleanup, and UI labels.
+- Update README, `docs/MT5_SETUP.md`, admin setup checklist and verification notes.
+- Extend tests for registry, setup, export, admin cleanup and UI labels.
 - Verify live reads and a small demo order for each broker before enabling MT5 trading for users.
+
+## Phase 5 - Productized managed runtime - parked
+
+- See the current pause note above for the full handoff.
+- Replace externally built bridge setup with a product-managed runtime.
+- Use Python venv on Windows and Windows Python inside Wine on Linux.
+- Allow the admin panel to launch the official installer, prepare the runtime, report status and expose recovery views.
+- Add a per-account worker pool before claiming multi-user support.
+- Add a dedicated Docker `mt5-runtime` service after host mode works.
+- Keep cloud or hosted MT5 API as the scale fallback.
 
 ## Decision gate
 

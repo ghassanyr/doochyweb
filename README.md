@@ -77,7 +77,7 @@ pnpm admin:revoke <username>    # demote an admin
 
 1. Set **Admin → Site settings → Site address** to the public HTTPS origin.
 2. Set branding, registration policy, legal links, and the risk disclaimer. When a Terms or Privacy URL is configured, new registrations and invite acceptances require agreement, and a cookie/storage notice appears site-wide.
-3. Configure SMTP, cTrader and Telegram under **Admin → Integrations**. SMTP is required for password reset, email verification and admin invites.
+3. Configure SMTP, cTrader and Telegram under **Admin → Integrations**. SMTP is required for password reset, email verification and admin invites. MT5 is optional and read-only in this release; leave it disabled unless the operator is prepared to run an external bridge. See `docs/MT5_SETUP.md`.
 4. Run `pnpm doochy:check` and confirm the setup checklist has no required todos.
 5. Take a `pnpm doochy:backup` snapshot before handing over the server. Keep backups within the 7-day freshness window the admin checklist expects.
 
@@ -87,7 +87,7 @@ Everything customer-facing follows **Admin → Site settings → Branding**: pro
 
 ## Optional integrations
 
-SMTP, cTrader and Telegram are configured in the admin panel after the first login. Secrets saved there are encrypted with `INTEGRATIONS_ENCRYPTION_KEY`. Site URL, branding, registration policy, and legal links are managed under **Admin → Site settings**.
+SMTP, cTrader, Telegram and optional read-only MT5 are configured in the admin panel after the first login. Secrets saved there are encrypted with `INTEGRATIONS_ENCRYPTION_KEY`. Site URL, branding, registration policy, and legal links are managed under **Admin → Site settings**. The MT5 card configures access to an external bridge; no bridge daemon ships in this repo.
 
 ### Email
 
@@ -118,6 +118,14 @@ With an AI provider configured, the review is written as structured JSON over a 
 ### Webhooks
 
 Outbound webhooks are configured under **Admin → Site settings → Webhooks**. Enable the events you want and set an HTTPS endpoint; the optional secret signs each JSON payload with `X-Doochy-Signature: sha256=<hex>`. Deliveries are queued in the background and retried, and the settings page has a test button that uses the saved configuration.
+
+### MT5
+
+MT5 support is read-only in this release. Configure it only if the operator is prepared to run a bridge service beside the app; no bridge daemon ships in this repo. Admins enter the bridge URL, optional API key, bridge-side account label, mode and enabled flag under **Admin → Integrations**. End users add their own MT5 login, server and password under **Connect** or **Settings**. cTrader remains the default provider.
+
+Open MT5 positions, pending orders and history are read through the user's encrypted MT5 account settings. Closed deals can be imported into the trade journal with source `mt5`. MT5 account metadata is included in user exports. MT5 write trading is not implemented.
+
+See `docs/MT5_SETUP.md` for the bridge contract, security notes and current limitations.
 
 cTrader OAuth needs HTTPS outside localhost. Register these callback URLs in the cTrader Open API portal:
 

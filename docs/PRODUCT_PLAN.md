@@ -1,9 +1,9 @@
 # Product readiness plan
 
-Status snapshot: 2026-11-16, working tree on top of HEAD `5c05829`.
+Status snapshot: 2026-11-17, working tree on top of HEAD `63deb79`.
 Sources: the original buyer-readiness plan (P0/P1/P2) and the cTrader fresh-buyer audit.
 
-The separate Trade AI feature backlog lives in `update.md`; it is not part of this plan.
+The separate Trade AI feature backlog lives in `docs/AI_PLAN.md`; it is not part of this plan.
 
 ## Current state
 
@@ -12,7 +12,7 @@ The separate Trade AI feature backlog lives in `update.md`; it is not part of th
 - P2 is complete: PWA metadata, social links, webhooks and deployment version information are implemented.
 - The daily briefing is now a structured, per-user brief over the effective watchlist, active signals and open journal ideas, with saved focus sessions, deterministic fallback sections and legacy snapshot regeneration.
 - AI Coach adds manual individual trade reviews and fixed UTC weekly behaviour reports over the Trade Journal, with deterministic fallbacks and report invalidation on journal changes.
-- Last verified: `pnpm typecheck`, `pnpm test` with 890 tests, `pnpm build` and `git diff --check` all pass.
+- Last verified: `pnpm typecheck`, `pnpm test` with 935 tests, `pnpm build` and `git diff --check` all pass.
 
 ## P0: needed for a sellable self-hosted product
 
@@ -48,6 +48,19 @@ All done.
 - Signed outbound webhooks for signal and alert events.
 - Deployment version and runtime information in the admin panel.
 
+## P3: MT5 productization - parked
+
+MT5 read-only support is implemented, but it is not yet a normal buyer-facing integration. See `mt5.md` for the full handoff and `docs/MT5_SETUP.md` for the current bridge contract.
+
+| Item | Status | What remains |
+| --- | --- | --- |
+| Read-only MT5 foundation | Done | Encrypted per-user accounts, namespaced routes, journal import, export, admin health and read-only UI are implemented. Tests stub the bridge; live broker validation has not been done. |
+| Product-managed runtime | Parked | Replace the externally built bridge with a bundled Python helper. Windows uses native Python; Linux uses Windows Python inside Wine. Admin panel must prepare the runtime and report plain-language status. |
+| Multi-user concurrency | Parked | One terminal holds one account. Add a per-account worker pool with locks, lazy start, idle timeout and health restart before claiming multi-user MT5 support. |
+| Docker runtime | Parked | Add a dedicated `mt5-runtime` service with Wine, Windows Python, Xvfb and persistent state. The current Node container cannot host it. |
+| MT5 write trading | Not started | Implement preview, place, modify, cancel, close and SL/TP amendment through the adapter and worker pool. Validate with demo accounts before enabling for users. |
+| Buyer docs | Partial | Current limitations and bridge contract are documented. Docs must be rewritten again when the managed runtime ships. |
+
 ## cTrader fresh-buyer audit
 
 | Gap | Status | What remains |
@@ -65,3 +78,4 @@ All done.
 
 1. Add a real end-to-end cTrader verification if the connection check is not enough for buyers.
 2. Commit the completed cTrader/P1/P2 work.
+3. Resume MT5 P3 only after choosing the expected maximum concurrent MT5 accounts per install.
