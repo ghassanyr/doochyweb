@@ -62,6 +62,11 @@ const ADMIN_SUBNAV: { view: ViewKey; label: string }[] = [
   { view: "admin-integrations", label: "Integrations" },
 ];
 
+const ANALYSIS_SUBNAV: { view: ViewKey; label: string }[] = [
+  { view: "analysis", label: "Overview" },
+  { view: "session-analysis", label: "Session Analysis" },
+];
+
 export interface AppSidebarProps {
   view: ViewKey;
   groups: NavGroupSettings[];
@@ -107,6 +112,7 @@ export function AppSidebar({
   const groups = groupModules(modules, navGroups, { signedIn, isAdmin });
   const adminActive =
     view === "admin" || view === "admin-settings" || view === "admin-integrations";
+  const analysisActive = view === "analysis" || view === "session-analysis";
 
   function navigate(next: ViewKey) {
     onNavigate(next);
@@ -169,17 +175,38 @@ export function AppSidebar({
             ) : null}
             <div className="space-y-0.5">
               {group.modules.map((module) => (
-                <SidebarLink
-                  key={module.key}
-                  view={module.key}
-                  label={module.label}
-                  icon={MODULE_ICONS[module.key]}
-                  active={view === module.key}
-                  locked={isModuleLocked(module, signedIn)}
-                  collapsed={collapsed}
-                  onNavigate={navigate}
-                  onSignIn={signIn}
-                />
+                <div key={module.key}>
+                  <SidebarLink
+                    view={module.key}
+                    label={module.label}
+                    icon={MODULE_ICONS[module.key]}
+                    active={module.key === "analysis" ? analysisActive : view === module.key}
+                    locked={isModuleLocked(module, signedIn)}
+                    collapsed={collapsed}
+                    onNavigate={navigate}
+                    onSignIn={signIn}
+                  />
+                  {module.key === "analysis" && analysisActive && !collapsed && (
+                    <div className="ml-5 mt-1 space-y-0.5 border-l border-hairline pl-2">
+                      {ANALYSIS_SUBNAV.map((item) => (
+                        <RouteLink
+                          key={item.view}
+                          view={item.view}
+                          onNavigate={navigate}
+                          aria-current={view === item.view ? "page" : undefined}
+                          className={
+                            "block rounded-md px-2 py-1.5 text-[12px] transition " +
+                            (view === item.view
+                              ? "bg-soft font-medium text-accent"
+                              : "text-fg-muted hover:bg-soft hover:text-fg")
+                          }
+                        >
+                          {item.label}
+                        </RouteLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>

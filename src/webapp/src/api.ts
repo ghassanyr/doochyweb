@@ -1354,7 +1354,7 @@ export interface AdminSetupCheck {
 // Integrations, see src/server/integrations
 // ---------------------------------------------------------------------------
 
-export type IntegrationProvider = "ctrader" | "telegram" | "smtp" | "ai";
+export type IntegrationProvider = "ctrader" | "telegram" | "smtp" | "ai" | "imap";
 
 export type IntegrationFieldKind = "text" | "secret" | "number" | "boolean" | "select";
 
@@ -1435,12 +1435,20 @@ export interface AiModelsResult {
   unknown?: number;
 }
 
+export interface ImapPreset {
+  key: string;
+  label: string;
+  hint: string;
+  values: Record<string, string | number | boolean>;
+}
+
 export interface AdminIntegrationsResponse {
   integrations: IntegrationState[];
   encryptionAvailable: boolean;
   requestOrigin: string | null;
   callbacks: CallbackCandidates;
   aiProviders: AiProviderOption[];
+  imapPresets: ImapPreset[];
 }
 
 export const configApi = {
@@ -1671,4 +1679,71 @@ export const api = {
 
   amendPosition: (ctid: number, positionId: number, sl?: number | null, tp?: number | null) =>
     request<WriteResult>(`/api/accounts/${ctid}/positions/${positionId}`, { method: "PATCH", body: { sl, tp } }),
+};
+
+// ---------------------------------------------------------------------------
+// Session Analysis, see src/server/sessionAnalysis
+// ---------------------------------------------------------------------------
+
+export type SessionLevelType = "support" | "resistance";
+
+export interface SessionMarket {
+  symbol: string;
+  targetLevel: string | null;
+  targetPeriod: string | null;
+  interval: string | null;
+  pattern: string | null;
+  identifiedAt: string | null;
+  reason: string | null;
+  supporting: string[];
+  levelType: SessionLevelType | null;
+  levelValue: string | null;
+  levelNote: string | null;
+  /** Public chart image path, or null when the email carried no chart. */
+  chartUrl: string | null;
+}
+
+export interface SessionDay {
+  sessionKey: string;
+  sessionDate: string;
+  subject: string;
+  sender: string | null;
+  receivedAt: string | null;
+  generatedAt: string | null;
+  markets: SessionMarket[];
+}
+
+export interface SessionDaySummary {
+  sessionKey: string;
+  sessionDate: string;
+  subject: string;
+  generatedAt: string | null;
+  marketCount: number;
+}
+
+export interface SessionLatestResponse {
+  day: SessionDay | null;
+  days: SessionDaySummary[];
+}
+
+export interface SessionSyncResult {
+  ok: boolean;
+  configured: boolean;
+  imported: boolean;
+  sessionKey: string | null;
+  markets: number;
+  message: string;
+  checkedAt: string;
+}
+
+export const sessionAnalysisApi = {
+  latest: () => request<SessionLatestResponse>("/api/session-analysis/latest"),
+
+  day: (sessionKey: string) =>
+    request<{ day: SessionDay }>(
+      `/api/session-analysis/days/${encodeURIComponent(sessionKey)}`
+    ),
+
+  sync: () =>
+    request<SessionSyncResult>("/api/session-analysis/sync", { method: "POST" }),
 };

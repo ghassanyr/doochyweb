@@ -15,6 +15,7 @@
 
 import { aiDefaultModel, aiProviderKeyRequired } from "../ai/providers";
 import type { IntegrationFieldState, IntegrationProvider } from "./types";
+import { providerImapIssues, validateImapSetup } from "./imapSetup";
 import { providerSmtpIssues, validateSmtpSetup } from "./smtpSetup";
 
 export const CTRADER_CALLBACK_PATHS = ["/callback", "/api/ctrader/oauth/callback"] as const;
@@ -174,6 +175,7 @@ export function providerIssuesFromValues(
   publicBaseUrl?: string | null
 ): SetupIssues {
   if (provider === "smtp") return validateSmtpSetup(values);
+  if (provider === "imap") return validateImapSetup(values);
   if (provider === "ai") return validateAiSetup(values);
   if (provider !== "ctrader") return { errors: [], warnings: [] };
   const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
@@ -189,6 +191,7 @@ export function providerIssues(
   publicBaseUrl?: string | null
 ): SetupIssues {
   if (provider === "smtp") return providerSmtpIssues(fields);
+  if (provider === "imap") return providerImapIssues(fields);
   if (provider === "ai") {
     const values: Record<string, unknown> = {};
     for (const field of fields) {

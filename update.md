@@ -120,6 +120,8 @@ started, `later` means deliberately deferred, `skip` means not planned.
   switch to a personal list, which starts empty so they build their own, then
   keeps its own symbols and order. Switching back to the site list is
   non-destructive, so the personal list is still there on return.
+- The read-only hint that explains the site list sits on the same row as the
+  Watchlist label, so it does not add a second toolbar row.
 - The personal list is capped by `analysis.watchlistLimit` in Admin, Settings
   (default 10, maximum 60). The site list keeps its own 60 symbol cap.
 - The Admin page always edits the site list, even when the signed-in admin uses
@@ -307,6 +309,59 @@ started, `later` means deliberately deferred, `skip` means not planned.
 - Filtering remains visual only: the full result set keeps polling and feeding
   the MTF confluence strip, so switching filters is instant.
 
+## Session Analysis
+
+- Analysis gains a Session Analysis subitem next to Overview, mirroring the
+  Admin sub-pages. It is public like Analysis, and it follows the Analysis
+  module's access rule when an admin makes that module signed-in only.
+- The page shows one card per market from the daily AI market analysis email:
+  symbol, Target Level, Target Period, Interval, pattern, the reason and
+  supporting lines, the support or resistance level with its note, and the exact
+  chart image the email embedded. Nothing is regenerated.
+- One stored document per session day, keyed by the analysis stamp in the email
+  (`17-Nov-2026 06:14 EST`), with a history selector when more than one day is
+  stored.
+- Ingestion reads a dedicated mailbox over IMAP. Admin, Integrations has a new
+  `imap` provider with host, port, encryption, username, password, folder,
+  sender and subject filters, poll minutes and enabled. The default poll is 360
+  minutes, and the first check runs shortly after startup.
+- Gmail is the documented default: `imap.gmail.com`, port 993, implicit TLS,
+  `INBOX`, sender `ai.analysis@getleveraged.com`, subject `AI Market Analysis`.
+  Gmail needs 2-Step Verification plus an App Password; the preset fills the
+  non-secret fields and leaves the mailbox address and App Password to the
+  admin. The Integrations card lists these steps and has a Use Gmail settings
+  button.
+- Saving the IMAP settings wakes the scheduler, so the first import happens
+  within seconds instead of waiting up to six hours. The card also has an
+  Import now action. The scheduler and the admin action share one in-flight
+  read, so a second click joins the running import rather than opening a second
+  IMAP connection.
+- Forwards are unwrapped: a `message/rfc822` attachment is parsed and the
+  nested message supplies the market cards and charts. The sender filter checks
+  From, Reply-To, Sender, X-Original-From and X-Forwarded-From across the whole
+  forward chain, so the original analysis address still matches when the outer
+  From is the receiving mailbox.
+- The parser works on a line rendering of the message, joins wrapped lines,
+  derives a support or resistance level from "Broke through Support level of X"
+  when the card has no separate level row, and pairs charts to markets by
+  alt or filename first, then document order. Only portrait chart-sized images
+  are kept; logos and spacers are dropped.
+- Chart bytes live in Mongo and are served by `GET
+  /api/session-analysis/chart/:id` outside the module gate, so an `<img>`
+  request never needs a bearer token. The route is still behind the maintenance
+  gate.
+- A Match site theme toggle recolors the chart background from the email's dark
+  green `#042820` to the site canvas `#0a0e14` with an SVG channel translation,
+  preserving the line colors. Light mode uses
+  `invert(1) hue-rotate(180deg) saturate(0.9)`. Turning it off restores the
+  exact email colors. The choice is stored in
+  `doochyweb_session_chart_theme` and defaults to matching the site.
+- Public reads: `GET /api/session-analysis/latest`, `/days` and `/days/:key`.
+  `POST /api/session-analysis/sync` is admin-only and backs the Check inbox now
+  action, because a six hour poll is too slow while setting up the mailbox.
+- Self-tested by `test/sessionAnalysis.test.ts` (parsing, image sizing and
+  pairing, IMAP validation, the Gmail preset and forward helpers).
+
 ## Briefing load path
 
 - `GET /api/briefing` no longer waits for the AI provider. When no brief exists,
@@ -350,7 +405,7 @@ started, `later` means deliberately deferred, `skip` means not planned.
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 926 tests, all passing.
+- `pnpm test`: 944 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

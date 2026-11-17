@@ -63,7 +63,7 @@ function errorOf(fn: () => unknown): Error {
 
 describe("registry", () => {
   test("lists providers in the documented order and recognises them", () => {
-    assert.deepEqual([...INTEGRATION_PROVIDERS], ["ctrader", "telegram", "smtp", "ai"]);
+    assert.deepEqual([...INTEGRATION_PROVIDERS], ["ctrader", "telegram", "smtp", "ai", "imap"]);
     for (const provider of INTEGRATION_PROVIDERS) {
       assert.equal(isIntegrationProvider(provider), true);
       assert.equal(INTEGRATION_DEFS[provider].provider, provider);

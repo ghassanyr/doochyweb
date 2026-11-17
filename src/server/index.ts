@@ -17,6 +17,14 @@ import { reconcileAccount, listAccounts, listTradableNames, symbolQuote } from "
 import { fetchOrderHistory } from "./ctrader/history";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
+import {
+  sessionAnalysisChartRouter,
+  sessionAnalysisRouter,
+} from "./sessionAnalysis/routes";
+import {
+  startSessionAnalysisScheduler,
+  stopSessionAnalysisScheduler,
+} from "./sessionAnalysis/scheduler";
 import { signalsRouter } from "./signals/routes";
 import { startSignalResolver } from "./signals/resolver";
 import { journalRouter } from "./journal/routes";
@@ -656,6 +664,20 @@ app.patch("/api/accounts/:ctid/positions/:positionId", authRequired, async (req:
 // Everything under /api/accounts and /api/credentials stays behind auth.
 // -----------------------------------------------------------------------
 app.use("/api/market", maintenanceGate, marketGate, marketRouter);
+// Session Analysis follows Analysis: public reads, chart images on their own
+// route so an <img> request never depends on the bearer token, and an
+// admin-only mailbox check.
+app.use(
+  "/api/session-analysis/chart",
+  maintenanceGate,
+  sessionAnalysisChartRouter
+);
+app.use(
+  "/api/session-analysis",
+  maintenanceGate,
+  moduleGate("analysis"),
+  sessionAnalysisRouter
+);
 app.use("/api/signals", maintenanceGate, moduleGate("signals"), signalsRouter);
 // The journal lives inside the Trading page, so it follows that module's access
 // rule; both routers also enforce a session on every route themselves, and the
@@ -720,6 +742,7 @@ async function main() {
   startAlertRunner();
   startJournalSync();
   startPaperRunner();
+  startSessionAnalysisScheduler();
 
   // Telegram is optional; a missing token or a bad one must never stop the
   // web app. The feature logs its own startup failures.
@@ -731,6 +754,7 @@ async function main() {
       stopAlertRunner();
       stopJournalSync();
       stopPaperRunner();
+      stopSessionAnalysisScheduler();
       process.exit(0);
     });
   }

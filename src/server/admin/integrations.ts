@@ -14,8 +14,14 @@ import { aiProviderCatalog, listAiModels, testAi } from "../ai/client";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
 import { IntegrationCryptoError, encryptionKeyFromEnv } from "../integrations/crypto";
 import { INTEGRATION_DEFS, isIntegrationProvider } from "../integrations/registry";
+import {
+  IMAP_PRESETS,
+  asImapValues,
+  testImapConnection,
+} from "../integrations/imapSetup";
 import { validateSmtpSetup } from "../integrations/smtpSetup";
 import { asSmtpValues, sendTestEmail } from "../email/transport";
+import { wakeSessionAnalysisScheduler } from "../sessionAnalysis/scheduler";
 import {
   getIntegrationStates,
   recordIntegrationTest,
@@ -165,6 +171,17 @@ async function testSmtp(
   }
 }
 
+async function testImap(values: ResolvedIntegration): Promise<IntegrationTestResult> {
+  if (values.missing.length > 0) {
+    return { ok: false, message: `Missing required fields: ${values.missing.join(", ")}` };
+  }
+  const issues = providerIssuesFromValues("imap", values.values);
+  if (issues.errors.length > 0) {
+    return { ok: false, message: issues.errors[0] };
+  }
+  return testImapConnection(asImapValues(values.values));
+}
+
 function testProvider(
   provider: IntegrationProvider,
   values: ResolvedIntegration,
@@ -172,6 +189,7 @@ function testProvider(
 ): Promise<IntegrationTestResult> {
   if (provider === "smtp") throw new Error("SMTP tests need the acting admin account");
   if (provider === "ai") return testAi(values.values);
+  if (provider === "imap") return testImap(values);
   return provider === "ctrader"
     ? testCtrader(values, publicBaseUrl)
     : testTelegram(values);
@@ -210,6 +228,7 @@ integrationAdminRouter.get("/integrations", adminRequired, async (req, res) => {
       requestOrigin: origin,
       callbacks: callbackCandidates(publicBaseUrl),
       aiProviders: aiProviderCatalog(),
+      imapPresets: IMAP_PRESETS,
     });
   } catch (err) {
     fail(res, err, "failed to load integrations");
@@ -256,6 +275,7 @@ integrationAdminRouter.put(
         req.body,
         req.username ?? req.userId ?? "admin"
       );
+      if (provider === "imap") wakeSessionAnalysisScheduler();
       res.json({ integration });
     } catch (err) {
       if (err instanceof IntegrationValidationError) {

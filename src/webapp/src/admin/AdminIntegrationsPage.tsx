@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   FlaskConical,
+  Inbox,
   Mail,
   Plug,
   RefreshCw,
@@ -17,14 +18,17 @@ import {
 
 import {
   adminApi,
+  sessionAnalysisApi,
   type AdminIntegrationsResponse,
   type AiProviderOption,
   type CallbackCandidates,
+  type ImapPreset,
   type IntegrationFieldState,
   type IntegrationPatch,
   type IntegrationProvider,
   type IntegrationState,
   type IntegrationTestResult,
+  type SessionSyncResult,
 } from "../api";
 import { AnimatedModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
@@ -837,26 +841,37 @@ function ProviderCard({
   baseline,
   encryptionAvailable,
   callbacks,
+  imapPresets,
   testResult,
   onDraftChange,
   onSave,
   onTest,
+  onImportNow,
 }: {
   state: IntegrationState;
   draft: Draft;
   baseline: Record<string, string>;
   encryptionAvailable: boolean;
   callbacks: CallbackCandidates;
+  imapPresets: readonly ImapPreset[];
   testResult: IntegrationTestResult | null;
   onDraftChange: (draft: Draft) => void;
   onSave: () => Promise<void>;
   onTest: () => Promise<void>;
+  onImportNow?: () => Promise<SessionSyncResult>;
 }) {
   const patch = buildPatch(state, draft, baseline);
   const dirty = isDirty(patch);
   const provider = state.provider;
   const Icon =
-    provider === "ctrader" ? Plug : provider === "smtp" ? Mail : Send;
+    provider === "ctrader"
+      ? Plug
+      : provider === "smtp"
+        ? Mail
+        : provider === "imap"
+          ? Inbox
+          : Send;
+  const [importResult, setImportResult] = useState<SessionSyncResult | null>(null);
 
   function updateValue(key: string, value: string) {
     onDraftChange({
@@ -871,6 +886,36 @@ function ProviderCard({
       ? draft.cleared.filter((entry) => entry !== key)
       : [...draft.cleared, key];
     onDraftChange({ ...draft, cleared, values: { ...draft.values, [key]: "" } });
+  }
+
+  function applyPreset(preset: ImapPreset) {
+    const values: Record<string, string> = { ...draft.values };
+    for (const [key, value] of Object.entries(preset.values)) {
+      values[key] = String(value);
+    }
+    onDraftChange({
+      ...draft,
+      cleared: draft.cleared.filter((key) => !(key in preset.values)),
+      values,
+    });
+  }
+
+  async function importNow() {
+    if (!onImportNow) return;
+    setImportResult(null);
+    try {
+      setImportResult(await onImportNow());
+    } catch (err) {
+      setImportResult({
+        ok: false,
+        configured: true,
+        imported: false,
+        sessionKey: null,
+        markets: 0,
+        message: err instanceof Error ? err.message : "Import failed.",
+        checkedAt: new Date().toISOString(),
+      });
+    }
   }
 
   return (
@@ -890,7 +935,17 @@ function ProviderCard({
             <p className="mt-0.5 max-w-xl text-xs text-fg-muted">{state.description}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {provider === "imap" && onImportNow && (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<RefreshCw className="h-3.5 w-3.5" />}
+              onClickAsync={importNow}
+            >
+              Import now
+            </Button>
+          )}
           <Button
             size="sm"
             variant="secondary"
@@ -962,6 +1017,57 @@ function ProviderCard({
         </div>
       )}
 
+      {provider === "imap" && (
+        <div className="space-y-2 rounded-xl border border-hairline bg-soft/60 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-fg">Setup checklist</p>
+            <div className="flex flex-wrap gap-1.5">
+              {imapPresets.map((preset) => (
+                <Button
+                  key={preset.key}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => applyPreset(preset)}
+                >
+                  Use {preset.label} settings
+                </Button>
+              ))}
+            </div>
+          </div>
+          <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-fg-muted">
+            <li>
+              Turn on 2-Step Verification for the mailbox, then create an App Password at{" "}
+              <a
+                href="https://myaccount.google.com/apppasswords"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent underline-offset-2 hover:underline"
+              >
+                myaccount.google.com/apppasswords
+              </a>
+              .
+            </li>
+            <li>
+              Enter the full mailbox address as the username and the 16-character App Password
+              as the password. A normal account password will be rejected.
+            </li>
+            <li>
+              Add one auto-forward rule in the analysis mailbox so the daily email arrives here.
+              Session Analysis reads only this mailbox and never exposes its password.
+            </li>
+            <li>
+              Save, then run Test to open the folder. Use Import now to read the mailbox without
+              waiting for the next scheduled poll.
+            </li>
+          </ol>
+          {imapPresets.map((preset) => (
+            <p key={preset.key} className="text-[11px] text-fg-faint">
+              {preset.hint}
+            </p>
+          ))}
+        </div>
+      )}
+
       {state.errors.length > 0 && (
         <Flash tone="danger" icon={<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
           {state.errors.join(" ")}
@@ -1006,6 +1112,18 @@ function ProviderCard({
               {state.lastTestDraft ? ", unsaved draft" : ""})
             </span>
           )}
+        </div>
+      )}
+
+      {importResult && (
+        <div className="rounded-lg border border-hairline bg-soft px-3 py-2 text-[11px] leading-relaxed">
+          <span className={importResult.ok ? "text-success" : "text-danger"}>
+            {importResult.ok ? "Import finished: " : "Import failed: "}
+            {importResult.message}
+          </span>
+          <span className="ml-1 text-fg-faint">
+            ({formatLocalDateTime(importResult.checkedAt)})
+          </span>
         </div>
       )}
 
@@ -1222,12 +1340,16 @@ export default function AdminIntegrationsPage({
               baseline={baseline}
               encryptionAvailable={data.encryptionAvailable}
               callbacks={callbackPreview}
+              imapPresets={data.imapPresets ?? []}
               testResult={testResults[state.provider] ?? null}
               onDraftChange={(next) =>
                 setDrafts((current) => ({ ...current, [state.provider]: next }))
               }
               onSave={() => save(state.provider)}
               onTest={() => test(state.provider)}
+              onImportNow={
+                state.provider === "imap" ? () => sessionAnalysisApi.sync() : undefined
+              }
             />
           );
         })}
