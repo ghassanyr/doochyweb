@@ -298,6 +298,18 @@ started, `later` means deliberately deferred, `skip` means not planned.
   stale snapshot never invents a move.
 - Self-tested by `test/today.test.ts` (greeting boundaries, mover ranking, limit).
 
+## Analysis filters
+
+- Timeframe, asset class and watchlist controls moved off the top toolbar into a
+  compact panel on the right. At `xl` and up the panel is a 300px sticky card
+  beside the grid, so the market cards get the full remaining width.
+- Below `xl` the same panel is a collapsed card above the grid. Its header shows
+  the active choices (`Filters | 4 hours · Crypto`) and a chevron, so the current
+  view is readable without opening it. The add-market combobox stays inside the
+  panel in both layouts, and the panel does not clip its suggestion dropdown.
+- Filtering remains visual only: the full result set keeps polling and feeding
+  the MTF confluence strip, so switching filters is instant.
+
 ## Briefing load path
 
 - `GET /api/briefing` no longer waits for the AI provider. When no brief exists,
