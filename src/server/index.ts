@@ -4,7 +4,18 @@ import path from "node:path";
 import fs from "node:fs";
 import { maskClientId, resolveConnectInput } from "./credentials";
 import { connectDb, loadCredentials, saveCredentials, User } from "./db";
-import { signToken, authRequired, AuthedRequest, hashPassword, verifyPassword, findUserByUsername } from "./auth";
+import { signToken, authRequired, AuthedRequest, hashPassword, verifyPassword, findUserByUsername, demoWriteGuard } from "./auth";
+import { demoRouter } from "./demo/routes";
+import { DEMO_USERNAME, ensureDemoUser } from "./demo/store";
+import {
+  DEMO_CTID,
+  demoCtraderAccount,
+  demoHistory,
+  demoOrders,
+  demoPositions,
+  demoQuote,
+  demoSymbols,
+} from "./demo/fixtures";
 import { accountAuthRouter } from "./accountRoutes";
 import { updateOwnEmail } from "./accountEmail";
 import { emailConfigured } from "./email/transport";
@@ -20,7 +31,7 @@ import {
   symbolQuote,
   type AccountView as CtraderAccountView,
 } from "./ctrader/reads";
-import { fetchOrderHistory } from "./ctrader/history";
+import { clampHistoryDays, fetchOrderHistory } from "./ctrader/history";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
 import {
@@ -65,6 +76,8 @@ app.set("trust proxy", 1);
 // Admin settings may carry an inline logo upload, so the JSON limit is larger
 // than the default; ordinary request bodies are still tiny.
 app.use(express.json({ limit: "1mb" }));
+app.use("/api", demoWriteGuard);
+app.use("/api/demo", demoRouter);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -131,6 +144,10 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
     const cleanEmail = String(email ?? "").trim().toLowerCase();
     if (!/^[A-Za-z0-9_-]{3,32}$/.test(clean)) {
       res.status(400).json({ error: "username must be 3-32 characters (letters, digits, _, -)" });
+      return;
+    }
+    if (clean === DEMO_USERNAME) {
+      res.status(409).json({ error: "username taken" });
       return;
     }
     if (!EMAIL_RE.test(cleanEmail)) {
@@ -222,6 +239,10 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
       res.status(401).json({ error: "invalid username or password" });
       return;
     }
+    if (user.accountType === "demo") {
+      res.status(403).json({ error: "use the demo entry button" });
+      return;
+    }
     if (user.status === "pending") {
       res.status(403).json({ error: "account is pending admin approval" });
       return;
@@ -253,17 +274,30 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
       res.status(401).json({ error: "user no longer exists" });
       return;
     }
+    if (req.demo) {
+      const account = demoCtraderAccount();
+      res.json({
+        username: user.username,
+        email: null,
+        emailVerified: true,
+        role: (user.role as string | undefined) ?? "user",
+        accountType: "demo",
+        demo: true,
+        hasCredentials: false,
+        hasMt5Accounts: false,
+        clientIdMasked: null,
+        ctraderOAuth: false,
+        ctraderManual: false,
+        accounts: [account],
+        brokerAccounts: brokerAccountViews([account], []),
+      });
+      return;
+    }
     const creds = await loadCredentials(req.userId!);
-    // /api/me stays reachable during maintenance so an allowed admin can be
-    // recognised, but live balances must not leak around the /api/accounts
-    // gate. Ordinary users get an empty list until maintenance ends.
     const settings = await getSiteSettings();
     const blocked =
       settings.maintenance.enabled &&
       !(settings.maintenance.allowAdmins && user.role === "admin");
-    // listAccounts enriches each account with live balance + broker name (both
-    // need a per-account broker round-trip), so /api/me returns the same shape
-    // as /api/accounts rather than the raw stored rows.
     const accounts = creds && !blocked ? await listAccounts(req.userId!) : [];
     const mt5Accounts = !blocked ? await listMt5Accounts(req.userId!) : [];
     res.json({
@@ -271,10 +305,10 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
       email: user.email ?? null,
       emailVerified: user.emailVerified !== false,
       role: (user.role as string | undefined) ?? "user",
+      accountType: "normal",
+      demo: false,
       hasCredentials: !!creds,
       hasMt5Accounts: mt5Accounts.length > 0,
-      // Enough for Settings to say which OpenAPI app is connected without ever
-      // sending the secret, or even the whole client id, to the browser.
       clientIdMasked: creds?.clientId ? maskClientId(creds.clientId) : null,
       ctraderOAuth: await ctraderOAuthAvailable(),
       ctraderManual: await ctraderManualAvailable(),
@@ -288,6 +322,10 @@ app.get("/api/me", authRequired, async (req: AuthedRequest, res: Response) => {
 
 app.get("/api/me/export", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
+    if (req.demo) {
+      res.status(403).json({ error: "demo account is read-only" });
+      return;
+    }
     const data = await exportUserData(req.userId!);
     if (!data) {
       res.status(401).json({ error: "user no longer exists" });
@@ -387,6 +425,11 @@ app.post("/api/connect", authRequired, async (req: AuthedRequest, res: Response)
 
 app.get("/api/accounts", authRequired, async (req: AuthedRequest, res: Response) => {
   try {
+    if (req.demo) {
+      const account = demoCtraderAccount();
+      res.json({ accounts: [account], brokerAccounts: brokerAccountViews([account], []) });
+      return;
+    }
     const [accounts, mt5Accounts] = await Promise.all([
       listAccounts(req.userId!),
       listMt5Accounts(req.userId!),
@@ -446,6 +489,14 @@ app.get("/api/accounts/:ctid/positions", authRequired, async (req: AuthedRequest
       res.status(400).json({ error: "invalid account id" });
       return;
     }
+    if (req.demo) {
+      if (ctid !== DEMO_CTID) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      res.json({ positions: demoPositions() });
+      return;
+    }
     const creds = await loadCredentials(req.userId!);
     const account = creds?.accounts.find((a) => a.ctid === ctid);
     if (!account) {
@@ -464,6 +515,14 @@ app.get("/api/accounts/:ctid/symbols", authRequired, async (req: AuthedRequest, 
     const ctid = Number(req.params.ctid);
     if (!Number.isFinite(ctid) || ctid <= 0) {
       res.status(400).json({ error: "invalid account id" });
+      return;
+    }
+    if (req.demo) {
+      if (ctid !== DEMO_CTID) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      res.json({ symbols: demoSymbols() });
       return;
     }
     const creds = await loadCredentials(req.userId!);
@@ -489,15 +548,23 @@ app.get("/api/accounts/:ctid/quote", authRequired, async (req: AuthedRequest, re
       res.status(400).json({ error: "invalid account id" });
       return;
     }
+    const symbol = String(req.query.symbol ?? "").trim();
+    if (!symbol) {
+      res.status(400).json({ error: "symbol is required" });
+      return;
+    }
+    if (req.demo) {
+      if (ctid !== DEMO_CTID) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      res.json({ quote: demoQuote(symbol) });
+      return;
+    }
     const creds = await loadCredentials(req.userId!);
     const account = creds?.accounts.find((a) => a.ctid === ctid);
     if (!account) {
       res.status(404).json({ error: "account not found" });
-      return;
-    }
-    const symbol = String(req.query.symbol ?? "").trim();
-    if (!symbol) {
-      res.status(400).json({ error: "symbol is required" });
       return;
     }
     const quote = await symbolQuote(req.userId!, ctid, account.isLive, symbol);
@@ -512,6 +579,14 @@ app.get("/api/accounts/:ctid/orders", authRequired, async (req: AuthedRequest, r
     const ctid = Number(req.params.ctid);
     if (!Number.isFinite(ctid) || ctid <= 0) {
       res.status(400).json({ error: "invalid account id" });
+      return;
+    }
+    if (req.demo) {
+      if (ctid !== DEMO_CTID) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      res.json({ orders: demoOrders() });
       return;
     }
     const creds = await loadCredentials(req.userId!);
@@ -535,6 +610,14 @@ app.get("/api/accounts/:ctid/history", authRequired, async (req: AuthedRequest, 
     const ctid = Number(req.params.ctid);
     if (!Number.isFinite(ctid) || ctid <= 0) {
       res.status(400).json({ error: "invalid account id" });
+      return;
+    }
+    if (req.demo) {
+      if (ctid !== DEMO_CTID) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      res.json(demoHistory(clampHistoryDays(req.query.days)));
       return;
     }
     const creds = await loadCredentials(req.userId!);
@@ -788,6 +871,9 @@ app.get("*", (req: Request, res: Response, next: NextFunction) => {
 // -----------------------------------------------------------------------
 async function main() {
   await connectDb();
+  await ensureDemoUser().catch((err) => {
+    console.warn(`[DEMO] seed skipped: ${err instanceof Error ? err.message : String(err)}`);
+  });
   await promoteConfiguredAdmins();
   const port = parseInt(process.env.PORT || "9111");
   app.listen(port, "127.0.0.1", () => {

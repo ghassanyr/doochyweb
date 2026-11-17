@@ -5,7 +5,8 @@ import { Router, type Request, type Response } from "express";
 
 import { hashPassword, signToken } from "./auth";
 import { consumeAuthToken, revokeAuthTokens } from "./authTokens";
-import { User } from "./db";
+import { isDemoUser, User } from "./db";
+import { DEMO_USERNAME } from "./demo/store";
 import { EmailNotConfiguredError, emailConfigured } from "./email/transport";
 import {
   AccountEmailLinkError,
@@ -75,7 +76,7 @@ accountAuthRouter.post("/forgot-password", async (req: Request, res: Response) =
   try {
     if (!(await requireEmail(res))) return;
     const user: any = await User.findOne({ email: address }).lean().exec();
-    if (user) {
+    if (user && !isDemoUser(user)) {
       try {
         await sendPasswordReset(String(user._id), req);
       } catch (err) {
@@ -103,6 +104,11 @@ accountAuthRouter.post("/reset-password", async (req: Request, res: Response) =>
   try {
     const userId = await consumeAuthToken(token, "password_reset");
     if (!userId) {
+      res.status(400).json({ error: "This reset link is invalid or has expired." });
+      return;
+    }
+    const user = await User.findById(userId).lean().exec();
+    if (!user || isDemoUser(user)) {
       res.status(400).json({ error: "This reset link is invalid or has expired." });
       return;
     }
@@ -138,6 +144,11 @@ accountAuthRouter.post("/verify-email", async (req: Request, res: Response) => {
       res.status(400).json({ error: "This verification link is invalid or has expired." });
       return;
     }
+    const user = await User.findById(userId).lean().exec();
+    if (!user || isDemoUser(user)) {
+      res.status(400).json({ error: "This verification link is invalid or has expired." });
+      return;
+    }
     const updated = await User.updateOne(
       { _id: userId },
       { $set: { emailVerified: true } }
@@ -165,7 +176,7 @@ accountAuthRouter.post("/resend-verification", async (req: Request, res: Respons
   }
   try {
     if (!(await requireEmail(res))) return;
-    const user: any = await User.findOne({ email: address, emailVerified: false }).lean().exec();
+    const user: any = await User.findOne({ email: address, emailVerified: false, accountType: { $ne: "demo" } }).lean().exec();
     if (user) {
       try {
         await sendVerification(String(user._id), req);
@@ -201,6 +212,11 @@ accountAuthRouter.post("/accept-invite", async (req: Request, res: Response) => 
     }
     const userId = await consumeAuthToken(token, "admin_invite");
     if (!userId) {
+      res.status(400).json({ error: "This invite link is invalid or has expired." });
+      return;
+    }
+    const invited = await User.findById(userId).lean().exec();
+    if (!invited || isDemoUser(invited)) {
       res.status(400).json({ error: "This invite link is invalid or has expired." });
       return;
     }

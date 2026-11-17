@@ -7,6 +7,7 @@
 import { Router, type Response } from "express";
 
 import { authRequired, type AuthedRequest } from "../auth";
+import { demoAlerts } from "../demo/fixtures";
 import { AlertError, createAlert, deleteAlert, listAlerts, updateAlert } from "./store";
 import { validateAlertInput } from "./validate";
 
@@ -24,6 +25,10 @@ function fail(res: Response, err: unknown): void {
 
 alertsRouter.get("/", async (req: AuthedRequest, res) => {
   try {
+    if (req.demo) {
+      res.json(demoAlerts());
+      return;
+    }
     res.json(await listAlerts(req.userId!));
   } catch (err) {
     fail(res, err);

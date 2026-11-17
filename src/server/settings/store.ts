@@ -12,6 +12,7 @@ import {
   DEFAULT_ANNOUNCEMENT,
   DEFAULT_BRANDING,
   DEFAULT_CONTENT,
+  DEFAULT_DEMO,
   DEFAULT_LEGAL,
   DEFAULT_LOCALE,
   DEFAULT_MAINTENANCE,
@@ -34,6 +35,7 @@ import type {
   AnnouncementSettings,
   AnnouncementTone,
   ContentSettings,
+  DemoSettings,
   LandingKey,
   LegalSettings,
   LocaleSettings,
@@ -62,6 +64,7 @@ import {
   normalizeMaintenance,
   normalizeNavigation,
   normalizeContent,
+  normalizeDemo,
   normalizeLocale,
   normalizePwa,
   normalizeRegistration,
@@ -290,6 +293,14 @@ const tradingDefaultsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const demoSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: DEFAULT_DEMO.enabled },
+    label: { type: String, default: DEFAULT_DEMO.label },
+  },
+  { _id: false }
+);
+
 const analysisSchema = new mongoose.Schema(
   {
     watchlistLimit: { type: Number, default: DEFAULT_ANALYSIS.watchlistLimit },
@@ -406,6 +417,7 @@ const siteSettingsSchema = new mongoose.Schema(
     },
     maintenance: { type: maintenanceSchema, default: () => ({ ...DEFAULT_MAINTENANCE }) },
     announcement: { type: announcementSchema, default: () => ({ ...DEFAULT_ANNOUNCEMENT }) },
+    demo: { type: demoSchema, default: () => ({ ...DEFAULT_DEMO }) },
     registration: { type: registrationSchema, default: () => ({ ...DEFAULT_REGISTRATION }) },
     legal: { type: legalSchema, default: () => ({ ...DEFAULT_LEGAL }) },
     seo: { type: seoSchema, default: () => ({ ...DEFAULT_SEO }) },
@@ -650,6 +662,14 @@ export function mergeAnnouncement(stored: any): AnnouncementSettings {
   };
 }
 
+export function mergeDemo(stored: any): DemoSettings {
+  const demo = stored && typeof stored === "object" ? stored : {};
+  return {
+    enabled: demo.enabled !== false,
+    label: typeof demo.label === "string" && demo.label.trim() ? demo.label : DEFAULT_DEMO.label,
+  };
+}
+
 export function mergeAnalysis(stored: any): AnalysisSettings {
   const analysis = stored && typeof stored === "object" ? stored : {};
   const limit = Number(analysis.watchlistLimit);
@@ -671,6 +691,7 @@ export function mergeSiteSettings(doc: any): SiteSettings {
     navigation: mergeNavigation(doc?.navigation),
     maintenance: mergeMaintenance(doc?.maintenance),
     announcement: mergeAnnouncement(doc?.announcement),
+    demo: mergeDemo(doc?.demo),
     registration: mergeRegistration(doc?.registration),
     analysis: mergeAnalysis(doc?.analysis),
     legal: mergeLegal(doc?.legal),
@@ -736,6 +757,7 @@ export async function saveSiteSettings(
     navigation?: unknown;
     maintenance?: unknown;
     announcement?: unknown;
+    demo?: unknown;
     registration?: unknown;
     analysis?: unknown;
     legal?: unknown;
@@ -759,6 +781,7 @@ export async function saveSiteSettings(
   const navigation = normalizeNavigation(patch.navigation, current.navigation);
   const maintenance = normalizeMaintenance(patch.maintenance, current.maintenance);
   const announcement = normalizeAnnouncement(patch.announcement, current.announcement);
+  const demo = normalizeDemo(patch.demo, current.demo);
   const registration = normalizeRegistration(patch.registration, current.registration);
   const analysis = normalizeAnalysis(patch.analysis, current.analysis);
   const legal = normalizeLegal(patch.legal, current.legal);
@@ -784,6 +807,7 @@ export async function saveSiteSettings(
         navigation,
         maintenance,
         announcement,
+        demo,
         registration,
         analysis,
         legal,
@@ -817,6 +841,7 @@ export function publicSiteConfig(settings: SiteSettings): SiteConfig {
     navigation: settings.navigation,
     maintenance: settings.maintenance,
     announcement: settings.announcement,
+    demo: settings.demo,
     registration: {
       mode: settings.registration.mode,
       message: settings.registration.message,

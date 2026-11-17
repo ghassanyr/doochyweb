@@ -81,7 +81,7 @@ export default function SessionAnalysisPage({
         <header>
           <h1 className="text-xl font-semibold tracking-tight text-fg">Session Analysis</h1>
           <p className="mt-0.5 text-sm text-fg-muted">
-            The latest session from the daily AI market analysis email.
+            The latest session from the daily AI market analysis.
           </p>
         </header>
 
@@ -151,7 +151,7 @@ export default function SessionAnalysisPage({
 
         {day && day.markets.length > 0 && (
           <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
-            Copied from the daily AI market analysis email. Not financial advice.
+            Copied from the daily AI market analysis. Not financial advice.
           </p>
         )}
       </div>

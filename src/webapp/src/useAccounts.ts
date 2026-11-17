@@ -5,6 +5,7 @@ import {
   type AccountView,
   type BrokerAccountView,
   type ConnectInput,
+  type UserAccountType,
   type UserRole,
 } from "./api";
 
@@ -22,6 +23,8 @@ export function useAccounts(enabled: boolean) {
   const [me, setMe] = useState<{
     username: string;
     role: UserRole;
+    accountType: UserAccountType;
+    demo: boolean;
     ctraderOAuth: boolean;
     ctraderManual: boolean;
   } | null>(null);
@@ -44,6 +47,8 @@ export function useAccounts(enabled: boolean) {
       setMe({
         username: res.username,
         role: res.role,
+        accountType: res.accountType,
+        demo: res.demo,
         ctraderOAuth: res.ctraderOAuth,
         ctraderManual: res.ctraderManual,
       });

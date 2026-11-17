@@ -9,6 +9,7 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ContentSettings,
+  DemoSettings,
   LocaleSettings,
   ModuleKey,
   ModuleSettings,
@@ -35,6 +36,11 @@ export const DEFAULT_REGISTRATION: RegistrationSettings = {
   message: "",
   inviteCode: "",
   requireEmailVerification: false,
+};
+
+export const DEFAULT_DEMO: DemoSettings = {
+  enabled: true,
+  label: "Try demo",
 };
 
 export const DEFAULT_LEGAL: LegalSettings = {
@@ -249,6 +255,7 @@ export function defaultSiteSettings(): SiteSettings {
     },
     maintenance: { ...DEFAULT_MAINTENANCE },
     announcement: { ...DEFAULT_ANNOUNCEMENT },
+    demo: { ...DEFAULT_DEMO },
     registration: { ...DEFAULT_REGISTRATION },
     analysis: { ...DEFAULT_ANALYSIS },
     legal: { ...DEFAULT_LEGAL },

@@ -60,7 +60,7 @@ function sameSessions(a: BriefingFocusSession[], b: BriefingFocusSession[]): boo
   return [...a].sort().join(",") === [...b].sort().join(",");
 }
 
-export default function BriefingPage() {
+export default function BriefingPage({ readOnly = false }: { readOnly?: boolean }) {
   const { content } = useSiteConfig();
   const [data, setData] = useState<BriefingResponse | null>(null);
   const [focus, setFocus] = useState<BriefingFocusSession[]>([]);
@@ -155,7 +155,7 @@ export default function BriefingPage() {
 
   const briefing = data?.briefing ?? null;
   const sections = briefing?.sections ?? null;
-  const focusDirty = data ? !sameSessions(focus, data.preferences.focusSessions) : false;
+  const focusDirty = data ? !sameSessions(focus, data.preferences?.focusSessions ?? []) : false;
   const pendingEnhancement =
     enhancing || briefing?.status === "building" || briefing?.status === "enhancing";
 
@@ -212,7 +212,7 @@ export default function BriefingPage() {
               size="sm"
               variant="secondary"
               className="ml-auto"
-              disabled={refreshing || pendingEnhancement}
+              disabled={readOnly || refreshing || pendingEnhancement}
               icon={<RefreshCw className="h-3.5 w-3.5" />}
               onClick={() => void refresh()}
             >
@@ -236,6 +236,7 @@ export default function BriefingPage() {
                     key={option.key}
                     type="button"
                     aria-pressed={active}
+                    disabled={readOnly}
                     onClick={() => toggleFocus(option.key)}
                     className={
                       "rounded-lg border px-2.5 py-1 text-[11px] font-medium transition " +
@@ -252,7 +253,7 @@ export default function BriefingPage() {
                 size="sm"
                 variant="secondary"
                 className="ml-auto"
-                disabled={!focusDirty || savingFocus || !focus.length}
+                disabled={readOnly || !focusDirty || savingFocus || !focus.length}
                 icon={<Save className="h-3.5 w-3.5" />}
                 onClick={() => void saveFocus()}
               >
@@ -293,7 +294,7 @@ export default function BriefingPage() {
                 either way.
               </Flash>
             )}
-            {data?.aiReady && !pendingEnhancement && briefing.error && (
+            {!readOnly && data?.aiReady && !pendingEnhancement && briefing.error && (
               <div className="space-y-2">
                 <Flash tone="warning">{briefing.error}</Flash>
                 <Button size="sm" variant="secondary" onClick={() => void retryEnhance()}>

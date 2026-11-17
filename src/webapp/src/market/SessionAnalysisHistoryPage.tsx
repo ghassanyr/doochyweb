@@ -179,7 +179,7 @@ export default function SessionAnalysisHistoryPage({
 
         {day && day.markets.length > 0 && (
           <p className="pb-2 text-center text-[11px] leading-relaxed text-fg-faint">
-            Copied from the daily AI market analysis email. Not financial advice.
+            Not financial advice.
           </p>
         )}
       </div>

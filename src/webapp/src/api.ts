@@ -1,6 +1,20 @@
 const TOKEN_KEY = "doochyweb_token";
 
 export type UserRole = "user" | "admin";
+export type UserAccountType = "normal" | "demo";
+
+export interface DemoSettings {
+  enabled: boolean;
+  label: string;
+}
+
+export interface AdminDemoStatus {
+  seeded: boolean;
+  userId: string | null;
+  seedVersion: number;
+  resetCount: number;
+  seededAt: string | null;
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -1393,6 +1407,7 @@ export interface SiteConfig {
   navigation: NavigationSettings;
   maintenance: MaintenanceSettings;
   announcement: AnnouncementSettings;
+  demo: DemoSettings;
   registration: PublicRegistrationSettings;
   legal: LegalSettings;
   seo: SeoSettings;
@@ -1538,6 +1553,10 @@ export const adminApi = {
 
   users: () => request<{ users: AdminUser[] }>("/api/admin/users"),
 
+  demoStatus: () => request<AdminDemoStatus>("/api/admin/demo"),
+
+  resetDemo: () => request<AdminDemoStatus>("/api/admin/demo/reset", { method: "POST" }),
+
   ctraderHealth: () => request<AdminCtraderHealth>("/api/admin/ctrader/health"),
 
   mt5Health: () => request<AdminMt5Health>("/api/admin/mt5/health"),
@@ -1585,6 +1604,7 @@ export const adminApi = {
     navigation?: Partial<NavigationSettings>;
     maintenance?: Partial<MaintenanceSettings>;
     announcement?: Partial<AnnouncementSettings>;
+    demo?: Partial<DemoSettings>;
     registration?: Partial<RegistrationSettings>;
     analysis?: Partial<AnalysisSettings>;
     legal?: Partial<LegalSettings>;
@@ -1646,6 +1666,11 @@ export const api = {
   login: (username: string, password: string) =>
     request<{ token: string }>("/api/auth/login", { method: "POST", body: { username, password } }),
 
+  enterDemo: () =>
+    request<{ token: string; username: string; label: string }>("/api/demo/enter", {
+      method: "POST",
+    }),
+
   forgotPassword: (email: string) =>
     request<{ ok: boolean }>("/api/auth/forgot-password", {
       method: "POST",
@@ -1682,6 +1707,8 @@ export const api = {
       email: string | null;
       emailVerified: boolean;
       role: UserRole;
+      accountType: UserAccountType;
+      demo: boolean;
       hasCredentials: boolean;
       hasMt5Accounts: boolean;
       clientIdMasked: string | null;

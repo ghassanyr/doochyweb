@@ -1,6 +1,6 @@
 # Product readiness plan
 
-Status snapshot: 2026-11-17, working tree on top of HEAD `63deb79`.
+Status snapshot: 2026-11-17, working tree on top of HEAD `7d434e3`.
 Sources: the original buyer-readiness plan (P0/P1/P2) and the cTrader fresh-buyer audit.
 
 The separate Trade AI feature backlog lives in `docs/AI_PLAN.md`; it is not part of this plan.
@@ -12,7 +12,8 @@ The separate Trade AI feature backlog lives in `docs/AI_PLAN.md`; it is not part
 - P2 is complete: PWA metadata, social links, webhooks and deployment version information are implemented.
 - The daily briefing is now a structured, per-user brief over the effective watchlist, active signals and open journal ideas, with saved focus sessions, deterministic fallback sections and legacy snapshot regeneration.
 - AI Coach adds manual individual trade reviews and fixed UTC weekly behaviour reports over the Trade Journal, with deterministic fallbacks and report invalidation on journal changes.
-- Last verified: `pnpm typecheck`, `pnpm test` with 935 tests, `pnpm build` and `git diff --check` all pass.
+- Demo mode is implemented as a shared read-only session with fixed fixtures, purpose-tagged short-lived tokens, admin controls and a server-wide demo write guard. See `docs/DEMO_ACCOUNT.md`.
+- Last verified: `pnpm typecheck`, `pnpm test` with 981 tests, `pnpm build` and `git diff --check` all pass.
 
 ## P0: needed for a sellable self-hosted product
 
@@ -47,6 +48,13 @@ All done.
 - Social links beyond the single website URL.
 - Signed outbound webhooks for signal and alert events.
 - Deployment version and runtime information in the admin panel.
+
+## Demo account
+
+| Item | Status | What remains |
+| --- | --- | --- |
+| Shared read-only session | Done | One seeded demo user, fixed fixtures, admin enable/label settings, admin reset, entry points, banner and exit action are implemented. The API write guard is authoritative. |
+| Documentation and tests | Done | `docs/DEMO_ACCOUNT.md` covers behavior and limitations. `test/demo.test.ts` covers fixture counts, token rules, the write guard and demo settings normalization. |
 
 ## P3: MT5 productization - parked
 

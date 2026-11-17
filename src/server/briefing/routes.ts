@@ -10,6 +10,7 @@ import { Router, type Response } from "express";
 
 import { authRequired, type AuthedRequest } from "../auth";
 import { AiError } from "../ai/client";
+import { demoBriefing } from "../demo/fixtures";
 import { briefingDateKey } from "./build";
 import { getBriefing, retryBriefingEnhancement } from "./service";
 import { parseFocusSessions } from "./sessions";
@@ -29,7 +30,7 @@ function fail(res: Response, err: unknown): void {
 
 briefingRouter.get("/", async (req: AuthedRequest, res) => {
   try {
-    res.json(await getBriefing(req.userId!));
+    res.json(req.demo ? demoBriefing() : await getBriefing(req.userId!));
   } catch (err) {
     fail(res, err);
   }

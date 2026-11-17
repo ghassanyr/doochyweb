@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Home, Lock, LogIn, LogOut, Menu, Moon, MoreHorizontal, Settings, Sun } from "lucide-react";
+import { Home, Lock, LogIn, LogOut, Menu, Moon, MoreHorizontal, Play, Settings, Sun } from "lucide-react";
 
-import { type BrandingSettings, type LegalSettings, type ModuleSettings, type NavGroupSettings } from "./api";
+import {
+  type BrandingSettings,
+  type DemoSettings,
+  type LegalSettings,
+  type ModuleSettings,
+  type NavGroupSettings,
+} from "./api";
 import { AnnouncementBanner } from "./AnnouncementBanner";
 import { AppSidebar, moduleIcon } from "./AppSidebar";
 import { RouteLink } from "./components/RouteLink";
-import { Button } from "./components/ui";
+import { Button, Flash } from "./components/ui";
 import { isModuleLocked, quickModules } from "./navigation";
 import { pathForView, viewFromPath, type ViewKey } from "./routing";
 import {
@@ -47,6 +53,10 @@ export function AppShell({
   onSignIn,
   onRegister,
   onLogout,
+  demo,
+  isDemo,
+  onEnterDemo,
+  onExitDemo,
   children,
 }: {
   view: ViewKey;
@@ -64,6 +74,10 @@ export function AppShell({
   onSignIn: () => void;
   onRegister: () => void;
   onLogout: () => void;
+  demo: DemoSettings;
+  isDemo: boolean;
+  onEnterDemo: () => void;
+  onExitDemo: () => void;
   children: ReactNode;
 }) {
   const { config, branding, theme, mode, toggleMode, social } = useSiteConfig();
@@ -267,21 +281,35 @@ export function AppShell({
                   />
                 </>
               ) : (
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={<LogIn className="h-4 w-4" />}
-                  onClick={onSignIn}
-                  aria-label="Sign in"
-                  title="Sign in to manage trading accounts"
-                >
-                  Sign in
-                </Button>
+                <>
+                  {demo.enabled && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Play className="h-4 w-4" />}
+                      onClick={onEnterDemo}
+                      title={`${demo.label} with fixed sample data`}
+                    >
+                      <span className="hidden sm:inline">{demo.label}</span>
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    icon={<LogIn className="h-4 w-4" />}
+                    onClick={onSignIn}
+                    aria-label="Sign in"
+                    title="Sign in to manage trading accounts"
+                  >
+                    Sign in
+                  </Button>
+                </>
               )}
             </div>
           </div>
         </header>
 
+        {isDemo && <DemoBanner label={demo.label} onExit={onExitDemo} />}
         <AnnouncementBanner announcement={config?.announcement ?? FALLBACK_ANNOUNCEMENT} />
 
         <main id="main-content" className="mx-auto max-w-page px-4 py-5 sm:px-6">
@@ -326,6 +354,10 @@ export function AppShell({
           onSignIn={onSignIn}
           onRegister={onRegister}
           onLogout={onLogout}
+          demo={demo}
+          isDemo={isDemo}
+          onEnterDemo={onEnterDemo}
+          onExitDemo={onExitDemo}
         />
       </aside>
 
@@ -372,6 +404,7 @@ export function AppShell({
           (collapsed ? "lg:pl-[72px]" : "lg:pl-[248px]")
         }
       >
+        {isDemo && <DemoBanner label={demo.label} onExit={onExitDemo} />}
         <AnnouncementBanner announcement={config?.announcement ?? FALLBACK_ANNOUNCEMENT} />
 
         <main id="main-content" className="mx-auto max-w-page px-4 py-5 sm:px-6">
@@ -417,6 +450,10 @@ export function AppShell({
               onSignIn={() => closeDrawerThen(onSignIn)}
               onRegister={() => closeDrawerThen(onRegister)}
               onLogout={onLogout}
+              demo={demo}
+              isDemo={isDemo}
+              onEnterDemo={() => closeDrawerThen(onEnterDemo)}
+              onExitDemo={onLogout}
             />
           </aside>
         </div>
@@ -450,6 +487,23 @@ function readSidebarCollapsed(): boolean {
     // Storage can be blocked; fall through to the viewport default.
   }
   return window.innerWidth < 1280;
+}
+
+function DemoBanner({ label, onExit }: { label: string; onExit: () => void }) {
+  return (
+    <div className="border-b border-amber-500/30 bg-amber-500/5">
+      <div className="mx-auto flex max-w-page flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <Flash tone="warning" icon={<Play className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
+          <span>
+            <strong>{label}</strong> is active with fixed sample data. Changes are disabled.
+          </span>
+        </Flash>
+        <Button size="sm" variant="ghost" onClick={onExit}>
+          Exit demo
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function SkipLink() {

@@ -26,6 +26,7 @@ import {
   type AnnouncementSettings,
   type BrandingSettings,
   type ContentSettings,
+  type DemoSettings,
   type LocaleSettings,
   type MaintenanceSettings,
   type LegalSettings,
@@ -56,6 +57,11 @@ export const FALLBACK_REGISTRATION: PublicRegistrationSettings = {
   message: "",
   inviteRequired: false,
   requireEmailVerification: false,
+};
+
+export const FALLBACK_DEMO: DemoSettings = {
+  enabled: true,
+  label: "Try demo",
 };
 
 export const FALLBACK_LEGAL: LegalSettings = {
@@ -512,6 +518,7 @@ interface SiteConfigContextValue {
   locale: LocaleSettings;
   social: SocialSettings;
   pwa: PwaSettings;
+  demo: DemoSettings;
   /** The palette currently painted, after the visitor's mode preference. */
   theme: ThemeSettings;
   mode: ThemeMode;
@@ -541,6 +548,7 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
   const locale = config?.locale ?? FALLBACK_LOCALE;
   const social = config?.social ?? FALLBACK_SOCIAL;
   const pwa = config?.pwa ?? FALLBACK_PWA;
+  const demo = config?.demo ?? FALLBACK_DEMO;
   const [consent, setConsent] = useState(hasCookieConsent);
 
   useEffect(() => {
@@ -617,6 +625,7 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
       locale,
       social,
       pwa,
+      demo,
       theme,
       mode: activeMode,
       toggleMode,
@@ -633,6 +642,7 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
       locale,
       social,
       pwa,
+      demo,
       theme,
       activeMode,
       toggleMode,

@@ -261,6 +261,11 @@ export interface AnalysisSettings {
   watchlistLimit: number;
 }
 
+export interface DemoSettings {
+  enabled: boolean;
+  label: string;
+}
+
 export type ThemeFont = "inter" | "system" | "serif";
 export type ThemeDensity = "compact" | "comfortable" | "spacious";
 
@@ -271,6 +276,7 @@ export interface SiteConfig {
   navigation: NavigationSettings;
   maintenance: MaintenanceSettings;
   announcement: AnnouncementSettings;
+  demo: DemoSettings;
   registration: PublicRegistrationSettings;
   legal: LegalSettings;
   seo: SeoSettings;

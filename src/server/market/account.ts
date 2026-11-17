@@ -27,7 +27,10 @@ export async function resolveMarketAccount(force = false): Promise<MarketAccount
   const pinnedUser = process.env.MARKET_CTRADER_USER_ID;
   const pinnedCtid = Number(process.env.MARKET_CTRADER_CTID);
 
-  const users = await User.find(pinnedUser ? { _id: pinnedUser } : {}).lean();
+  const users = await User.find({
+    ...(pinnedUser ? { _id: pinnedUser } : {}),
+    accountType: { $ne: "demo" },
+  }).lean();
   let found: MarketAccount | null = null;
 
   for (const u of users) {

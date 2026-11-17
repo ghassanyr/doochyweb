@@ -46,6 +46,7 @@ export default function PositionsTab({
   accounts,
   ctid,
   isAdmin,
+  readOnly = false,
   ticketOpen,
   onTicketClose,
   refreshToken,
@@ -55,6 +56,7 @@ export default function PositionsTab({
   ctid: number | null;
   /** Only admins can publish signals. */
   isAdmin: boolean;
+  readOnly?: boolean;
   /** The order ticket is owned by the trading tabs row. */
   ticketOpen: boolean;
   onTicketClose: () => void;
@@ -236,7 +238,8 @@ export default function PositionsTab({
                 onToggle={() => setOpenId(openId === p.positionId ? null : p.positionId)}
                 onChanged={load}
                 onClose={() => setClosePos(p)}
-                canPublish={isAdmin}
+                canPublish={isAdmin && !readOnly}
+                readOnly={readOnly}
                 onPublish={() =>
                   setPublishDraft({
                     symbol: p.symbol,
@@ -252,16 +255,18 @@ export default function PositionsTab({
         </Stagger>
       )}
 
-      <OrderTicket
-        open={ticketOpen}
-        onClose={onTicketClose}
-        onDone={load}
-        accounts={accounts}
-        defaultCtids={mode === "combined" ? accounts.map((a) => a.ctid) : ctid != null ? [ctid] : []}
-        symbols={symbols}
-      />
+      {!readOnly && (
+        <OrderTicket
+          open={ticketOpen}
+          onClose={onTicketClose}
+          onDone={load}
+          accounts={accounts}
+          defaultCtids={mode === "combined" ? accounts.map((a) => a.ctid) : ctid != null ? [ctid] : []}
+          symbols={symbols}
+        />
+      )}
 
-      {isAdmin && (
+      {isAdmin && !readOnly && (
         <PublishSignalModal
           draft={publishDraft}
           onClose={() => setPublishDraft(null)}
@@ -270,7 +275,7 @@ export default function PositionsTab({
       )}
 
       <ConfirmModal
-        open={closePos != null}
+        open={!readOnly && closePos != null}
         title={closePos ? `${closePos.side} ${closePos.symbol}` : "Close"}
         body={
           closePos && (
@@ -309,6 +314,7 @@ function PositionCard({
   onChanged,
   onClose,
   canPublish,
+  readOnly = false,
   onPublish,
 }: {
   p: PositionRow;
@@ -318,6 +324,7 @@ function PositionCard({
   onChanged: () => void;
   onClose: () => void;
   canPublish: boolean;
+  readOnly?: boolean;
   onPublish: () => void;
 }) {
   const isBuy = p.side === "BUY";
@@ -427,48 +434,56 @@ function PositionCard({
             <Field label="Current result" value={fmtNetUsd(p.netUsd)} valueClassName={netTone(p.netUsd)} />
           </div>
 
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-fg-muted">Edit stop loss / take profit</div>
-            <div className="grid grid-cols-2 gap-2">
-              <BareInput
-                value={sl}
-                onChange={setSl}
-                placeholder={p.stopLoss != null ? String(p.stopLoss) : "SL"}
-              />
-              <BareInput
-                value={tp}
-                onChange={setTp}
-                placeholder={p.takeProfit != null ? String(p.takeProfit) : "TP"}
-              />
+          {readOnly ? (
+            <div className="rounded-lg border border-hairline bg-soft px-3 py-2 text-xs text-fg-muted">
+              Demo data is read-only.
             </div>
-            {sideErr && <Flash tone="danger">{sideErr}</Flash>}
-            <div className="flex items-end justify-between gap-2">
-              <span className="text-xs text-fg-faint">Levels are resent as shown; clearing a field removes it.</span>
-              <Button
-                size="sm"
-                variant={dirty && !sideErr ? "primary" : "secondary"}
-                disabled={!dirty || !!sideErr}
-                onClickAsync={dirty && !sideErr ? save : undefined}
-              >
-                Save levels
-              </Button>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-fg-muted">Edit stop loss / take profit</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <BareInput
+                    value={sl}
+                    onChange={setSl}
+                    placeholder={p.stopLoss != null ? String(p.stopLoss) : "SL"}
+                  />
+                  <BareInput
+                    value={tp}
+                    onChange={setTp}
+                    placeholder={p.takeProfit != null ? String(p.takeProfit) : "TP"}
+                  />
+                </div>
+                {sideErr && <Flash tone="danger">{sideErr}</Flash>}
+                <div className="flex items-end justify-between gap-2">
+                  <span className="text-xs text-fg-faint">Levels are resent as shown; clearing a field removes it.</span>
+                  <Button
+                    size="sm"
+                    variant={dirty && !sideErr ? "primary" : "secondary"}
+                    disabled={!dirty || !!sideErr}
+                    onClickAsync={dirty && !sideErr ? save : undefined}
+                  >
+                    Save levels
+                  </Button>
+                </div>
+              </div>
 
-          <div
-            className={
-              "grid gap-2 border-t border-hairline pt-3 " + (canPublish ? "grid-cols-2" : "grid-cols-1")
-            }
-          >
-            {canPublish && (
-              <Button variant="secondary" size="md" onClick={onPublish}>
-                <Megaphone className="h-4 w-4" /> Publish signal
-              </Button>
-            )}
-            <Button variant="danger" size="md" onClick={onClose}>
-              <XOctagon className="h-4 w-4" /> Close position
-            </Button>
-          </div>
+              <div
+                className={
+                  "grid gap-2 border-t border-hairline pt-3 " + (canPublish ? "grid-cols-2" : "grid-cols-1")
+                }
+              >
+                {canPublish && (
+                  <Button variant="secondary" size="md" onClick={onPublish}>
+                    <Megaphone className="h-4 w-4" /> Publish signal
+                  </Button>
+                )}
+                <Button variant="danger" size="md" onClick={onClose}>
+                  <XOctagon className="h-4 w-4" /> Close position
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Collapse>
     </Card>

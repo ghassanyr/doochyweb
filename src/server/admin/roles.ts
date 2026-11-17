@@ -1,7 +1,7 @@
 // Admin role helpers. The role lives on the user document and is read on every
 // admin request, so these changes take effect without re-issuing JWTs.
 
-import { User, type UserRole } from "../db";
+import { isDemoUser, User, type UserRole } from "../db";
 
 export type RoleChange =
   | "promoted"
@@ -40,7 +40,7 @@ export async function promoteConfiguredAdmins(): Promise<void> {
  */
 export async function setRole(username: string, role: UserRole): Promise<RoleChange> {
   const user = await User.findOne({ username }).lean().exec();
-  if (!user) return "missing";
+  if (!user || isDemoUser(user)) return "missing";
 
   const current = ((user.role as UserRole | undefined) ?? "user");
   if (current === role) return role === "admin" ? "already_admin" : "not_admin";

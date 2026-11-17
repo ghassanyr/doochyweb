@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Circle, Download, GripVertical, KeyRound, Mail, Palette, Plug, Trash2, UserPlus, X } from "lucide-react";
 
-import { adminApi, marketApi, type AdminCtraderHealth, type AdminMt5Health, type AdminSetupCheck, type AdminUser, type UserRole } from "../api";
+import { adminApi, marketApi, type AdminCtraderHealth, type AdminDemoStatus, type AdminMt5Health, type AdminSetupCheck, type AdminUser, type UserRole } from "../api";
 import { ConfirmModal } from "../components/Modal";
 import { FadeRise } from "../components/motion";
 import { RouteLink } from "../components/RouteLink";
@@ -43,6 +43,10 @@ export default function AdminPage({
   const [ctraderHealth, setCtraderHealth] = useState<AdminCtraderHealth | null>(null);
   const [mt5Health, setMt5Health] = useState<AdminMt5Health | null>(null);
   const [registrationMode, setRegistrationMode] = useState<string | null>(null);
+  const [demoStatus, setDemoStatus] = useState<AdminDemoStatus | null>(null);
+  const [demoLoading, setDemoLoading] = useState(true);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
   const [buildInfo, setBuildInfo] = useState<{
     version: string;
     nodeVersion: string;
@@ -128,12 +132,24 @@ export default function AdminPage({
     }
   }, []);
 
+  const loadDemo = useCallback(async () => {
+    try {
+      setDemoStatus(await adminApi.demoStatus());
+      setDemoNotice(null);
+    } catch (err) {
+      setDemoNotice(err instanceof Error ? err.message : "Failed to load demo status");
+    } finally {
+      setDemoLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadUsers();
     void loadChecks();
     void loadCtraderHealth();
     void loadMt5Health();
-  }, [loadUsers, loadChecks, loadCtraderHealth, loadMt5Health]);
+    void loadDemo();
+  }, [loadUsers, loadChecks, loadCtraderHealth, loadMt5Health, loadDemo]);
 
   const add = useCallback(
     async (raw: string) => {
@@ -284,6 +300,19 @@ export default function AdminPage({
     }
   }
 
+  async function resetDemo() {
+    setDemoBusy(true);
+    try {
+      const status = await adminApi.resetDemo();
+      setDemoStatus(status);
+      setDemoNotice("Demo account reset. Existing demo links are no longer valid.");
+    } catch (err) {
+      setDemoNotice(err instanceof Error ? err.message : "Failed to reset the demo account");
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
   return (
     <FadeRise>
       <div className="space-y-3">
@@ -360,6 +389,55 @@ export default function AdminPage({
               ))}
             </div>
           )}
+        </Card>
+
+        <Card className="space-y-3 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold tracking-tight text-fg">Demo account</h2>
+              <p className="mt-0.5 text-xs text-fg-muted">
+                Shared read-only sample session. Resetting invalidates every active demo link.
+              </p>
+            </div>
+            <Badge tone={demoStatus?.seeded ? "success" : "muted"}>
+              {demoStatus?.seeded ? "Seeded" : "Not seeded"}
+            </Badge>
+          </div>
+          {demoLoading ? (
+            <Skeleton className="h-8 w-full" />
+          ) : (
+            <div className="grid gap-2 text-xs text-fg-muted sm:grid-cols-3">
+              <div>
+                <div className="font-semibold text-fg">Version</div>
+                <div>{demoStatus?.seedVersion ?? "-"}</div>
+              </div>
+              <div>
+                <div className="font-semibold text-fg">Resets</div>
+                <div>{demoStatus?.resetCount ?? "-"}</div>
+              </div>
+              <div>
+                <div className="font-semibold text-fg">Last seed</div>
+                <div>
+                  {demoStatus?.seededAt ? formatLocalDateTime(demoStatus.seededAt) : "Not seeded"}
+                </div>
+              </div>
+            </div>
+          )}
+          {demoNotice && <Flash tone="warning">{demoNotice}</Flash>}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="ghost" onClickAsync={loadDemo} disabled={demoBusy}>
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              icon={<AlertTriangle className="h-4 w-4" />}
+              onClickAsync={resetDemo}
+              disabled={demoBusy}
+            >
+              Reset demo
+            </Button>
+          </div>
         </Card>
 
         <Card className="space-y-3 p-4">

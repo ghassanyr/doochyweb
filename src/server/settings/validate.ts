@@ -13,6 +13,7 @@ import type {
   BrandingSettings,
   ContentSettings,
   DateFormat,
+  DemoSettings,
   LandingKey,
   LegalSettings,
   LocaleSettings,
@@ -657,6 +658,15 @@ export function normalizeTradingDefaults(
 
 const DATE_FORMATS: readonly DateFormat[] = ["locale", "iso", "dmy", "mdy"];
 const NUMBER_FORMATS: readonly NumberFormat[] = ["locale", "comma-dot", "dot-comma"];
+
+export function normalizeDemo(patch: unknown, base: DemoSettings): DemoSettings {
+  const source = plainObject(patch);
+  const label = readString(source, "label", base.label, 40);
+  return {
+    enabled: readBoolean(source, "enabled", base.enabled),
+    label: label || base.label,
+  };
+}
 
 export function normalizeAnalysis(patch: unknown, base: AnalysisSettings): AnalysisSettings {
   const source = plainObject(patch);

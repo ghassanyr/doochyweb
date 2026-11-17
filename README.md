@@ -71,6 +71,9 @@ pm2 start ecosystem.config.cjs  # run under pm2
 pnpm test                       # test suite
 pnpm admin:grant <username>     # promote an existing user
 pnpm admin:revoke <username>    # demote an admin
+pnpm demo:seed                  # create or repair the shared demo user
+pnpm demo:reset                 # invalidate demo links and increment resets
+pnpm demo:status                # print demo seed status
 ```
 
 ## Buyer handover checklist
@@ -78,12 +81,17 @@ pnpm admin:revoke <username>    # demote an admin
 1. Set **Admin → Site settings → Site address** to the public HTTPS origin.
 2. Set branding, registration policy, legal links, and the risk disclaimer. When a Terms or Privacy URL is configured, new registrations and invite acceptances require agreement, and a cookie/storage notice appears site-wide.
 3. Configure SMTP, cTrader and Telegram under **Admin → Integrations**. SMTP is required for password reset, email verification and admin invites. MT5 is optional and read-only in this release; leave it disabled unless the operator is prepared to run an external bridge. See `docs/MT5_SETUP.md`.
-4. Run `pnpm doochy:check` and confirm the setup checklist has no required todos.
-5. Take a `pnpm doochy:backup` snapshot before handing over the server. Keep backups within the 7-day freshness window the admin checklist expects.
+4. Decide whether demo access should be enabled and set its label under **Admin → Site settings → Demo access**.
+5. Run `pnpm doochy:check` and confirm the setup checklist has no required todos.
+6. Take a `pnpm doochy:backup` snapshot before handing over the server. Keep backups within the 7-day freshness window the admin checklist expects.
 
 ### White-label checklist
 
 Everything customer-facing follows **Admin → Site settings → Branding**: product name, tagline, description, logo, support email, website and footer copy. The page title, meta/Open Graph tags, favicons, header, maintenance screen, transactional emails and Telegram messages use the same values. If no logo is uploaded, a monogram is generated from the product name; the bundled mark is only used while the product keeps its default name. The Telegram bot username must match the real username assigned by @BotFather so the deep link works.
+
+## Demo account
+
+The optional demo gives visitors a shared, read-only workspace with fixed sample positions, orders, alerts, briefing and coaching data. It uses one seeded user, short-lived purpose-tagged tokens, and a server-side guard that blocks every write under `/api`. The default entry label is `Try demo`. Manage it under **Admin → Site settings → Demo access** and **Admin → Demo account**. See `docs/DEMO_ACCOUNT.md` for the full behavior, fixed counts and reset commands.
 
 ## Optional integrations
 

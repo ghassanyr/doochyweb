@@ -7,6 +7,7 @@
 import { Router, type Response } from "express";
 
 import { authRequired, type AuthedRequest } from "../auth";
+import { demoJournalList } from "../demo/fixtures";
 import { journalCsv } from "./validate";
 import {
   createJournalEntry,
@@ -45,6 +46,10 @@ journalRouter.get("/", async (req: AuthedRequest, res) => {
   try {
     const limit = Number(req.query.limit) || 50;
     const offset = Number(req.query.offset) || 0;
+    if (req.demo) {
+      res.json(demoJournalList({ ...queryFilters(req), limit, offset }));
+      return;
+    }
     res.json(await listJournal(req.userId!, { ...queryFilters(req), limit, offset }));
     // Keep the journal current without a button. The sync backs off on its own
     // after a recent run, and the response is already sent, so a slow broker
@@ -59,11 +64,13 @@ journalRouter.get("/", async (req: AuthedRequest, res) => {
 
 journalRouter.get("/export", async (req: AuthedRequest, res) => {
   try {
-    const result = await listJournal(req.userId!, {
-      ...queryFilters(req),
-      limit: 200,
-      offset: 0,
-    });
+    const result = req.demo
+      ? demoJournalList({ ...queryFilters(req), limit: 200, offset: 0 })
+      : await listJournal(req.userId!, {
+          ...queryFilters(req),
+          limit: 200,
+          offset: 0,
+        });
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", 'attachment; filename="doochy-journal.csv"');
     res.send(journalCsv(result.entries as unknown as Record<string, unknown>[]));

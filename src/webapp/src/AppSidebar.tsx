@@ -23,6 +23,7 @@ import {
   Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
+  Play,
   Radio,
   Settings,
   ShieldCheck,
@@ -32,7 +33,13 @@ import {
   Zap,
 } from "lucide-react";
 
-import type { BrandingSettings, ModuleKey, ModuleSettings, NavGroupSettings } from "./api";
+import type {
+  BrandingSettings,
+  DemoSettings,
+  ModuleKey,
+  ModuleSettings,
+  NavGroupSettings,
+} from "./api";
 import { RouteLink } from "./components/RouteLink";
 import { Button } from "./components/ui";
 import { groupModules, isModuleLocked, type NavGroup } from "./navigation";
@@ -85,6 +92,10 @@ export interface AppSidebarProps {
   onSignIn: () => void;
   onRegister: () => void;
   onLogout: () => void;
+  demo: DemoSettings;
+  isDemo: boolean;
+  onEnterDemo: () => void;
+  onExitDemo: () => void;
 }
 
 export function AppSidebar({
@@ -105,6 +116,10 @@ export function AppSidebar({
   onSignIn,
   onRegister,
   onLogout,
+  demo,
+  isDemo,
+  onEnterDemo,
+  onExitDemo,
 }: AppSidebarProps) {
   const { branding, theme, mode, toggleMode } = useSiteConfig();
   const logoUrl = brandMarkUrl(branding, theme, 80);
@@ -142,6 +157,16 @@ export function AppSidebar({
 
   function logout() {
     onLogout();
+    onClose?.();
+  }
+
+  function enterDemo() {
+    onEnterDemo();
+    onClose?.();
+  }
+
+  function exitDemo() {
+    onExitDemo();
     onClose?.();
   }
 
@@ -272,6 +297,10 @@ export function AppSidebar({
         onSignIn={signIn}
         onRegister={register}
         onLogout={logout}
+        demo={demo}
+        isDemo={isDemo}
+        onEnterDemo={enterDemo}
+        onExitDemo={exitDemo}
       />
     </div>
   );
@@ -477,6 +506,10 @@ function SidebarFooter({
   onSignIn,
   onRegister,
   onLogout,
+  demo,
+  isDemo,
+  onEnterDemo,
+  onExitDemo,
 }: {
   signedIn: boolean;
   username: string | null;
@@ -490,16 +523,22 @@ function SidebarFooter({
   onSignIn: () => void;
   onRegister: () => void;
   onLogout: () => void;
+  demo: DemoSettings;
+  isDemo: boolean;
+  onEnterDemo: () => void;
+  onExitDemo: () => void;
 }) {
   const nextMode = mode === "dark" ? "light" : "dark";
   const initials = (username ?? "?").slice(0, 2).toUpperCase();
   const connected = hasCredentials === true;
   const checking = hasCredentials === null;
-  const statusText = checking
-    ? "Checking connection"
-    : connected
-      ? `cTrader connected${accountCount > 0 ? `, ${accountCount} account${accountCount === 1 ? "" : "s"}` : ""}`
-      : "cTrader not connected";
+  const statusText = isDemo
+    ? "Read-only demo data"
+    : checking
+      ? "Checking connection"
+      : connected
+        ? `cTrader connected${accountCount > 0 ? `, ${accountCount} account${accountCount === 1 ? "" : "s"}` : ""}`
+        : "cTrader not connected";
 
   return (
     <div className="shrink-0 border-t border-hairline p-2">
@@ -518,19 +557,31 @@ function SidebarFooter({
               collapsed={collapsed}
               onClick={onToggleMode}
             />
-            <FooterAction
-              icon={<Settings className="h-4 w-4" />}
-              label="Settings"
-              collapsed={collapsed}
-              onClick={onOpenSettings}
-            />
-            <FooterAction
-              icon={<LogOut className="h-4 w-4" />}
-              label="Sign out"
-              collapsed={collapsed}
-              onClick={onLogout}
-              tone="danger"
-            />
+            {isDemo ? (
+              <FooterAction
+                icon={<LogOut className="h-4 w-4" />}
+                label="Exit demo"
+                collapsed={collapsed}
+                onClick={onExitDemo}
+                tone="danger"
+              />
+            ) : (
+              <>
+                <FooterAction
+                  icon={<Settings className="h-4 w-4" />}
+                  label="Settings"
+                  collapsed={collapsed}
+                  onClick={onOpenSettings}
+                />
+                <FooterAction
+                  icon={<LogOut className="h-4 w-4" />}
+                  label="Sign out"
+                  collapsed={collapsed}
+                  onClick={onLogout}
+                  tone="danger"
+                />
+              </>
+            )}
           </div>
 
           <div
@@ -567,7 +618,7 @@ function SidebarFooter({
                       }
                       aria-hidden="true"
                     />
-                    {connected || checking ? (
+                    {connected || checking || isDemo ? (
                       <span className="truncate">{statusText}</span>
                     ) : (
                       <RouteLink
@@ -586,6 +637,18 @@ function SidebarFooter({
         </>
       ) : (
         <div className="space-y-1">
+          {demo.enabled && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className={collapsed ? "w-full px-0" : "w-full"}
+              icon={<Play className="h-4 w-4" />}
+              onClick={onEnterDemo}
+              title={demo.label}
+            >
+              {!collapsed && demo.label}
+            </Button>
+          )}
           <Button
             variant="primary"
             size="sm"

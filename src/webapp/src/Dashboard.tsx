@@ -35,10 +35,12 @@ export default function Dashboard({
   accounts,
   brokerAccounts,
   isAdmin,
+  readOnly = false,
 }: {
   accounts: AccountView[];
   brokerAccounts: BrokerAccountView[];
   isAdmin: boolean;
+  readOnly?: boolean;
 }) {
   // The trading view opens on "All accounts", with every individual pill
   // unselected. "All accounts" is its own mode, not a shortcut that ticks every
@@ -179,6 +181,7 @@ export default function Dashboard({
             accounts={activeAccounts}
             ctid={single?.ctid ?? null}
             isAdmin={isAdmin}
+            readOnly={readOnly}
           />
         )}
         <Mt5TradingPanel accounts={mt5Accounts} />
@@ -192,11 +195,13 @@ function Tabs({
   accounts,
   ctid,
   isAdmin,
+  readOnly = false,
 }: {
   mode: ViewMode;
   accounts: AccountView[];
   ctid: number | null;
   isAdmin: boolean;
+  readOnly?: boolean;
 }) {
   const [tab, setTab] = useState<PageKey>("positions");
   const [ticketOpen, setTicketOpen] = useState(false);
@@ -234,16 +239,18 @@ function Tabs({
                 aria-label="Refresh"
                 title="Refresh"
               />
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Plus className="h-4 w-4" />}
-                disabled={accounts.length === 0}
-                title="New order"
-                onClick={() => setTicketOpen(true)}
-              >
-                New order
-              </Button>
+              {!readOnly && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Plus className="h-4 w-4" />}
+                  disabled={accounts.length === 0}
+                  title="New order"
+                  onClick={() => setTicketOpen(true)}
+                >
+                  New order
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -258,6 +265,7 @@ function Tabs({
           accounts={accounts}
           ctid={ctid}
           isAdmin={isAdmin}
+          readOnly={readOnly}
           ticketOpen={ticketOpen}
           onTicketClose={() => setTicketOpen(false)}
           refreshToken={refreshToken}
@@ -268,6 +276,7 @@ function Tabs({
           accounts={accounts}
           ctid={ctid}
           isAdmin={isAdmin}
+          readOnly={readOnly}
           ticketOpen={ticketOpen}
           onTicketClose={() => setTicketOpen(false)}
           refreshToken={refreshToken}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogIn } from "lucide-react";
+import { LogIn, Play } from "lucide-react";
 import { api, getToken, setToken, type ConnectInput, type ModuleKey } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import SessionAnalysisPage from "./market/SessionAnalysisPage";
@@ -61,6 +61,8 @@ export default function App() {
   // has nothing to show on Trading yet.
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
   // Result of the cTrader consent round-trip: the server redirects back to
   // /trading?ctrader=connected (or ctrader_error=...).
   const [oauthNotice, setOauthNotice] = useState<{ tone: "success" | "danger"; message: string } | null>(
@@ -90,7 +92,8 @@ export default function App() {
     connect,
   } = useAccounts(signedIn);
   const isAdmin = me?.role === "admin";
-  const { config, content } = useSiteConfig();
+  const isDemo = me?.demo ?? false;
+  const { config, content, demo } = useSiteConfig();
   const navigation = config?.navigation ?? FALLBACK_NAVIGATION;
   const maintenance = config?.maintenance ?? FALLBACK_MAINTENANCE;
   // The configured landing page applies once, to the root URL, after the
@@ -182,6 +185,23 @@ export default function App() {
     if (mode === "register") handleViewChange("analysis");
   }
 
+  async function handleEnterDemo() {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    setDemoError(null);
+    try {
+      const res = await api.enterDemo();
+      setToken(res.token);
+      setTokenState(res.token);
+      setShowLogin(false);
+      setAuthMode("login");
+    } catch (err) {
+      setDemoError(err instanceof Error ? err.message : "Could not start the demo.");
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
   function handleViewChange(next: ViewKey) {
     if ((next === "admin" || next === "admin-settings" || next === "admin-integrations") && !isAdmin) return;
     // Settings is a takeover, not a nav tab: always open it through the helper
@@ -239,6 +259,7 @@ export default function App() {
     setToken(null);
     setTokenState(null);
     setShowLogin(false);
+    setDemoError(null);
     handleViewChange("analysis");
   }
 
@@ -282,6 +303,9 @@ export default function App() {
           setShowLogin(false);
           handleViewChange("forgot-password");
         }}
+        onEnterDemo={handleEnterDemo}
+        demoBusy={demoBusy}
+        demoError={demoError}
       />
     </AnimatedModal>
   );
@@ -332,6 +356,7 @@ export default function App() {
   // Settings manages cTrader credentials, so it is a takeover for signed-in
   // users only and sits outside the shell.
   if (view === "settings" && signedIn) {
+    if (isDemo) return <DemoNotice onExit={handleLogout} onBack={() => handleViewChange("analysis")} />;
     return (
       <SettingsPage
         accounts={accounts}
@@ -359,6 +384,10 @@ export default function App() {
         onSignIn={openLogin}
         onRegister={() => openAuth("register")}
         onLogout={handleLogout}
+        demo={demo}
+        isDemo={isDemo}
+        onEnterDemo={handleEnterDemo}
+        onExitDemo={handleLogout}
       >
         {view === "home" ? (
           signedIn ? (
@@ -385,6 +414,10 @@ export default function App() {
                 : `${lockedLabel} is available to signed-in members. Sign in to continue, or keep using the public pages.`
             }
             onSignIn={moduleAdminOnly ? undefined : openLogin}
+            onDemo={moduleAdminOnly ? undefined : handleEnterDemo}
+            demoEnabled={demo.enabled}
+            demoLabel={demo.label}
+            demoBusy={demoBusy}
           />
         ) : view === "admin" ? (
           isAdmin ? (
@@ -424,7 +457,7 @@ export default function App() {
         ) : view === "alerts" ? (
           <AlertsPage />
         ) : view === "briefing" ? (
-          <BriefingPage />
+          <BriefingPage readOnly={isDemo} />
         ) : view === "coach" ? (
           <CoachPage />
         ) : isLegalView(view) ? (
@@ -434,6 +467,10 @@ export default function App() {
             title="Sign in to manage settings"
             body="Settings holds your cTrader connection, account preferences and notification options. Sign in to continue."
             onSignIn={openLogin}
+            onDemo={handleEnterDemo}
+            demoEnabled={demo.enabled}
+            demoLabel={demo.label}
+            demoBusy={demoBusy}
           />
         ) : (
           <>
@@ -442,22 +479,25 @@ export default function App() {
                 <Flash tone={oauthNotice.tone}>{oauthNotice.message}</Flash>
               </div>
             )}
-            {hasCredentials === null ? (
+            {hasCredentials === null && !isDemo ? (
               <div className="mx-auto w-full max-w-sm space-y-3 py-8">
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-10 w-full" />
               </div>
-            ) : !hasCredentials ? (
-                <TradingConnect
-                  oauthAvailable={me?.ctraderOAuth ?? false}
-                  manualAvailable={me?.ctraderManual ?? false}
-                  hasMt5Accounts={hasMt5Accounts}
-                  onConnected={handleConnected}
-                  onMt5Changed={refreshBalances}
-                  onSkip={() => handleViewChange("analysis")}
-                />
+            ) : !isDemo && !hasCredentials ? (
+              <TradingConnect
+                oauthAvailable={me?.ctraderOAuth ?? false}
+                manualAvailable={me?.ctraderManual ?? false}
+                onConnected={handleConnected}
+                onSkip={() => handleViewChange("analysis")}
+              />
             ) : (
-              <Dashboard accounts={accounts} brokerAccounts={brokerAccounts} isAdmin={isAdmin} />
+              <Dashboard
+                accounts={accounts}
+                brokerAccounts={brokerAccounts}
+                isAdmin={isAdmin}
+                readOnly={isDemo}
+              />
             )}
           </>
         )}
@@ -472,10 +512,18 @@ function SignInPrompt({
   title,
   body,
   onSignIn,
+  onDemo,
+  demoEnabled,
+  demoLabel,
+  demoBusy,
 }: {
   title: string;
   body: string;
   onSignIn?: () => void;
+  onDemo?: () => void;
+  demoEnabled: boolean;
+  demoLabel: string;
+  demoBusy: boolean;
 }) {
   return (
     <div className="mx-auto w-full max-w-lg">
@@ -485,18 +533,55 @@ function SignInPrompt({
         </div>
         <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">{title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg-muted">{body}</p>
-        {onSignIn && (
-          <div className="mt-5 flex justify-center">
-            <Button
-              variant="primary"
-              size="lg"
-              icon={<LogIn className="h-4 w-4" />}
-              onClick={onSignIn}
-            >
-              Sign in
-            </Button>
+        {(onSignIn || (demoEnabled && onDemo)) && (
+          <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
+            {onSignIn && (
+              <Button
+                variant="primary"
+                size="lg"
+                icon={<LogIn className="h-4 w-4" />}
+                onClick={onSignIn}
+              >
+                Sign in
+              </Button>
+            )}
+            {demoEnabled && onDemo && (
+              <Button
+                variant="secondary"
+                size="lg"
+                icon={<Play className="h-4 w-4" />}
+                disabled={demoBusy}
+                onClick={onDemo}
+              >
+                {demoLabel}
+              </Button>
+            )}
           </div>
         )}
+      </Card>
+    </div>
+  );
+}
+
+function DemoNotice({ onExit, onBack }: { onExit: () => void; onBack: () => void }) {
+  return (
+    <div className="mx-auto w-full max-w-lg py-8">
+      <Card className="p-8 text-center shadow-overlay">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent">
+          <Play className="h-5 w-5" />
+        </div>
+        <h2 className="mt-4 text-xl font-semibold tracking-tight text-fg">Demo mode is read-only</h2>
+        <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+          Account settings are disabled in the demo. Exit demo to use your own account.
+        </p>
+        <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
+          <Button variant="secondary" onClick={onBack}>
+            Back to market
+          </Button>
+          <Button variant="primary" onClick={onExit}>
+            Exit demo
+          </Button>
+        </div>
       </Card>
     </div>
   );

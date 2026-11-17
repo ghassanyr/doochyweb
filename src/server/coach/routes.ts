@@ -8,6 +8,7 @@ import { Router, type Response } from "express";
 
 import { AiError } from "../ai/client";
 import { authRequired, type AuthedRequest } from "../auth";
+import { demoCoachTrade, demoCoachTrades, demoCoachWeekly } from "../demo/fixtures";
 import {
   CoachError,
   generateTradeReview,
@@ -35,6 +36,10 @@ function fail(res: Response, err: unknown): void {
 
 coachRouter.get("/weekly", async (req: AuthedRequest, res) => {
   try {
+    if (req.demo) {
+      res.json(demoCoachWeekly());
+      return;
+    }
     const week = typeof req.query.week === "string" ? req.query.week : undefined;
     res.json(await getWeeklyReview(req.userId!, week));
   } catch (err) {
@@ -52,7 +57,7 @@ coachRouter.post("/weekly/:weekKey/review", async (req: AuthedRequest, res) => {
 
 coachRouter.get("/trades", async (req: AuthedRequest, res) => {
   try {
-    res.json(await getRecentTrades(req.userId!));
+    res.json(req.demo ? demoCoachTrades() : await getRecentTrades(req.userId!));
   } catch (err) {
     fail(res, err);
   }
@@ -60,6 +65,15 @@ coachRouter.get("/trades", async (req: AuthedRequest, res) => {
 
 coachRouter.get("/trades/:id", async (req: AuthedRequest, res) => {
   try {
+    if (req.demo) {
+      const report = demoCoachTrade(req.params.id);
+      if (!report) {
+        res.status(404).json({ error: "trade not found" });
+        return;
+      }
+      res.json(report);
+      return;
+    }
     res.json(await getTradeReview(req.userId!, req.params.id));
   } catch (err) {
     fail(res, err);

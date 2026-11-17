@@ -9,7 +9,8 @@ import mongoose from "mongoose";
 
 import { hashPassword } from "../auth";
 import { revokeAuthTokens } from "../authTokens";
-import { Credentials, User, type StoredAccount, type UserRole, type UserStatus } from "../db";
+import { Credentials, User, isDemoUser, type StoredAccount, type UserRole, type UserStatus } from "../db";
+import { DEMO_USERNAME } from "../demo/store";
 import { dropUserSockets } from "../ctrader/connection";
 import { UserWatchlist } from "../market/userWatchlist";
 import { Mt5AccountModel } from "../mt5/accounts";
@@ -91,7 +92,7 @@ function rowFrom(doc: any): AdminUserRow {
 
 /** Every account, newest first. Never includes the password hash. */
 export async function listUsers(): Promise<AdminUserRow[]> {
-  const docs = await User.find({}).sort({ createdAt: -1 }).lean().exec();
+  const docs = await User.find({ accountType: { $ne: "demo" } }).sort({ createdAt: -1 }).lean().exec();
   return docs.map(rowFrom);
 }
 
@@ -101,12 +102,17 @@ export async function listCtraderHealth(): Promise<AdminCtraderHealth> {
   if (docs.length === 0) {
     return { connections: [], summary: { connected: 0, reauthRequired: 0, failing: 0 } };
   }
-  const users = await User.find({ _id: { $in: docs.map((doc: any) => doc.userId) } })
+  const users = await User.find({
+    _id: { $in: docs.map((doc: any) => doc.userId) },
+    accountType: { $ne: "demo" },
+  })
     .select({ username: 1 })
     .lean()
     .exec();
   const names = new Map(users.map((user: any) => [String(user._id), String(user.username ?? "unknown")]));
-  const connections = docs.map((doc: any): AdminCtraderHealthRow => ({
+  const connections = docs
+    .filter((doc: any) => names.has(String(doc.userId)))
+    .map((doc: any): AdminCtraderHealthRow => ({
     userId: String(doc.userId),
     username: names.get(String(doc.userId)) ?? "unknown",
     mode: typeof doc.clientId === "string" && doc.clientId ? "manual" : "oauth",
@@ -133,12 +139,17 @@ export async function listMt5Health(): Promise<AdminMt5Health> {
     return { connections: [], summary: { accounts: 0, users: 0, failing: 0 } };
   }
   const userIds = Array.from(new Set((docs as any[]).map((doc) => String(doc.userId))));
-  const users = await User.find({ _id: { $in: userIds.map((id) => new mongoose.Types.ObjectId(id)) } })
+  const users = await User.find({
+    _id: { $in: userIds.map((id) => new mongoose.Types.ObjectId(id)) },
+    accountType: { $ne: "demo" },
+  })
     .select({ username: 1 })
     .lean()
     .exec();
   const names = new Map(users.map((user: any) => [String(user._id), String(user.username ?? "unknown")]));
-  const connections = (docs as any[]).map((doc): AdminMt5HealthRow => ({
+  const connections = (docs as any[])
+    .filter((doc) => names.has(String(doc.userId)))
+    .map((doc): AdminMt5HealthRow => ({
     userId: String(doc.userId),
     username: names.get(String(doc.userId)) ?? "unknown",
     accountId: String(doc.accountId),
@@ -168,6 +179,9 @@ export async function createUser(input: {
   password: string;
   role: UserRole;
 }): Promise<AdminUserRow> {
+  if (input.username === DEMO_USERNAME) {
+    throw new Error("username is reserved for the demo account");
+  }
   const user = await User.create({
     username: input.username,
     email: input.email,
@@ -189,6 +203,9 @@ export async function inviteUser(input: {
   email: string;
   role: UserRole;
 }): Promise<AdminUserRow> {
+  if (input.username === DEMO_USERNAME) {
+    throw new Error("username is reserved for the demo account");
+  }
   const user = await User.create({
     username: input.username,
     email: input.email,
@@ -211,7 +228,7 @@ export async function updateUser(
 ): Promise<UserUpdateResult> {
   if (!mongoose.isValidObjectId(userId)) return "missing";
   const user = await User.findById(userId).lean().exec();
-  if (!user) return "missing";
+  if (!user || isDemoUser(user)) return "missing";
 
   const currentRole = ((user.role as UserRole | undefined) ?? "user");
   const currentStatus = ((user.status as UserStatus | undefined) ?? "active");
@@ -238,7 +255,7 @@ export async function resetUserPassword(userId: string, password: string): Promi
   if (!mongoose.isValidObjectId(userId)) return false;
   const objectId = new mongoose.Types.ObjectId(userId);
   const result = await User.updateOne(
-    { _id: objectId },
+    { _id: objectId, accountType: { $ne: "demo" } },
     {
       $set: { passwordHash: await hashPassword(password) },
       $inc: { tokenVersion: 1 },
@@ -257,7 +274,7 @@ export async function deleteUser(userId: string, actorId: string): Promise<Delet
   if (userId === actorId) return "self";
 
   const user = await User.findById(userId).lean().exec();
-  if (!user) return "missing";
+  if (!user || isDemoUser(user)) return "missing";
 
   if (user.role === "admin") {
     const admins = await User.countDocuments(ACTIVE_ADMIN_FILTER).exec();

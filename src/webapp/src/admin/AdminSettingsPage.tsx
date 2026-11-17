@@ -34,6 +34,7 @@ import {
   type BrandingSettings,
   type ContentSettings,
   type DateFormat,
+  type DemoSettings,
   type LandingKey,
   type LegalSettings,
   type LocaleSettings,
@@ -390,6 +391,7 @@ export default function AdminSettingsPage({
   const [navigation, setNavigation] = useState<NavigationSettings | null>(null);
   const [maintenance, setMaintenance] = useState<MaintenanceSettings | null>(null);
   const [announcement, setAnnouncement] = useState<AnnouncementSettings | null>(null);
+  const [demo, setDemo] = useState<DemoSettings | null>(null);
   const [registration, setRegistration] = useState<RegistrationSettings | null>(null);
   const [legal, setLegal] = useState<LegalSettings | null>(null);
   const [seo, setSeo] = useState<SeoSettings | null>(null);
@@ -424,6 +426,7 @@ export default function AdminSettingsPage({
         setNavigation(settings.navigation);
         setMaintenance(settings.maintenance);
         setAnnouncement(settings.announcement);
+        setDemo(settings.demo);
         setRegistration(settings.registration);
         setLegal(settings.legal);
         setSeo(settings.seo);
@@ -474,6 +477,7 @@ export default function AdminSettingsPage({
       !navigation ||
       !maintenance ||
       !announcement ||
+      !demo ||
       !registration ||
       !legal ||
       !seo ||
@@ -495,6 +499,7 @@ export default function AdminSettingsPage({
       JSON.stringify(navigation) !== JSON.stringify(loaded.navigation) ||
       JSON.stringify(maintenance) !== JSON.stringify(loaded.maintenance) ||
       JSON.stringify(announcement) !== JSON.stringify(loaded.announcement) ||
+      JSON.stringify(demo) !== JSON.stringify(loaded.demo) ||
       JSON.stringify(registration) !== JSON.stringify(loaded.registration) ||
       JSON.stringify(legal) !== JSON.stringify(loaded.legal) ||
       JSON.stringify(seo) !== JSON.stringify(loaded.seo) ||
@@ -515,6 +520,7 @@ export default function AdminSettingsPage({
     navigation,
     maintenance,
     announcement,
+    demo,
     registration,
     legal,
     seo,
@@ -536,6 +542,7 @@ export default function AdminSettingsPage({
     setNavigation(loaded.navigation);
     setMaintenance(loaded.maintenance);
     setAnnouncement(loaded.announcement);
+    setDemo(loaded.demo);
     setRegistration(loaded.registration);
     setLegal(loaded.legal);
     setSeo(loaded.seo);
@@ -560,6 +567,7 @@ export default function AdminSettingsPage({
       !navigation ||
       !maintenance ||
       !announcement ||
+      !demo ||
       !registration ||
       !legal ||
       !seo ||
@@ -584,6 +592,7 @@ export default function AdminSettingsPage({
         navigation,
         maintenance,
         announcement,
+        demo,
         registration,
         analysis,
         legal,
@@ -603,6 +612,7 @@ export default function AdminSettingsPage({
       setNavigation(settings.navigation);
       setMaintenance(settings.maintenance);
       setAnnouncement(settings.announcement);
+      setDemo(settings.demo);
       setRegistration(settings.registration);
       setLegal(settings.legal);
       setSeo(settings.seo);
@@ -670,6 +680,7 @@ export default function AdminSettingsPage({
     !navigation ||
     !maintenance ||
     !announcement ||
+    !demo ||
     !registration ||
     !legal ||
     !seo ||
@@ -1843,6 +1854,31 @@ export default function AdminSettingsPage({
           <p className="text-[11px] text-fg-faint">
             Trading is always signed-in only because it shows broker accounts.
           </p>
+        </Card>
+
+        <Card className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-fg">Demo access</h2>
+              <p className="text-xs text-fg-muted">
+                Offer a shared read-only session from sign-in and navigation.
+              </p>
+            </div>
+          </div>
+          <Toggle
+            checked={demo.enabled}
+            onChange={(enabled) => setDemo({ ...demo, enabled })}
+            label="Enable demo mode"
+          />
+          <TextField
+            label="Entry label"
+            value={demo.label}
+            onChange={(label) => setDemo({ ...demo, label })}
+            placeholder="Try demo"
+            hint="Shown on the sign-in button and demo banner."
+            maxLength={40}
+          />
         </Card>
 
         <Card className="space-y-4 p-4">

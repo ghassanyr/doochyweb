@@ -39,6 +39,7 @@ export default function OrdersTab({
   accounts,
   ctid,
   isAdmin,
+  readOnly = false,
   ticketOpen,
   onTicketClose,
   refreshToken,
@@ -48,6 +49,7 @@ export default function OrdersTab({
   ctid: number | null;
   /** Only admins can publish signals. */
   isAdmin: boolean;
+  readOnly?: boolean;
   /** The order ticket is owned by the trading tabs row. */
   ticketOpen: boolean;
   onTicketClose: () => void;
@@ -210,7 +212,8 @@ export default function OrdersTab({
                   ctid={rowCtid(o)}
                   onChanged={load}
                   onCancel={() => setCancelOrder(o)}
-                  canPublish={isAdmin}
+                  canPublish={isAdmin && !readOnly}
+                  readOnly={readOnly}
                   onPublish={() =>
                     setPublishDraft({
                       symbol: o.symbol,
@@ -227,16 +230,18 @@ export default function OrdersTab({
         </>
       )}
 
-      <OrderTicket
-        open={ticketOpen}
-        onClose={onTicketClose}
-        onDone={load}
-        accounts={accounts}
-        defaultCtids={mode === "combined" ? accounts.map((a) => a.ctid) : ctid != null ? [ctid] : []}
-        symbols={syms}
-      />
+      {!readOnly && (
+        <OrderTicket
+          open={ticketOpen}
+          onClose={onTicketClose}
+          onDone={load}
+          accounts={accounts}
+          defaultCtids={mode === "combined" ? accounts.map((a) => a.ctid) : ctid != null ? [ctid] : []}
+          symbols={syms}
+        />
+      )}
 
-      {isAdmin && (
+      {isAdmin && !readOnly && (
         <PublishSignalModal
           draft={publishDraft}
           onClose={() => setPublishDraft(null)}
@@ -245,7 +250,7 @@ export default function OrdersTab({
       )}
 
       <ConfirmModal
-        open={cancelOrder != null}
+        open={!readOnly && cancelOrder != null}
         title={cancelOrder ? `Cancel ${cancelOrder.side} ${cancelOrder.symbol}?` : "Cancel order"}
         body={
           cancelOrder && (
@@ -286,6 +291,7 @@ function PendingCard({
   onChanged,
   onCancel,
   canPublish,
+  readOnly = false,
   onPublish,
 }: {
   o: OrderRow;
@@ -293,6 +299,7 @@ function PendingCard({
   onChanged: () => void;
   onCancel: () => void;
   canPublish: boolean;
+  readOnly?: boolean;
   onPublish: () => void;
 }) {
   const isBuy = o.side === "BUY";
@@ -373,41 +380,49 @@ function PendingCard({
 
         {msg && <Flash tone={msg.tone}>{msg.text}</Flash>}
 
-        <Collapse open={editing}>
-          <div className="space-y-2 border-t border-hairline pt-3">
-            <div className="text-sm font-medium text-fg-muted">Edit order</div>
-            <div className="grid grid-cols-3 gap-2">
-              <BareFields value={entry} onChange={setEntry} placeholder={`${levelLabel} ${o.price}`} />
-              <BareFields value={sl} onChange={setSl} placeholder={o.stopLoss != null ? `SL ${o.stopLoss}` : "SL"} />
-              <BareFields value={tp} onChange={setTp} placeholder={o.takeProfit != null ? `TP ${o.takeProfit}` : "TP"} />
-            </div>
-            {sideErr && <Flash tone="danger">{sideErr}</Flash>}
-            <Button
-              size="sm"
-              variant={dirty && !sideErr ? "primary" : "secondary"}
-              disabled={!dirty || !!sideErr}
-              onClickAsync={dirty && !sideErr ? save : undefined}
-            >
-              Save changes
-            </Button>
+        {readOnly ? (
+          <div className="mt-auto rounded-lg border border-hairline bg-soft px-3 py-2 text-xs text-fg-muted">
+            Demo data is read-only.
           </div>
-        </Collapse>
+        ) : (
+          <>
+            <Collapse open={editing}>
+              <div className="space-y-2 border-t border-hairline pt-3">
+                <div className="text-sm font-medium text-fg-muted">Edit order</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <BareFields value={entry} onChange={setEntry} placeholder={`${levelLabel} ${o.price}`} />
+                  <BareFields value={sl} onChange={setSl} placeholder={o.stopLoss != null ? `SL ${o.stopLoss}` : "SL"} />
+                  <BareFields value={tp} onChange={setTp} placeholder={o.takeProfit != null ? `TP ${o.takeProfit}` : "TP"} />
+                </div>
+                {sideErr && <Flash tone="danger">{sideErr}</Flash>}
+                <Button
+                  size="sm"
+                  variant={dirty && !sideErr ? "primary" : "secondary"}
+                  disabled={!dirty || !!sideErr}
+                  onClickAsync={dirty && !sideErr ? save : undefined}
+                >
+                  Save changes
+                </Button>
+              </div>
+            </Collapse>
 
-        <div className="mt-auto space-y-2 border-t border-hairline pt-2.5">
-          {canPublish && (
-            <Button variant="secondary" size="sm" className="w-full" onClick={onPublish}>
-              <Megaphone className="h-3.5 w-3.5" /> Publish signal
-            </Button>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing((e) => !e)}>
-              {editing ? "Done" : "Edit"}
-            </Button>
-            <Button variant="danger" size="sm" icon={<Ban className="h-3.5 w-3.5" />} onClick={onCancel}>
-              Cancel
-            </Button>
-          </div>
-        </div>
+            <div className="mt-auto space-y-2 border-t border-hairline pt-2.5">
+              {canPublish && (
+                <Button variant="secondary" size="sm" className="w-full" onClick={onPublish}>
+                  <Megaphone className="h-3.5 w-3.5" /> Publish signal
+                </Button>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing((e) => !e)}>
+                  {editing ? "Done" : "Edit"}
+                </Button>
+                <Button variant="danger" size="sm" icon={<Ban className="h-3.5 w-3.5" />} onClick={onCancel}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </Card>
   );

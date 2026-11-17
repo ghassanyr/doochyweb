@@ -95,6 +95,7 @@ describe("site settings defaults", () => {
       "announcement",
       "branding",
       "content",
+      "demo",
       "legal",
       "locale",
       "maintenance",

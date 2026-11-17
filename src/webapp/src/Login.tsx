@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { LogIn, UserPlus } from "lucide-react";
+import { LogIn, Sparkles, UserPlus } from "lucide-react";
 import { api, ApiError } from "./api";
 import { Button, Flash, inputCls } from "./components/ui";
-import { FALLBACK_LEGAL, FALLBACK_REGISTRATION, useSiteConfig } from "./siteConfig";
+import { FALLBACK_DEMO, FALLBACK_LEGAL, FALLBACK_REGISTRATION, useSiteConfig } from "./siteConfig";
 
 // Sign-in form. It is rendered inside the auth modal, so the surrounding modal
 // owns the card, title and close button; this component only owns the fields
@@ -12,11 +12,17 @@ export default function Login({
   mode,
   onModeChange,
   onForgotPassword,
+  onEnterDemo,
+  demoBusy = false,
+  demoError = null,
 }: {
   onAuthed: (token: string, mode: "login" | "register") => void;
   mode: "login" | "register";
   onModeChange: (mode: "login" | "register") => void;
   onForgotPassword?: () => void;
+  onEnterDemo?: () => void;
+  demoBusy?: boolean;
+  demoError?: string | null;
 }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -32,6 +38,7 @@ export default function Login({
   const { config } = useSiteConfig();
   const registration = config?.registration ?? FALLBACK_REGISTRATION;
   const legal = config?.legal ?? FALLBACK_LEGAL;
+  const demo = config?.demo ?? FALLBACK_DEMO;
   const needsLegalAcceptance =
     mode === "register" && Boolean(legal.termsUrl || legal.privacyUrl);
 
@@ -294,6 +301,30 @@ export default function Login({
           {busy ? (mode === "login" ? "Signing in…" : "Creating account…") : mode === "login" ? "Sign in" : "Create account"}
         </Button>
       </form>
+
+      {demo.enabled && onEnterDemo && (
+        <div className="mt-5 border-t border-hairline pt-5">
+          <div className="relative mb-3 text-center">
+            <span className="relative z-10 bg-canvas px-2 text-xs text-fg-faint">or</span>
+            <span className="absolute inset-x-0 top-1/2 border-t border-hairline" aria-hidden="true" />
+          </div>
+          {demoError && <Flash tone="danger">{demoError}</Flash>}
+          <Button
+            type="button"
+            size="lg"
+            variant="secondary"
+            className="w-full"
+            icon={<Sparkles className="h-4 w-4" />}
+            disabled={demoBusy}
+            onClick={onEnterDemo}
+          >
+            {demo.label}
+          </Button>
+          <p className="mt-2 text-center text-xs text-fg-faint">
+            Explore fixed sample data in read-only mode.
+          </p>
+        </div>
+      )}
 
       <p className="mt-6 text-center text-sm">
         {mode === "login" ? (

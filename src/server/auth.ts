@@ -1,15 +1,18 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
-import { User, type UserRole } from "./db";
+import { User, isDemoUser, type UserAccountType, type UserRole } from "./db";
 
 const BCRYPT_ROUNDS = 10;
 const JWT_TTL = "7d";
+const DEMO_TOKEN_TTL = "2h";
 
 export interface AuthedRequest extends Request {
   userId?: string;
   username?: string;
   role?: UserRole;
+  accountType?: UserAccountType;
+  demo?: boolean;
   tokenVersion?: number;
 }
 
@@ -17,12 +20,15 @@ export interface SessionUser {
   id: string;
   username: string | null;
   role: UserRole;
+  accountType: UserAccountType;
+  demo: boolean;
   tokenVersion: number;
 }
 
 interface TokenPayload {
   userId: string;
   v?: number;
+  purpose?: "demo";
 }
 
 function jwtSecret(): string {
@@ -37,7 +43,11 @@ function readPayload(req: Request): TokenPayload | null {
   try {
     const payload: any = jwt.verify(header.slice(7), jwtSecret());
     if (!payload || typeof payload.userId !== "string") return null;
-    return { userId: payload.userId, v: typeof payload.v === "number" ? payload.v : 0 };
+    return {
+      userId: payload.userId,
+      v: typeof payload.v === "number" ? payload.v : 0,
+      purpose: payload.purpose === "demo" ? "demo" : undefined,
+    };
   } catch {
     return null;
   }
@@ -45,6 +55,14 @@ function readPayload(req: Request): TokenPayload | null {
 
 export function signToken(userId: string, tokenVersion = 0): string {
   return jwt.sign({ userId, v: tokenVersion }, jwtSecret(), { expiresIn: JWT_TTL });
+}
+
+export function signDemoToken(userId: string, tokenVersion = 0): string {
+  return jwt.sign(
+    { userId, v: tokenVersion, purpose: "demo" },
+    jwtSecret(),
+    { expiresIn: DEMO_TOKEN_TTL }
+  );
 }
 
 /**
@@ -59,10 +77,14 @@ export async function sessionFromRequest(req: Request): Promise<SessionUser | nu
   if (!user) return null;
   const current = typeof user.tokenVersion === "number" ? user.tokenVersion : 0;
   if ((payload.v ?? 0) !== current) return null;
+  const demo = isDemoUser(user);
+  if (demo !== (payload.purpose === "demo")) return null;
   return {
     id: String(user._id ?? payload.userId),
     username: typeof user.username === "string" ? user.username : null,
     role: user.role === "admin" ? "admin" : "user",
+    accountType: demo ? "demo" : "normal",
+    demo,
     tokenVersion: current,
   };
 }
@@ -110,7 +132,30 @@ export async function authRequired(
     req.userId = session.id;
     req.username = session.username ?? undefined;
     req.role = session.role;
+    req.accountType = session.accountType;
+    req.demo = session.demo;
     req.tokenVersion = session.tokenVersion;
+    next();
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to verify session" });
+  }
+}
+
+export async function demoWriteGuard(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    next();
+    return;
+  }
+  try {
+    const session = await sessionFromRequest(req);
+    if (session?.demo) {
+      res.status(403).json({ error: "demo account is read-only" });
+      return;
+    }
     next();
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "failed to verify session" });
@@ -129,13 +174,15 @@ export async function adminRequired(req: AuthedRequest, res: Response, next: Nex
       res.status(401).json({ error: "invalid or expired token" });
       return;
     }
-    if (session.role !== "admin") {
+    if (session.demo || session.role !== "admin") {
       res.status(403).json({ error: "admin access required" });
       return;
     }
     req.userId = session.id;
     req.username = session.username ?? undefined;
     req.role = session.role;
+    req.accountType = session.accountType;
+    req.demo = session.demo;
     req.tokenVersion = session.tokenVersion;
     next();
   } catch (err: any) {

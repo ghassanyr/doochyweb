@@ -8,6 +8,7 @@ import { Router } from "express";
 
 import { adminRequired, type AuthedRequest } from "../auth";
 import { backupStatus } from "../backup";
+import { DEMO_USERNAME, demoStatus, isDemoUserId, resetDemoUser } from "../demo/store";
 import { encryptionKeyFromEnv } from "../integrations/crypto";
 import { getIntegrationStates } from "../integrations/store";
 import { getSiteSettings, saveSiteSettings } from "../settings/store";
@@ -188,6 +189,22 @@ adminRouter.get("/users", adminRequired, async (_req, res) => {
   }
 });
 
+adminRouter.get("/demo", adminRequired, async (_req, res) => {
+  try {
+    res.json(await demoStatus());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to load demo status" });
+  }
+});
+
+adminRouter.post("/demo/reset", adminRequired, async (_req, res) => {
+  try {
+    res.json(await resetDemoUser());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "failed to reset demo" });
+  }
+});
+
 adminRouter.get("/ctrader/health", adminRequired, async (_req, res) => {
   try {
     res.json(await listCtraderHealth());
@@ -216,6 +233,10 @@ adminRouter.post("/users", adminRequired, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "username must be 3-32 characters (letters, digits, _, -)" });
       return;
     }
+    if (username === DEMO_USERNAME) {
+      res.status(409).json({ error: "username is reserved for the demo account" });
+      return;
+    }
     if (!EMAIL_RE.test(email)) {
       res.status(400).json({ error: "email must be a valid address" });
       return;
@@ -242,6 +263,10 @@ adminRouter.post("/users/invite", adminRequired, async (req: AuthedRequest, res)
     const role = req.body?.role === "admin" ? "admin" : "user";
     if (!/^[A-Za-z0-9_-]{3,32}$/.test(username)) {
       res.status(400).json({ error: "username must be 3-32 characters (letters, digits, _, -)" });
+      return;
+    }
+    if (username === DEMO_USERNAME) {
+      res.status(409).json({ error: "username is reserved for the demo account" });
       return;
     }
     if (!EMAIL_RE.test(email)) {
@@ -299,6 +324,10 @@ adminRouter.patch("/users/:id", adminRequired, async (req: AuthedRequest, res) =
 
 adminRouter.get("/users/:id/export", adminRequired, async (req: AuthedRequest, res) => {
   try {
+    if (await isDemoUserId(req.params.id)) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
     const data = await exportUserData(req.params.id);
     if (!data) {
       res.status(404).json({ error: "user not found" });
@@ -390,6 +419,7 @@ adminRouter.put("/settings", adminRequired, async (req: AuthedRequest, res) => {
         navigation: req.body?.navigation,
         maintenance: req.body?.maintenance,
         announcement: req.body?.announcement,
+        demo: req.body?.demo,
         registration: req.body?.registration,
         analysis: req.body?.analysis,
         legal: req.body?.legal,
