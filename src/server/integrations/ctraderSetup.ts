@@ -16,6 +16,7 @@
 import { aiDefaultModel, aiProviderKeyRequired } from "../ai/providers";
 import { mt5SetupIssues } from "../mt5/bridge";
 import type { IntegrationFieldState, IntegrationProvider } from "./types";
+import { providerImapIssues, validateImapSetup } from "./imapSetup";
 import { providerSmtpIssues, validateSmtpSetup } from "./smtpSetup";
 
 export const CTRADER_CALLBACK_PATHS = ["/callback", "/api/ctrader/oauth/callback"] as const;
@@ -175,6 +176,7 @@ export function providerIssuesFromValues(
   publicBaseUrl?: string | null
 ): SetupIssues {
   if (provider === "smtp") return validateSmtpSetup(values);
+  if (provider === "imap") return validateImapSetup(values);
   if (provider === "ai") return validateAiSetup(values);
   if (provider === "mt5") return mt5SetupIssues(values, Boolean(text(values.apiKey)));
   if (provider !== "ctrader") return { errors: [], warnings: [] };
@@ -191,6 +193,7 @@ export function providerIssues(
   publicBaseUrl?: string | null
 ): SetupIssues {
   if (provider === "smtp") return providerSmtpIssues(fields);
+  if (provider === "imap") return providerImapIssues(fields);
   if (provider === "ai") {
     const values: Record<string, unknown> = {};
     for (const field of fields) {

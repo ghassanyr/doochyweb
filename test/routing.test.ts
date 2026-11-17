@@ -9,7 +9,7 @@ describe("path routing", () => {
   test("maps canonical paths to views", () => {
     assert.equal(pathForView("home"), "/");
     assert.equal(viewFromPath("/"), "home");
-    for (const view of ["analysis", "signals", "breakouts", "learn", "trading", "alerts", "briefing", "coach", "admin", "settings"] as const) {
+    for (const view of ["analysis", "session-analysis", "signals", "breakouts", "learn", "trading", "alerts", "briefing", "coach", "admin", "settings"] as const) {
       assert.equal(pathForView(view), `/${view}`);
       assert.equal(viewFromPath(`/${view}`), view);
       assert.deepEqual(resolveRoute({ pathname: `/${view}`, search: "", hostname: D }), {
