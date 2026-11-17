@@ -74,7 +74,6 @@ export interface PaperInput {
   sizeMode: PaperSizeMode;
   notional: number | null;
   lots: number | null;
-  ctid: number | null;
   stop: number | null;
   target: number | null;
 }

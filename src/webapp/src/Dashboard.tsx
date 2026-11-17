@@ -209,7 +209,7 @@ function Tabs({
       ) : (
         // Paper trading is also per member: the book is not tied to a broker
         // account, so the selector above does not filter it either.
-        <SimulationTab accounts={accounts} />
+        <SimulationTab />
       )}
     </div>
   );

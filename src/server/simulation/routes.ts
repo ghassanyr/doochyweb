@@ -70,16 +70,11 @@ simulationRouter.get("/", async (req: AuthedRequest, res) => {
 simulationRouter.get("/spec", async (req: AuthedRequest, res) => {
   try {
     const symbol = normalizeSymbol(req.query.symbol);
-    const ctid = Number(req.query.ctid);
     if (!symbol) {
       res.status(400).json({ error: "symbol is required" });
       return;
     }
-    if (!Number.isFinite(ctid) || !Number.isInteger(ctid) || ctid <= 0) {
-      res.status(400).json({ error: "a connected cTrader account is required" });
-      return;
-    }
-    const spec = await resolvePaperSpec(req.userId!, symbol, ctid);
+    const spec = await resolvePaperSpec(symbol);
     if (!spec) {
       res.status(422).json({ error: "No cTrader lot specification is available for that symbol." });
       return;

@@ -163,12 +163,12 @@ started, `later` means deliberately deferred, `skip` means not planned.
 - Lives as the Paper trading tab inside `/trading`, after Positions, Pending
   orders and Journal. It is per member, not per broker account, so the account
   selector above the tabs does not filter it.
-- Positions use cTrader lot sizing when a connected account supplies a contract
-  spec for the symbol. The form shows `Size (Lots)`, min/max/step hints, and the
-  account whose specs are used. Volume, spec snapshot and quote conversion are
-  stored with the position so later P&L uses the same contract.
-- Symbols without a cTrader spec, including Binance-only crypto, fall back to USD
-  notional sizing and the form shows `Size (USD)`. Old rows remain USD rows.
+- The form offers USD and Lots sizing. The server reads contract specs from the
+  configured cTrader market feed automatically, with no broker account choice in
+  the UI. Volume, spec snapshot and quote conversion are stored with the position
+  so later P&L uses the same contract.
+- Lots are greyed out when the chosen symbol has no cTrader spec, including
+  Binance-only crypto, and USD stays selectable. Old rows remain USD rows.
 - The book starts at 100,000, tracks realised P&L, and reports exposure in USD.
 - Fills happen server side at the current market price, so the browser cannot
   choose its own entry. A buy needs its stop below and target above the fill; a
@@ -341,10 +341,19 @@ started, `later` means deliberately deferred, `skip` means not planned.
   them from watchlists, signals, alerts and paper rows. The migration also clears
   today's briefing for users whose watchlist changed.
 
+## Broker adapter seam
+
+- `src/server/broker/` defines a provider-neutral contract for accounts,
+  symbols, quotes, bars, history, reconcile and the full order lifecycle.
+- The cTrader adapter wraps the existing cTrader modules. Existing endpoints and
+  behaviour are unchanged.
+- `mt5` is a reserved adapter id but is not registered until a transport is
+  chosen.
+
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 921 tests, all passing.
+- `pnpm test`: 926 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

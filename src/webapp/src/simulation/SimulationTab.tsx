@@ -11,11 +11,11 @@ import { FlaskConical, RefreshCw, Search, X } from "lucide-react";
 import {
   marketApi,
   simulationApi,
-  type AccountView,
   type PaperAccount,
   type PaperListResponse,
   type PaperPosition,
   type PaperSide,
+  type PaperSizeMode,
   type PaperSymbolSpec,
 } from "../api";
 import { FadeRise } from "../components/motion";
@@ -24,9 +24,10 @@ import type { CatalogEntry } from "../market/types";
 import { formatLocalDateTime } from "../time";
 
 const POLL_MS = 30_000;
-const DEFAULT_SIZE = "10000";
+const DEFAULT_USD_SIZE = "10000";
+const DEFAULT_LOT_SIZE = "0.1";
 
-export default function SimulationTab({ accounts }: { accounts: AccountView[] }) {
+export default function SimulationTab() {
   const [data, setData] = useState<PaperListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +39,15 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
   const [symOpen, setSymOpen] = useState(false);
   const [activeSym, setActiveSym] = useState(-1);
   const [side, setSide] = useState<PaperSide>("buy");
-  const [size, setSize] = useState(DEFAULT_SIZE);
+  const [sizeMode, setSizeMode] = useState<PaperSizeMode>("usd");
+  const [usdSize, setUsdSize] = useState(DEFAULT_USD_SIZE);
+  const [lotSize, setLotSize] = useState(DEFAULT_LOT_SIZE);
   const [stop, setStop] = useState("");
   const [target, setTarget] = useState("");
-  const [ctid, setCtid] = useState<number | null>(null);
   const [spec, setSpec] = useState<PaperSymbolSpec | null>(null);
   const [specLoading, setSpecLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const size = sizeMode === "usd" ? usdSize : lotSize;
 
   const load = useCallback(async () => {
     try {
@@ -77,26 +80,31 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
   }, []);
 
   useEffect(() => {
-    if (!ctid && accounts.length) setCtid(accounts[0].ctid);
-  }, [accounts, ctid]);
-
-  useEffect(() => {
     let alive = true;
     const query = symbol.trim().toUpperCase();
-    if (!ctid || !query) {
+    if (!query) {
       setSpec(null);
       setSpecLoading(false);
       return;
     }
+    setSpec(null);
     setSpecLoading(true);
     const id = window.setTimeout(() => {
       simulationApi
-        .spec(query, ctid)
+        .spec(query)
         .then((result) => {
           if (!alive) return;
           setSpec(result.spec);
-          const initial = result.spec.minLots ?? 0.1;
-          setSize((current) => (current === DEFAULT_SIZE ? String(initial) : current));
+          const minLots = result.spec.minLots;
+          if (minLots != null) {
+            setLotSize((current) => {
+              const parsed = Number(current);
+              if (!Number.isFinite(parsed) || parsed === Number(DEFAULT_LOT_SIZE) || parsed < minLots) {
+                return String(minLots);
+              }
+              return current;
+            });
+          }
         })
         .catch(() => {
           if (alive) setSpec(null);
@@ -109,7 +117,11 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
       alive = false;
       window.clearTimeout(id);
     };
-  }, [ctid, symbol]);
+  }, [symbol]);
+
+  useEffect(() => {
+    if (sizeMode === "lots" && !spec && !specLoading) setSizeMode("usd");
+  }, [sizeMode, spec, specLoading]);
 
   const matches = useMemo(() => {
     const query = symbol.trim().toUpperCase();
@@ -132,6 +144,14 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
     setSymOpen(false);
     setActiveSym(-1);
   }, []);
+
+  const chooseSizeMode = useCallback(
+    (next: PaperSizeMode) => {
+      if (next === "lots" && !spec) return;
+      setSizeMode(next);
+    },
+    [spec]
+  );
 
   const onSymbolKey = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -161,8 +181,12 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
       setNotice({ tone: "danger", text: "Pick a symbol and a size above zero." });
       return;
     }
-    if (specLoading) {
+    if (sizeMode === "lots" && specLoading) {
       setNotice({ tone: "danger", text: "Wait for the lot specification to load." });
+      return;
+    }
+    if (sizeMode === "lots" && !spec) {
+      setNotice({ tone: "danger", text: "Lots are not available for this symbol." });
       return;
     }
     const stopValue = stop.trim() ? Number(stop) : null;
@@ -178,29 +202,31 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
 
     setSubmitting(true);
     try {
-      const payload = spec
-        ? {
-            symbol: symbol.trim().toUpperCase(),
-            side,
-            sizeMode: "lots" as const,
-            lots: value,
-            ctid: spec.account.ctid,
-            stop: stopValue,
-            target: targetValue,
-          }
-        : {
-            symbol: symbol.trim().toUpperCase(),
-            side,
-            sizeMode: "usd" as const,
-            notional: value,
-            stop: stopValue,
-            target: targetValue,
-          };
+      const payload =
+        sizeMode === "lots"
+          ? {
+              symbol: symbol.trim().toUpperCase(),
+              side,
+              sizeMode: "lots" as const,
+              lots: value,
+              stop: stopValue,
+              target: targetValue,
+            }
+          : {
+              symbol: symbol.trim().toUpperCase(),
+              side,
+              sizeMode: "usd" as const,
+              notional: value,
+              stop: stopValue,
+              target: targetValue,
+            };
       const result = await simulationApi.open(payload);
       setSymbol("");
       setStop("");
       setTarget("");
-      setSize(DEFAULT_SIZE);
+      setUsdSize(DEFAULT_USD_SIZE);
+      setLotSize(DEFAULT_LOT_SIZE);
+      setSizeMode("usd");
       setNotice({
         tone: "success",
         text: `Opened ${result.position.side} ${result.position.symbol} at ${result.position.entryPrice}.`,
@@ -211,7 +237,7 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
     } finally {
       setSubmitting(false);
     }
-  }, [symbol, side, size, stop, target, spec, specLoading, load]);
+  }, [symbol, side, sizeMode, size, stop, target, spec, specLoading, load]);
 
   const closePosition = useCallback(
     async (row: PaperPosition) => {
@@ -350,44 +376,71 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
               </div>
             </div>
 
-            {accounts.length > 0 && (
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-medium text-fg-muted">Lot spec account</span>
-                <select
-                  className={inputCls + " py-1.5"}
-                  value={ctid ?? ""}
-                  onChange={(event) => setCtid(Number(event.target.value))}
-                >
-                  {accounts.map((account) => (
-                    <option key={account.ctid} value={account.ctid}>
-                      {account.broker} {account.login}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <div>
+              <span className="mb-1 block text-[11px] font-medium text-fg-muted">Sizing</span>
+              <div className="flex rounded-lg border border-hairline-strong bg-soft p-[3px]">
+                {(["usd", "lots"] as const).map((mode) => {
+                  const disabled = mode === "lots" && !spec;
+                  const hint = disabled
+                    ? specLoading
+                      ? "Checking lot spec..."
+                      : symbol.trim()
+                        ? "Lots are not available for this symbol"
+                        : "Pick a symbol first"
+                    : undefined;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => chooseSizeMode(mode)}
+                      aria-pressed={sizeMode === mode}
+                      title={hint}
+                      className={
+                        "h-7 flex-1 rounded-md text-[11.5px] font-semibold uppercase tracking-wide transition " +
+                        (disabled
+                          ? "cursor-not-allowed text-fg-faint"
+                          : sizeMode === mode
+                            ? "bg-accent-soft text-accent"
+                            : "text-fg-muted hover:text-fg")
+                      }
+                    >
+                      {mode}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <label className="block">
               <span className="mb-1 block text-[11px] font-medium text-fg-muted">
-                {spec ? "Size (Lots)" : "Size (USD)"}
+                {sizeMode === "usd" ? "Amount (USD)" : "Lots"}
               </span>
               <input
                 className={inputCls + " py-1.5 tabular-nums"}
                 value={size}
-                onChange={(event) => setSize(event.target.value)}
+                onChange={(event) =>
+                  sizeMode === "usd" ? setUsdSize(event.target.value) : setLotSize(event.target.value)
+                }
                 inputMode="decimal"
               />
-              {specLoading ? (
-                <span className="mt-1 block text-[10.5px] text-fg-faint">Loading lot spec...</span>
-              ) : spec ? (
-                <span className="mt-1 block text-[10.5px] text-fg-faint">
-                  Min {spec.minLots ?? "-"}
-                  {spec.lotStep != null ? ` step ${spec.lotStep}` : ""}
-                  {spec.maxLots != null ? ` max ${spec.maxLots}` : ""}
-                </span>
+              {sizeMode === "lots" ? (
+                specLoading ? (
+                  <span className="mt-1 block text-[10.5px] text-fg-faint">Checking lot spec...</span>
+                ) : spec ? (
+                  <span className="mt-1 block text-[10.5px] text-fg-faint">
+                    Min {spec.minLots ?? "-"}
+                    {spec.lotStep != null ? ` step ${spec.lotStep}` : ""}
+                    {spec.maxLots != null ? ` max ${spec.maxLots}` : ""}
+                  </span>
+                ) : (
+                  <span className="mt-1 block text-[10.5px] text-fg-faint">
+                    Lots are not available for this symbol.
+                  </span>
+                )
               ) : (
                 <span className="mt-1 block text-[10.5px] text-fg-faint">
-                  Connect a cTrader account for lot sizing. USD fallback stays available.
+                  Sized in flat USD notional.
                 </span>
               )}
             </label>
@@ -417,7 +470,7 @@ export default function SimulationTab({ accounts }: { accounts: AccountView[] })
             <Button
               variant="primary"
               size="sm"
-              disabled={submitting || specLoading}
+              disabled={submitting || (sizeMode === "lots" && (specLoading || !spec))}
               onClick={() => void openPosition()}
             >
               {submitting ? "Opening" : "Open"}

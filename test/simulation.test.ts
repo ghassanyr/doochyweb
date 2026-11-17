@@ -76,24 +76,23 @@ describe("validatePaperInput", () => {
     assert.equal(parsed.ok, false);
   });
 
-  test("accepts lot sizing with an account", () => {
+  test("accepts lot sizing without a client account", () => {
     const parsed = validatePaperInput({
       symbol: "EURUSD",
       side: "buy",
       sizeMode: "lots",
       lots: "0.10",
-      ctid: 123,
     });
     assert.ok(parsed.ok);
     assert.equal(parsed.value.sizeMode, "lots");
     assert.equal(parsed.value.lots, 0.1);
-    assert.equal(parsed.value.ctid, 123);
     assert.equal(parsed.value.notional, null);
+    assert.equal("ctid" in parsed.value, false);
   });
 
-  test("requires an account for lot sizing", () => {
+  test("requires a lot amount for lot sizing", () => {
     assert.equal(
-      validatePaperInput({ symbol: "EURUSD", side: "buy", sizeMode: "lots", lots: 0.1 }).ok,
+      validatePaperInput({ symbol: "EURUSD", side: "buy", sizeMode: "lots" }).ok,
       false
     );
   });

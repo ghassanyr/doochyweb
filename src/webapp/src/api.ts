@@ -662,12 +662,6 @@ export interface PaperSymbolSpec {
   minLots: number | null;
   maxLots: number | null;
   lotStep: number | null;
-  account: {
-    ctid: number;
-    login: number;
-    broker: string;
-    isLive: boolean;
-  };
 }
 
 export interface PaperPosition {
@@ -717,7 +711,6 @@ export interface PaperInputPayload {
   sizeMode?: PaperSizeMode;
   notional?: number;
   lots?: number;
-  ctid?: number;
   stop?: number | null;
   target?: number | null;
 }
@@ -725,10 +718,8 @@ export interface PaperInputPayload {
 export const simulationApi = {
   list: () => request<PaperListResponse>("/api/simulation"),
 
-  spec: (symbol: string, ctid: number) =>
-    request<{ spec: PaperSymbolSpec }>(
-      `/api/simulation/spec?symbol=${encodeURIComponent(symbol)}&ctid=${ctid}`
-    ),
+  spec: (symbol: string) =>
+    request<{ spec: PaperSymbolSpec }>(`/api/simulation/spec?symbol=${encodeURIComponent(symbol)}`),
 
   open: (input: PaperInputPayload) =>
     request<{ position: PaperPosition }>("/api/simulation", { method: "POST", body: input }),

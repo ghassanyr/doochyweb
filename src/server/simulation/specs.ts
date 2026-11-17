@@ -1,5 +1,5 @@
 import { quoteUsdFactor, resolveTradableSymbol } from "../ctrader/reads";
-import { loadCredentials } from "../db";
+import { resolveMarketAccount } from "../market/account";
 import { cachedCatalogFull, resolveMeta } from "../market/catalog";
 import { normalizeSymbol } from "../market/symbols";
 import type { PaperLotSpecSnapshot } from "./types";
@@ -12,12 +12,6 @@ export interface PaperSymbolSpec {
   minLots: number | null;
   maxLots: number | null;
   lotStep: number | null;
-  account: {
-    ctid: number;
-    login: number;
-    broker: string;
-    isLive: boolean;
-  };
 }
 
 export function paperLotBounds(spec: Pick<PaperLotSpecSnapshot, "lotSize" | "minVolume" | "stepVolume" | "maxVolume">): {
@@ -54,14 +48,8 @@ export function snapPaperLots(
   return Math.round((volume / spec.lotSize) * 10_000) / 10_000;
 }
 
-export async function resolvePaperSpec(
-  userId: string,
-  symbol: string,
-  ctid: number
-): Promise<PaperSymbolSpec | null> {
-  if (!Number.isFinite(ctid) || ctid <= 0) return null;
-  const creds = await loadCredentials(userId);
-  const account = creds?.accounts.find((entry) => entry.ctid === ctid);
+export async function resolvePaperSpec(symbol: string): Promise<PaperSymbolSpec | null> {
+  const account = await resolveMarketAccount().catch(() => null);
   if (!account) return null;
 
   const catalog = (await cachedCatalogFull()).items;
@@ -75,9 +63,19 @@ export async function resolvePaperSpec(
   const env = account.isLive ? "live" : "demo";
 
   for (const candidate of unique) {
-    const resolved = await resolveTradableSymbol(userId, env, ctid, candidate);
+    let resolved: Awaited<ReturnType<typeof resolveTradableSymbol>> = null;
+    try {
+      resolved = await resolveTradableSymbol(account.userId, env, account.ctid, candidate);
+    } catch {
+      continue;
+    }
     if (!resolved || !(resolved.spec.lotSize > 0)) continue;
-    const factor = await quoteUsdFactor(userId, ctid, account.isLive, resolved.symbolId).catch(() => null);
+    const factor = await quoteUsdFactor(
+      account.userId,
+      account.ctid,
+      account.isLive,
+      resolved.symbolId
+    ).catch(() => null);
     const snapshot: PaperLotSpecSnapshot = {
       symbolId: resolved.symbolId,
       brokerSymbol: resolved.spec.name,
@@ -88,7 +86,7 @@ export async function resolvePaperSpec(
       quoteAsset: resolved.spec.quoteAsset,
       digits: resolved.spec.digits,
       quoteUsdFactor: factor,
-      ctid,
+      ctid: account.ctid,
       isLive: account.isLive,
     };
     return {
@@ -97,12 +95,6 @@ export async function resolvePaperSpec(
       symbolId: resolved.symbolId,
       spec: snapshot,
       ...paperLotBounds(snapshot),
-      account: {
-        ctid,
-        login: account.login,
-        broker: account.broker,
-        isLive: account.isLive,
-      },
     };
   }
   return null;

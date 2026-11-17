@@ -39,7 +39,6 @@ export function validatePaperInput(body: unknown): PaperValidation {
 
   let notional: number | null = null;
   let lots: number | null = null;
-  let ctid: number | null = null;
   if (sizeMode === "usd") {
     notional = asNumber(source.notional);
     if (notional == null || notional <= 0) {
@@ -50,15 +49,11 @@ export function validatePaperInput(body: unknown): PaperValidation {
     }
   } else {
     lots = asNumber(source.lots);
-    ctid = asNumber(source.ctid);
     if (lots == null || lots <= 0) {
       return { ok: false, error: "size must be a positive lot amount" };
     }
     if (lots > MAX_LOTS) {
       return { ok: false, error: `size cannot exceed ${MAX_LOTS.toLocaleString("en-US")} lots` };
-    }
-    if (ctid == null || !Number.isInteger(ctid) || ctid <= 0) {
-      return { ok: false, error: "a connected cTrader account is required for lot sizing" };
     }
   }
 
@@ -69,7 +64,7 @@ export function validatePaperInput(body: unknown): PaperValidation {
     return { ok: false, error: "target must be a positive price" };
   }
 
-  return { ok: true, value: { symbol, side, sizeMode, notional, lots, ctid, stop, target } };
+  return { ok: true, value: { symbol, side, sizeMode, notional, lots, stop, target } };
 }
 
 /**

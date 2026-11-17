@@ -112,7 +112,7 @@ export async function openPaperPosition(
   let sizeMode: PaperPositionView["sizeMode"] = "usd";
 
   if (input.sizeMode === "lots") {
-    const resolved = await resolvePaperSpec(userId, input.symbol, input.ctid ?? 0);
+    const resolved = await resolvePaperSpec(input.symbol);
     if (!resolved) {
       throw new PaperError(400, "No cTrader lot specification is available for that symbol.");
     }
