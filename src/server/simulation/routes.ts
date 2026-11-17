@@ -76,7 +76,7 @@ simulationRouter.get("/spec", async (req: AuthedRequest, res) => {
     }
     const spec = await resolvePaperSpec(symbol);
     if (!spec) {
-      res.status(422).json({ error: "No cTrader lot specification is available for that symbol." });
+      res.status(422).json({ error: "No broker lot specification is available for that symbol." });
       return;
     }
     res.json({ spec });

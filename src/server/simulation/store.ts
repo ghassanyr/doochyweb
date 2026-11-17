@@ -114,7 +114,7 @@ export async function openPaperPosition(
   if (input.sizeMode === "lots") {
     const resolved = await resolvePaperSpec(input.symbol);
     if (!resolved) {
-      throw new PaperError(400, "No cTrader lot specification is available for that symbol.");
+      throw new PaperError(400, "No broker lot specification is available for that symbol.");
     }
     const snapped = snapPaperLots(input.lots ?? 0, resolved.spec);
     const resolvedVolume = paperVolumeForLots(input.lots ?? 0, resolved.spec);

@@ -1,8 +1,10 @@
 import { ctraderBrokerAdapter } from "./ctrader";
+import { mt5BrokerAdapter } from "./mt5";
 import type { BrokerAdapter, BrokerId } from "./types";
 
 const adapters: Partial<Record<BrokerId, BrokerAdapter>> = {
   ctrader: ctraderBrokerAdapter,
+  mt5: mt5BrokerAdapter,
 };
 
 export function isBrokerId(value: unknown): value is BrokerId {
@@ -20,4 +22,5 @@ export function registeredBrokerIds(): BrokerId[] {
 }
 
 export { ctraderAccountRef, ctraderBrokerAdapter } from "./ctrader";
+export { createMt5BrokerAdapter, mt5AccountRef, mt5BrokerAdapter } from "./mt5";
 export * from "./types";

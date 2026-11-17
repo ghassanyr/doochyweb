@@ -6,6 +6,7 @@ import {
   ctraderBrokerAdapter,
   getBrokerAdapter,
   isBrokerId,
+  mt5BrokerAdapter,
   registeredBrokerIds,
 } from "../src/server/broker";
 import type { BrokerAccountRef, BrokerAdapter } from "../src/server/broker";
@@ -187,10 +188,10 @@ describe("broker adapter seam", () => {
     assert.equal(preview.preview?.rewardUsd, 20);
   });
 
-  test("registry exposes only implemented adapters", () => {
+  test("registry exposes the implemented adapters", () => {
     assert.equal(getBrokerAdapter("ctrader"), ctraderBrokerAdapter);
-    assert.deepEqual(registeredBrokerIds(), ["ctrader"]);
-    assert.throws(() => getBrokerAdapter("mt5"), /No broker adapter registered for mt5/);
+    assert.equal(getBrokerAdapter("mt5"), mt5BrokerAdapter);
+    assert.deepEqual(registeredBrokerIds(), ["ctrader", "mt5"]);
     assert.equal(isBrokerId("mt5"), true);
     assert.equal(isBrokerId("binance"), false);
   });

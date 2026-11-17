@@ -4,7 +4,7 @@
 // (configured, source, masked hint) and the runtime receives resolved values
 // only through resolveIntegration, which is never serialised to a response.
 
-export type IntegrationProvider = "ctrader" | "telegram" | "smtp" | "ai";
+export type IntegrationProvider = "ctrader" | "mt5" | "telegram" | "smtp" | "ai";
 
 export type IntegrationFieldKind = "text" | "secret" | "number" | "boolean" | "select";
 

@@ -344,13 +344,26 @@ started, `later` means deliberately deferred, `skip` means not planned.
   symbols, quotes, bars, history, reconcile and the full order lifecycle.
 - The cTrader adapter wraps the existing cTrader modules. Existing endpoints and
   behaviour are unchanged.
-- `mt5` is a reserved adapter id but is not registered until a transport is
-  chosen.
+- `mt5` is now a registered adapter id with a read-only bridge transport.
+
+## MT5 read-only foundation
+
+- Added an `mt5` integration with bridge URL, optional API key, account ID,
+  account mode and an explicit enable switch. The API key is encrypted at rest
+  and never returned to the browser.
+- Added a self-hosted bridge client for health, symbols, quotes and candles.
+  MT5 writes, reconciliation and trade history deliberately throw until their
+  phases are implemented.
+- Added an MT5 market provider with its own provider id, cache keys, catalog
+  entries and source label. cTrader stays the default until MT5 is enabled.
+- Paper trading lot specs now come from the active broker adapter. Spec snapshots
+  carry the broker id and symbol id as strings, so MT5 symbols do not need a fake
+  cTrader `ctid`.
 
 ## Verification
 
 - `pnpm typecheck` covers the server, webapp and test projects.
-- `pnpm test`: 926 tests, all passing.
+- `pnpm test`: 932 tests, all passing.
 - `pnpm build` produces the server build and the webapp bundle.
 - Not exercised against a live database, a broker socket or a Telegram chat in
   this pass; those paths need a running deployment to confirm end to end.

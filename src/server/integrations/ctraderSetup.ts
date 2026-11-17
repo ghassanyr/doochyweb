@@ -14,6 +14,7 @@
 // only a warning because the connection still works, but trading actions fail.
 
 import { aiDefaultModel, aiProviderKeyRequired } from "../ai/providers";
+import { mt5SetupIssues } from "../mt5/bridge";
 import type { IntegrationFieldState, IntegrationProvider } from "./types";
 import { providerSmtpIssues, validateSmtpSetup } from "./smtpSetup";
 
@@ -175,6 +176,7 @@ export function providerIssuesFromValues(
 ): SetupIssues {
   if (provider === "smtp") return validateSmtpSetup(values);
   if (provider === "ai") return validateAiSetup(values);
+  if (provider === "mt5") return mt5SetupIssues(values, Boolean(text(values.apiKey)));
   if (provider !== "ctrader") return { errors: [], warnings: [] };
   const baseRaw = text(publicBaseUrl) || text(values.publicBaseUrl);
   const issues = validateCtraderSetup(ctraderSetupValues(values, baseRaw));
@@ -196,6 +198,14 @@ export function providerIssues(
     }
     const keyField = fields.find((field) => field.key === "apiKey");
     return validateAiSetup(values, keyField?.configured === true);
+  }
+  if (provider === "mt5") {
+    const values: Record<string, unknown> = {};
+    for (const field of fields) {
+      if (field.kind !== "secret" && field.value !== null) values[field.key] = field.value;
+    }
+    const keyField = fields.find((field) => field.key === "apiKey");
+    return mt5SetupIssues(values, keyField?.configured === true);
   }
   if (provider !== "ctrader") return { errors: [], warnings: [] };
   const values: Record<string, unknown> = {};

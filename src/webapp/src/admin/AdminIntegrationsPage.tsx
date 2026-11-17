@@ -856,7 +856,7 @@ function ProviderCard({
   const dirty = isDirty(patch);
   const provider = state.provider;
   const Icon =
-    provider === "ctrader" ? Plug : provider === "smtp" ? Mail : Send;
+    provider === "ctrader" || provider === "mt5" ? Plug : provider === "smtp" ? Mail : Send;
 
   function updateValue(key: string, value: string) {
     onDraftChange({
@@ -897,7 +897,7 @@ function ProviderCard({
             icon={<FlaskConical className="h-3.5 w-3.5" />}
             onClickAsync={onTest}
           >
-            {provider === "ctrader" ? "Check config" : "Test"}
+            {provider === "ctrader" || provider === "mt5" ? "Check config" : "Test"}
           </Button>
           <Button
             size="sm"
@@ -959,6 +959,24 @@ function ProviderCard({
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {provider === "mt5" && (
+        <div className="space-y-2 rounded-xl border border-hairline bg-soft/60 p-3">
+          <p className="text-xs font-semibold text-fg">Setup checklist</p>
+          <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-fg-muted">
+            <li>Run the MT5 bridge on the machine that can open the terminal.</li>
+            <li>Point the bridge at a demo account with the symbols you want to analyse.</li>
+            <li>
+              Enter the bridge URL, optional API key and bridge account ID here, then run Check
+              config.
+            </li>
+            <li>
+              Save, then turn on Use MT5 for market analysis. cTrader stays the default until it is
+              enabled.
+            </li>
+          </ol>
         </div>
       )}
 
