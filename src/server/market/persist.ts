@@ -86,6 +86,10 @@ export function binanceSeriesKey(pair: string, timeframe: string): string {
   return `binance:${pair}:${timeframe}`;
 }
 
+export function mt5SeriesKey(symbol: string, timeframe: string): string {
+  return `mt5:${symbol}:${timeframe}`;
+}
+
 /** Read a stored series, or null when it has never been fetched. */
 export async function readSeries(
   ctid: number,
@@ -100,6 +104,13 @@ export async function readBinanceSeries(
   timeframe: string
 ): Promise<{ bars: StoredBar[]; fetchedAt: number } | null> {
   return readByKey(binanceSeriesKey(pair, timeframe));
+}
+
+export async function readMt5Series(
+  symbol: string,
+  timeframe: string
+): Promise<{ bars: StoredBar[]; fetchedAt: number } | null> {
+  return readByKey(mt5SeriesKey(symbol, timeframe));
 }
 
 async function readByKey(key: string): Promise<{ bars: StoredBar[]; fetchedAt: number } | null> {
@@ -137,6 +148,14 @@ export async function writeBinanceSeries(
   bars: StoredBar[]
 ): Promise<void> {
   await writeByKey(binanceSeriesKey(pair, timeframe), { provider: "binance", timeframe, bars });
+}
+
+export async function writeMt5Series(
+  symbol: string,
+  timeframe: string,
+  bars: StoredBar[]
+): Promise<void> {
+  await writeByKey(mt5SeriesKey(symbol, timeframe), { provider: "mt5", timeframe, bars });
 }
 
 async function writeByKey(

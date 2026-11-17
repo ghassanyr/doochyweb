@@ -10,7 +10,9 @@ export type PaperCloseReason = "manual" | "stop" | "target";
 export type PaperSizeMode = "usd" | "lots";
 
 export interface PaperLotSpecSnapshot {
-  symbolId: number;
+  broker: "ctrader" | "mt5";
+  symbolId: string;
+  accountId: string;
   brokerSymbol: string;
   lotSize: number;
   minVolume: number;
@@ -19,7 +21,7 @@ export interface PaperLotSpecSnapshot {
   quoteAsset: string | null;
   digits: number;
   quoteUsdFactor: number | null;
-  ctid: number;
+  ctid: number | null;
   isLive: boolean;
 }
 

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add MT5 as a broker option in phases, without destabilising the current cTrader implementation. The first phase is a provider-neutral adapter seam. A concrete MT5 transport, such as a cloud API or a self-hosted terminal bridge, is chosen after the seam exists.
+Add MT5 as a broker option in phases, without destabilising the current cTrader implementation. The first phase is a provider-neutral adapter seam. Phase 1 uses a self-hosted terminal bridge for read-only data; a cloud API can replace the transport behind the same adapter later.
 
 ## Scope decisions
 
@@ -22,9 +22,10 @@ Add MT5 as a broker option in phases, without destabilising the current cTrader 
 - Keep `/api/accounts/:ctid/*` untouched.
 - Add adapter contract tests using a fake MT5 adapter.
 
-## Phase 1 - MT5 read-only foundation
+## Phase 1 - MT5 read-only foundation - done
 
 - Add `mt5` to the integration registry, admin integrations UI, and `.env.example`.
+- Define the self-hosted bridge contract: `/health`, `/symbols`, `/quote` and `/candles` with an optional bearer token.
 - Add MT5 market provider wiring in the market provider registry, persistence keys, catalog, and shared account resolution.
 - Generalize paper trading lot specs so they come from the configured broker adapter instead of cTrader directly.
 - Keep the paper trading USD/Lots UI. Lots stays disabled when the active provider has no spec for the symbol.
@@ -50,10 +51,8 @@ Add MT5 as a broker option in phases, without destabilising the current cTrader 
 
 ## Decision gate
 
-Before Phase 1 needs real MT5 data, choose the concrete transport:
-
-- Cloud MT5 API: faster delivery, external paid dependency, another credential model.
-- Self-hosted MT5 terminal bridge: more control and privacy, heavier operations.
+- Chosen for Phase 1: self-hosted MT5 terminal bridge. It keeps credentials and the terminal on the operator's machine, and the window into broker data stays read-only.
+- A cloud MT5 API remains an option for a later transport swap behind `BrokerAdapter`.
 
 ## Verification
 

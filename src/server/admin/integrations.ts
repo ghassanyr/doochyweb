@@ -12,6 +12,7 @@ import { buildAuthorizeUrl, ctraderOAuthConfigFrom } from "../ctrader/oauth";
 import { callbackCandidates, providerIssuesFromValues } from "../integrations/ctraderSetup";
 import { aiProviderCatalog, listAiModels, testAi } from "../ai/client";
 import { canonicalPublicBaseUrl } from "../settings/siteUrl";
+import { testMt5Bridge } from "../mt5/bridge";
 import { IntegrationCryptoError, encryptionKeyFromEnv } from "../integrations/crypto";
 import { INTEGRATION_DEFS, isIntegrationProvider } from "../integrations/registry";
 import {
@@ -190,6 +191,7 @@ function testProvider(
   if (provider === "smtp") throw new Error("SMTP tests need the acting admin account");
   if (provider === "ai") return testAi(values.values);
   if (provider === "imap") return testImap(values);
+  if (provider === "mt5") return testMt5Bridge(values.values);
   return provider === "ctrader"
     ? testCtrader(values, publicBaseUrl)
     : testTelegram(values);

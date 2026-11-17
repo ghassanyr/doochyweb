@@ -6,7 +6,8 @@
 // without credentials the Binance list still serves, and `brokerError` explains
 // why the broker half is empty.
 
-import { clearCache, cTraderCatalog } from "./providers/index";
+import { clearMt5ConfigCache } from "../mt5/bridge";
+import { clearCache, cTraderCatalog, mt5Catalog } from "./providers/index";
 import { cryptoPairs } from "./crypto";
 import { buildCatalog, filterNoisyCatalog, normalizeSymbol, resolveAgainstBroker, toSymbolMeta } from "./symbols";
 import type { CatalogEntry, SymbolMeta } from "./types";
@@ -43,14 +44,22 @@ export async function loadCatalog(): Promise<{
 }> {
   const crypto = await cryptoPairs();
   let broker: string[] = [];
-  let brokerError: string | null = null;
+  let mt5: string[] = [];
+  const brokerErrors: string[] = [];
   try {
     broker = await cTraderCatalog();
   } catch (err) {
-    brokerError = message(err);
+    brokerErrors.push(`cTrader: ${message(err)}`);
   }
-  const full = buildCatalog(broker, crypto);
-  return { items: filterNoisyCatalog(full, broker), full, brokerError };
+  try {
+    mt5 = await mt5Catalog();
+  } catch (err) {
+    const detail = message(err);
+    if (!/disabled/i.test(detail)) brokerErrors.push(`MT5: ${detail}`);
+  }
+  const brokerError = brokerErrors.length ? brokerErrors.join(" ") : null;
+  const full = buildCatalog(broker, crypto, mt5);
+  return { items: filterNoisyCatalog(full, [...broker, ...mt5]), full, brokerError };
 }
 
 /**
@@ -64,10 +73,14 @@ export function resolveMeta(symbol: string, catalog: CatalogEntry[]): SymbolMeta
   const short = normalizeSymbol(symbol);
   const entry = catalog.find((c) => c.symbol === short);
   const pair = entry?.provider === "binance" ? entry.name : null;
-  const brokerNames = catalog.filter((c) => c.provider !== "binance").map((c) => c.name);
-  const brokerName = resolveAgainstBroker(symbol, brokerNames);
+  const brokerNames = catalog
+    .filter((c) => c.provider !== "binance" && c.provider !== "mt5")
+    .map((c) => c.name);
+  const mt5Names = catalog.filter((c) => c.provider === "mt5").map((c) => c.name);
+  const ctraderName = resolveAgainstBroker(symbol, brokerNames);
+  const brokerName = ctraderName ?? resolveAgainstBroker(symbol, mt5Names);
   if (!brokerName && !pair) return null;
-  return toSymbolMeta(brokerName, symbol, pair);
+  return toSymbolMeta(brokerName, symbol, pair, ctraderName ? "ctrader" : "mt5");
 }
 
 /**
@@ -78,11 +91,11 @@ export function resolveMeta(symbol: string, catalog: CatalogEntry[]): SymbolMeta
 export function unresolvableError(symbol: string, brokerError: string | null): string {
   if (brokerError) {
     return (
-      `Could not read the cTrader symbol list, so "${symbol}" cannot be checked. ` +
+      `Could not read the broker symbol list, so "${symbol}" cannot be checked. ` +
       `${brokerError.slice(0, 200)}`
     );
   }
-  return `"${symbol}" is neither tradable on the connected cTrader account nor listed on Binance`;
+  return `"${symbol}" is neither tradable on the connected broker account nor listed on Binance`;
 }
 
 export async function cachedCatalog(): Promise<CatalogEntry[]> {
@@ -108,5 +121,6 @@ export async function cachedFullCatalog(): Promise<CatalogEntry[]> {
 /** Force the catalog to be re-read, e.g. after credentials change. */
 export function clearCatalogCache(): void {
   catalogCache = null;
+  clearMt5ConfigCache();
   clearCache();
 }

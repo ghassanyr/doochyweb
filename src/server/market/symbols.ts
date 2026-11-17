@@ -126,19 +126,21 @@ export function resolveAgainstBroker(input: unknown, available: string[]): strin
 export function toSymbolMeta(
   brokerName: string | null,
   requested?: string,
-  binancePair?: string | null
+  binancePair?: string | null,
+  broker: "ctrader" | "mt5" = "ctrader"
 ): SymbolMeta {
   const name = brokerName || requested || binancePair || "";
   const type = binancePair ? "crypto" : inferType(name);
   const providers: SymbolMeta["providers"] = {};
   if (binancePair) providers.binance = binancePair;
-  if (brokerName) providers.ctrader = brokerName;
+  if (brokerName) providers[broker] = brokerName;
+  const brokerLabel = broker === "mt5" ? "MT5" : "cTrader";
   return {
     symbol: requested || brokerName || name,
     name,
     type,
     providers,
-    note: brokerName && requested && requested !== brokerName ? `cTrader symbol: ${brokerName}` : undefined,
+    note: brokerName && requested && requested !== brokerName ? `${brokerLabel} symbol: ${brokerName}` : undefined,
   };
 }
 
@@ -184,7 +186,8 @@ export function noisyCatalogSymbols(entries: CatalogEntry[], available: readonly
  */
 export function buildCatalog(
   available: string[],
-  crypto: { symbol: string; pair: string; base: string }[] = []
+  crypto: { symbol: string; pair: string; base: string }[] = [],
+  mt5Available: string[] = []
 ): CatalogEntry[] {
   const cryptoSymbols = new Map(crypto.map((c) => [c.symbol, c.pair]));
   const cryptoBases = new Set(crypto.map((c) => c.base));
@@ -200,11 +203,20 @@ export function buildCatalog(
     if (covered(short)) continue;
     out.set(short, { symbol: short, name, type: inferType(name) });
   }
+  for (const name of mt5Available) {
+    const short = normalizeSymbol(name);
+    if (!short || covered(short) || out.has(short)) continue;
+    out.set(short, { symbol: short, name, type: inferType(name), provider: "mt5" });
+  }
   for (const [alias, target] of Object.entries(ALIASES)) {
     // The alias table maps BTCUSDT to BTCUSD, so this loop will otherwise put
     // back the very broker entry the filter above just removed.
-    if (out.has(alias) || covered(alias) || !available.includes(target)) continue;
-    out.set(alias, { symbol: alias, name: target, type: inferType(target) });
+    if (out.has(alias) || covered(alias)) continue;
+    if (available.includes(target)) {
+      out.set(alias, { symbol: alias, name: target, type: inferType(target) });
+    } else if (mt5Available.includes(target)) {
+      out.set(alias, { symbol: alias, name: target, type: inferType(target), provider: "mt5" });
+    }
   }
   for (const [symbol, pair] of cryptoSymbols) {
     out.set(symbol, { symbol, name: pair, type: "crypto", provider: "binance" });

@@ -1,4 +1,11 @@
-import { quoteUsdFactor, resolveTradableSymbol } from "../ctrader/reads";
+import {
+  ctraderAccountRef,
+  getBrokerAdapter,
+  mt5AccountRef,
+  type BrokerAccountRef,
+  type BrokerId,
+} from "../broker";
+import { resolveMt5Config } from "../mt5/bridge";
 import { resolveMarketAccount } from "../market/account";
 import { cachedCatalogFull, resolveMeta } from "../market/catalog";
 import { normalizeSymbol } from "../market/symbols";
@@ -6,12 +13,18 @@ import type { PaperLotSpecSnapshot } from "./types";
 
 export interface PaperSymbolSpec {
   requestedSymbol: string;
+  broker: BrokerId;
   brokerSymbol: string;
-  symbolId: number;
+  symbolId: string;
   spec: PaperLotSpecSnapshot;
   minLots: number | null;
   maxLots: number | null;
   lotStep: number | null;
+}
+
+interface SpecSource {
+  broker: BrokerId;
+  ref: BrokerAccountRef;
 }
 
 export function paperLotBounds(spec: Pick<PaperLotSpecSnapshot, "lotSize" | "minVolume" | "stepVolume" | "maxVolume">): {
@@ -48,37 +61,53 @@ export function snapPaperLots(
   return Math.round((volume / spec.lotSize) * 10_000) / 10_000;
 }
 
-export async function resolvePaperSpec(symbol: string): Promise<PaperSymbolSpec | null> {
+async function activeSpecSource(): Promise<SpecSource | null> {
+  const mt5 = await resolveMt5Config()
+    .then((config) => ({ broker: "mt5" as const, ref: mt5AccountRef(config) }))
+    .catch(() => null);
+  if (mt5) return mt5;
   const account = await resolveMarketAccount().catch(() => null);
   if (!account) return null;
+  return {
+    broker: "ctrader",
+    ref: ctraderAccountRef(account.userId, account.ctid, account.isLive),
+  };
+}
+
+export async function resolvePaperSpec(symbol: string): Promise<PaperSymbolSpec | null> {
+  const source = await activeSpecSource();
+  if (!source) return null;
 
   const catalog = (await cachedCatalogFull()).items;
   const meta = resolveMeta(symbol, catalog);
+  const primary = meta?.providers[source.broker];
+  const secondary =
+    source.broker === "mt5" ? meta?.providers.ctrader : meta?.providers.mt5;
   const candidates = [
-    meta?.providers.ctrader,
+    primary,
+    secondary,
     normalizeSymbol(symbol),
     String(symbol ?? "").trim().toUpperCase(),
   ].filter((value): value is string => Boolean(value));
   const unique = [...new Set(candidates)];
-  const env = account.isLive ? "live" : "demo";
+  const adapter = getBrokerAdapter(source.broker);
 
   for (const candidate of unique) {
-    let resolved: Awaited<ReturnType<typeof resolveTradableSymbol>> = null;
+    let resolved: Awaited<ReturnType<typeof adapter.resolveSymbol>> = null;
     try {
-      resolved = await resolveTradableSymbol(account.userId, env, account.ctid, candidate);
+      resolved = await adapter.resolveSymbol(source.ref, candidate);
     } catch {
       continue;
     }
     if (!resolved || !(resolved.spec.lotSize > 0)) continue;
-    const factor = await quoteUsdFactor(
-      account.userId,
-      account.ctid,
-      account.isLive,
-      resolved.symbolId
-    ).catch(() => null);
+    const factor = await adapter
+      .quoteUsdFactor(source.ref, resolved.spec.symbol)
+      .catch(() => null);
     const snapshot: PaperLotSpecSnapshot = {
-      symbolId: resolved.symbolId,
-      brokerSymbol: resolved.spec.name,
+      broker: source.broker,
+      symbolId: resolved.id,
+      accountId: source.ref.accountId,
+      brokerSymbol: resolved.spec.symbol,
       lotSize: resolved.spec.lotSize,
       minVolume: resolved.spec.minVolume,
       stepVolume: resolved.spec.stepVolume,
@@ -86,13 +115,14 @@ export async function resolvePaperSpec(symbol: string): Promise<PaperSymbolSpec 
       quoteAsset: resolved.spec.quoteAsset,
       digits: resolved.spec.digits,
       quoteUsdFactor: factor,
-      ctid: account.ctid,
-      isLive: account.isLive,
+      ctid: source.broker === "ctrader" ? Number(source.ref.accountId) : null,
+      isLive: source.ref.mode === "live",
     };
     return {
       requestedSymbol: normalizeSymbol(symbol),
-      brokerSymbol: resolved.spec.name,
-      symbolId: resolved.symbolId,
+      broker: source.broker,
+      brokerSymbol: resolved.spec.symbol,
+      symbolId: resolved.id,
       spec: snapshot,
       ...paperLotBounds(snapshot),
     };

@@ -28,7 +28,7 @@ import type { ProviderId } from "../types";
 export const MAX_IN_FLIGHT = 4;
 
 /** Steady-state spacing between request starts, per provider. */
-const MIN_SPACING_MS: Record<ProviderId, number> = { ctrader: 200, binance: 50 };
+const MIN_SPACING_MS: Record<ProviderId, number> = { ctrader: 200, mt5: 100, binance: 50 };
 
 const REFILL_INTERVAL_MS = 60_000;
 
@@ -45,6 +45,7 @@ const POLICIES: Record<ProviderId, Policy | null> = {
   // capacity 4 at one request per 200ms = 300/min, comfortably above what the
   // broker serves but well under anything that trips the throttle.
   ctrader: { capacity: 4, perMinute: 300, maxInFlight: MAX_IN_FLIGHT },
+  mt5: { capacity: 8, perMinute: 600, maxInFlight: 8 },
   // 600 klines/min at weight 2 = 1200 weight/min, exactly the published cap.
   // Held a little under so a burst cannot sit right on the ceiling.
   binance: { capacity: 12, perMinute: 400, maxInFlight: 12 },

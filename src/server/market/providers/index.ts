@@ -21,13 +21,16 @@ import * as breaker from "./breaker";
 import {
   readSeries,
   readBinanceSeries,
+  readMt5Series,
   writeSeries,
   writeBinanceSeries,
+  writeMt5Series,
   type StoredBar,
 } from "../persist";
 import * as rateLimit from "./rateLimit";
 import { binance } from "./binance";
 import { ctrader, cTraderCatalog, marketSymbolRef } from "./ctrader";
+import { mt5, mt5Catalog, marketSymbolRef as mt5MarketSymbolRef } from "./mt5";
 import type {
   AnalysisSettings,
   Candle,
@@ -38,7 +41,7 @@ import type {
   Timeframe,
 } from "../types";
 
-const REGISTRY: Record<ProviderId, MarketProvider> = { ctrader, binance };
+const REGISTRY: Record<ProviderId, MarketProvider> = { ctrader, mt5, binance };
 
 /** Bars actually returned before a result is trusted. */
 export const MIN_CANDLES = 30;
@@ -68,7 +71,10 @@ function cacheKey(pid: ProviderId, meta: SymbolMeta, tf: Timeframe): string {
 }
 
 /** Where a series can be read from: a broker symbol id, or a Binance pair. */
-type SourceRef = { kind: "ctrader"; ctid: number; symbolId: number } | { kind: "binance"; pair: string };
+type SourceRef =
+  | { kind: "ctrader"; ctid: number; symbolId: number }
+  | { kind: "mt5"; symbol: string }
+  | { kind: "binance"; pair: string };
 
 /**
  * Which sources to try, in order.
@@ -81,6 +87,7 @@ export function providerOrder(meta: SymbolMeta): ProviderId[] {
   const order: ProviderId[] = [];
   if (meta.providers?.binance) order.push("binance");
   if (meta.providers?.ctrader) order.push("ctrader");
+  if (meta.providers?.mt5) order.push("mt5");
   return order;
 }
 
@@ -89,21 +96,25 @@ async function resolveRef(pid: ProviderId, meta: SymbolMeta): Promise<SourceRef 
     const pair = meta.providers?.binance;
     return pair ? { kind: "binance", pair } : null;
   }
+  if (pid === "mt5") {
+    const resolved = await mt5MarketSymbolRef(meta);
+    return resolved ? { kind: "mt5", ...resolved } : null;
+  }
   const resolved = await marketSymbolRef(meta);
   return resolved ? { kind: "ctrader", ...resolved } : null;
 }
 
 function readPersist(ref: SourceRef, tf: Timeframe) {
-  return ref.kind === "binance"
-    ? readBinanceSeries(ref.pair, tf.id)
-    : readSeries(ref.ctid, ref.symbolId, tf.id);
+  if (ref.kind === "binance") return readBinanceSeries(ref.pair, tf.id);
+  if (ref.kind === "mt5") return readMt5Series(ref.symbol, tf.id);
+  return readSeries(ref.ctid, ref.symbolId, tf.id);
 }
 
 function writePersist(ref: SourceRef, tf: Timeframe, bars: Candle[]) {
   const payload = bars as StoredBar[];
-  return ref.kind === "binance"
-    ? writeBinanceSeries(ref.pair, tf.id, payload)
-    : writeSeries(ref.ctid, ref.symbolId, tf.id, payload);
+  if (ref.kind === "binance") return writeBinanceSeries(ref.pair, tf.id, payload);
+  if (ref.kind === "mt5") return writeMt5Series(ref.symbol, tf.id, payload);
+  return writeSeries(ref.ctid, ref.symbolId, tf.id, payload);
 }
 
 export interface BarsResult {
@@ -349,7 +360,11 @@ async function refreshInBackground(
 }
 
 /** Display names, so an error reads "from cTrader" rather than "from ctrader". */
-const PROVIDER_LABEL: Record<ProviderId, string> = { ctrader: "cTrader", binance: "Binance" };
+const PROVIDER_LABEL: Record<ProviderId, string> = {
+  ctrader: "cTrader",
+  mt5: "MT5",
+  binance: "Binance",
+};
 
 function listProviders(names: ProviderId[]): string {
   const labels = names.map((n) => PROVIDER_LABEL[n] || n);
@@ -394,5 +409,5 @@ export function clearCache(): void {
   lastRateLimitAt = 0;
 }
 
-export { ctrader, cTraderCatalog, binance };
+export { ctrader, cTraderCatalog, mt5, mt5Catalog, binance };
 export { REGISTRY };

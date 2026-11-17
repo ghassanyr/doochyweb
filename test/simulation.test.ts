@@ -15,7 +15,9 @@ import {
 } from "../src/server/simulation/validate";
 
 const LOT_SPEC: PaperLotSpecSnapshot = {
-  symbolId: 7,
+  broker: "ctrader",
+  symbolId: "7",
+  accountId: "123",
   brokerSymbol: "EURUSD",
   lotSize: 100_000,
   minVolume: 1_000,

@@ -641,7 +641,9 @@ export type PaperCloseReason = "manual" | "stop" | "target";
 export type PaperSizeMode = "usd" | "lots";
 
 export interface PaperLotSpecSnapshot {
-  symbolId: number;
+  broker: "ctrader" | "mt5";
+  symbolId: string;
+  accountId: string;
   brokerSymbol: string;
   lotSize: number;
   minVolume: number;
@@ -650,14 +652,15 @@ export interface PaperLotSpecSnapshot {
   quoteAsset: string | null;
   digits: number;
   quoteUsdFactor: number | null;
-  ctid: number;
+  ctid: number | null;
   isLive: boolean;
 }
 
 export interface PaperSymbolSpec {
   requestedSymbol: string;
+  broker: "ctrader" | "mt5";
   brokerSymbol: string;
-  symbolId: number;
+  symbolId: string;
   spec: PaperLotSpecSnapshot;
   minLots: number | null;
   maxLots: number | null;
@@ -1354,7 +1357,7 @@ export interface AdminSetupCheck {
 // Integrations, see src/server/integrations
 // ---------------------------------------------------------------------------
 
-export type IntegrationProvider = "ctrader" | "telegram" | "smtp" | "ai" | "imap";
+export type IntegrationProvider = "ctrader" | "mt5" | "telegram" | "smtp" | "ai" | "imap";
 
 export type IntegrationFieldKind = "text" | "secret" | "number" | "boolean" | "select";
 

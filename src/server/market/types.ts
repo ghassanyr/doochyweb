@@ -20,6 +20,8 @@ export type SymbolType = "forex" | "commodity" | "crypto" | "index" | "stock" | 
 export interface ProviderMap {
   /** Broker symbol name. Set by the symbol resolver, not by the catalog. */
   ctrader?: string | null;
+  /** MT5 symbol name. Set by the symbol resolver, not by the catalog. */
+  mt5?: string | null;
   /** Binance spot pair, e.g. "SOLUSDT". Set only for crypto markets. */
   binance?: string | null;
 }
@@ -150,7 +152,7 @@ export interface TimeframeRating {
   error?: string;
 }
 
-export type ProviderId = "ctrader" | "binance";
+export type ProviderId = "ctrader" | "mt5" | "binance";
 
 export interface ProviderWarning {
   provider: ProviderId;
