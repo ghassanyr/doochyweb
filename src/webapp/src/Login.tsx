@@ -39,6 +39,29 @@ export default function Login({
   const registration = config?.registration ?? FALLBACK_REGISTRATION;
   const legal = config?.legal ?? FALLBACK_LEGAL;
   const demo = config?.demo ?? FALLBACK_DEMO;
+  const demoEntry = demo.enabled && onEnterDemo ? (
+    <div className="mt-5 border-t border-hairline pt-5">
+      <div className="relative mb-3 text-center">
+        <span className="relative z-10 bg-canvas px-2 text-xs text-fg-faint">or</span>
+        <span className="absolute inset-x-0 top-1/2 border-t border-hairline" aria-hidden="true" />
+      </div>
+      {demoError && <Flash tone="danger">{demoError}</Flash>}
+      <Button
+        type="button"
+        size="lg"
+        variant="secondary"
+        className="w-full"
+        icon={<Sparkles className="h-4 w-4" />}
+        disabled={demoBusy}
+        onClick={onEnterDemo}
+      >
+        {demo.label}
+      </Button>
+      <p className="mt-2 text-center text-xs text-fg-faint">
+        Explore fixed sample data in read-only mode.
+      </p>
+    </div>
+  ) : null;
   const needsLegalAcceptance =
     mode === "register" && Boolean(legal.termsUrl || legal.privacyUrl);
 
@@ -133,6 +156,7 @@ export default function Login({
         <Button variant="secondary" className="w-full" onClick={() => onModeChange("login")}>
           Back to sign in
         </Button>
+        {demoEntry}
       </div>
     );
   }
@@ -302,30 +326,6 @@ export default function Login({
         </Button>
       </form>
 
-      {demo.enabled && onEnterDemo && (
-        <div className="mt-5 border-t border-hairline pt-5">
-          <div className="relative mb-3 text-center">
-            <span className="relative z-10 bg-canvas px-2 text-xs text-fg-faint">or</span>
-            <span className="absolute inset-x-0 top-1/2 border-t border-hairline" aria-hidden="true" />
-          </div>
-          {demoError && <Flash tone="danger">{demoError}</Flash>}
-          <Button
-            type="button"
-            size="lg"
-            variant="secondary"
-            className="w-full"
-            icon={<Sparkles className="h-4 w-4" />}
-            disabled={demoBusy}
-            onClick={onEnterDemo}
-          >
-            {demo.label}
-          </Button>
-          <p className="mt-2 text-center text-xs text-fg-faint">
-            Explore fixed sample data in read-only mode.
-          </p>
-        </div>
-      )}
-
       <p className="mt-6 text-center text-sm">
         {mode === "login" ? (
           registration.mode === "closed" ? (
@@ -349,6 +349,8 @@ export default function Login({
           </button>
         )}
       </p>
+
+      {demoEntry}
     </>
   );
 }

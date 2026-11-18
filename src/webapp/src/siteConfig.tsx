@@ -61,7 +61,7 @@ export const FALLBACK_REGISTRATION: PublicRegistrationSettings = {
 
 export const FALLBACK_DEMO: DemoSettings = {
   enabled: true,
-  label: "Try demo",
+  label: "Explore sample account",
 };
 
 export const FALLBACK_LEGAL: LegalSettings = {

@@ -5,6 +5,7 @@ import {
   DEFAULT_ANALYSIS,
   DEFAULT_ANNOUNCEMENT,
   DEFAULT_BRANDING,
+  DEFAULT_DEMO,
   DEFAULT_LEGAL,
   DEFAULT_MAINTENANCE,
   DEFAULT_NAV_GROUPS,
@@ -13,7 +14,7 @@ import {
   DEFAULT_SITE,
   DEFAULT_THEME,
 } from "../src/server/settings/defaults";
-import { mergeAnalysis, mergeSiteSettings, publicSiteConfig } from "../src/server/settings/store";
+import { mergeAnalysis, mergeDemo, mergeSiteSettings, publicSiteConfig } from "../src/server/settings/store";
 import { normalizePublicBaseUrl, publicBaseUrlFor } from "../src/server/settings/siteUrl";
 import {
   SettingsValidationError,
@@ -44,6 +45,11 @@ describe("site settings defaults", () => {
     assert.equal(settings.version, null);
     assert.equal(settings.updatedAt, null);
     assert.equal(settings.updatedBy, null);
+  });
+
+  test("the demo label drops the old trial wording", () => {
+    assert.equal(mergeDemo({ label: "Try demo" }).label, DEFAULT_DEMO.label);
+    assert.equal(mergeDemo({ label: "Open sample account" }).label, "Open sample account");
   });
 
   test("stored values override defaults and new fields still appear", () => {

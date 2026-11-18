@@ -91,7 +91,7 @@ Everything customer-facing follows **Admin → Site settings → Branding**: pro
 
 ## Demo account
 
-The optional demo gives visitors a shared, read-only workspace with fixed sample positions, orders, alerts, briefing and coaching data. It uses one seeded user, short-lived purpose-tagged tokens, and a server-side guard that blocks every write under `/api`. The default entry label is `Try demo`. Manage it under **Admin → Site settings → Demo access** and **Admin → Demo account**. See `docs/DEMO_ACCOUNT.md` for the full behavior, fixed counts and reset commands.
+The optional demo gives visitors a shared, read-only workspace with fixed sample positions, orders, alerts, briefing and coaching data. It uses one seeded user, short-lived purpose-tagged tokens, and a server-side guard that blocks every write under `/api`. The default entry label is `Explore sample account`. Manage it under **Admin → Site settings → Demo access** and **Admin → Demo account**. See `docs/DEMO_ACCOUNT.md` for the full behavior, fixed counts and reset commands.
 
 ## Optional integrations
 

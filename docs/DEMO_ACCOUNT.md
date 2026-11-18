@@ -4,7 +4,7 @@ The demo account gives new visitors a shared, read-only workspace with fixed sam
 
 ## Entry
 
-Visitors can enter from the header, sidebar, sign-in modal, or a sign-in prompt by pressing the configured demo label. The default label is `Try demo`.
+Visitors can enter from the header, sidebar, sign-in modal, or a sign-in prompt by pressing the configured demo label. The default label is `Explore sample account`.
 
 The browser calls `POST /api/demo/enter`. The server checks `settings.demo.enabled`, seeds the shared demo user if needed, and returns a short-lived demo JWT. The web app stores that token in the same `localStorage` key as a normal session and removes it on `Exit demo`.
 

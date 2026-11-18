@@ -1875,7 +1875,7 @@ export default function AdminSettingsPage({
             label="Entry label"
             value={demo.label}
             onChange={(label) => setDemo({ ...demo, label })}
-            placeholder="Try demo"
+            placeholder="Explore sample account"
             hint="Shown on the sign-in button and demo banner."
             maxLength={40}
           />

@@ -664,9 +664,10 @@ export function mergeAnnouncement(stored: any): AnnouncementSettings {
 
 export function mergeDemo(stored: any): DemoSettings {
   const demo = stored && typeof stored === "object" ? stored : {};
+  const label = typeof demo.label === "string" ? demo.label.trim() : "";
   return {
     enabled: demo.enabled !== false,
-    label: typeof demo.label === "string" && demo.label.trim() ? demo.label : DEFAULT_DEMO.label,
+    label: label && label !== "Try demo" ? label : DEFAULT_DEMO.label,
   };
 }
 

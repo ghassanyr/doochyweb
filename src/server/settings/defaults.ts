@@ -40,7 +40,7 @@ export const DEFAULT_REGISTRATION: RegistrationSettings = {
 
 export const DEFAULT_DEMO: DemoSettings = {
   enabled: true,
-  label: "Try demo",
+  label: "Explore sample account",
 };
 
 export const DEFAULT_LEGAL: LegalSettings = {
