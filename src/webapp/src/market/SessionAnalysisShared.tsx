@@ -97,7 +97,7 @@ export function sessionOptionLabel(entry: SessionDaySummary): string {
   return `${entry.sessionName} - ${stamp} (${entry.marketCount})`;
 }
 
-function LevelIcon({ type }: { type: SessionMarket["levelType"] }) {
+export function LevelIcon({ type }: { type: SessionMarket["levelType"] }) {
   if (type === "support") {
     return <ArrowDownRight className="h-3.5 w-3.5 text-emerald-500" />;
   }
@@ -107,7 +107,7 @@ function LevelIcon({ type }: { type: SessionMarket["levelType"] }) {
   return null;
 }
 
-function MetaRow({ label, value }: { label: string; value: string | null }) {
+export function MetaRow({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-hairline py-1 last:border-0">
       <span className="text-[11px] uppercase tracking-wide text-fg-faint">{label}</span>

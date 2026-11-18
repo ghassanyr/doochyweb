@@ -1889,3 +1889,47 @@ export const sessionAnalysisApi = {
   sync: () =>
     request<SessionSyncResult>("/api/session-analysis/sync", { method: "POST" }),
 };
+
+// ---------------------------------------------------------------------------
+// Hand Picks, see src/server/handPicks
+// ---------------------------------------------------------------------------
+
+export type HandPickLevelType = "support" | "resistance";
+
+export interface HandPickInput {
+  symbol: string;
+  pattern: string | null;
+  targetLevel: string | null;
+  targetPeriod: string | null;
+  interval: string | null;
+  identifiedAt: string | null;
+  reason: string | null;
+  supporting: string[];
+  levelType: HandPickLevelType | null;
+  levelValue: string | null;
+  levelNote: string | null;
+}
+
+export interface HandPick extends HandPickInput {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const handPicksApi = {
+  list: () => request<{ picks: HandPick[] }>("/api/hand-picks"),
+
+  create: (input: HandPickInput) =>
+    request<{ pick: HandPick }>("/api/hand-picks", { method: "POST", body: input }),
+
+  update: (id: string, input: HandPickInput) =>
+    request<{ pick: HandPick }>(`/api/hand-picks/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: input,
+    }),
+
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/hand-picks/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+};

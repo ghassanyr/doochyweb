@@ -6,6 +6,7 @@ import { FadeRise } from "../components/motion";
 import { Card } from "../components/ui";
 import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
 import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
+import { HandPicks } from "./HandPicks";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
 import { SortableGrid } from "./SortableGrid";
@@ -563,6 +564,8 @@ export default function AnalysisPage({
           Indicators computed server-side (RSI, STOCH, MACD, ADX, CCI, Williams %R, ATR, Ultimate
           Oscillator, ROC, Bull/Bear Power, SMA/EMA 5-200). Read from your cTrader account. Not financial advice.
         </p>
+
+        <HandPicks isAdmin={isAdmin} />
       </div>
 
       {detail && (

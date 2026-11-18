@@ -42,6 +42,7 @@ import {
   startSessionAnalysisScheduler,
   stopSessionAnalysisScheduler,
 } from "./sessionAnalysis/scheduler";
+import { handPicksRouter } from "./handPicks/routes";
 import { signalsRouter } from "./signals/routes";
 import { startSignalResolver } from "./signals/resolver";
 import { journalRouter } from "./journal/routes";
@@ -817,6 +818,9 @@ app.use(
   moduleGate("analysis"),
   sessionAnalysisRouter
 );
+// Hand Picks are curated by an admin but shown inside Analysis, so reads follow
+// the Analysis access rule and writes add the admin guard themselves.
+app.use("/api/hand-picks", maintenanceGate, moduleGate("analysis"), handPicksRouter);
 app.use("/api/signals", maintenanceGate, moduleGate("signals"), signalsRouter);
 // The journal lives inside the Trading page, so it follows that module's access
 // rule; both routers also enforce a session on every route themselves, and the
