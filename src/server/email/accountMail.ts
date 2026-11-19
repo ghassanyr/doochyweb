@@ -125,7 +125,8 @@ export async function sendVerification(userId: string, req: Request): Promise<vo
               username: String(user.username ?? ""),
               expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
             },
-            theme
+            theme,
+            { label: "Verify email", url }
           )
         : verifyEmailEmail({ brand, url, expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES }, theme)
     );

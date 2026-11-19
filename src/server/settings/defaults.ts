@@ -158,7 +158,7 @@ export const DEFAULT_TEMPLATES: TemplateSettings = {
       subject: "Verify your email for {{brand}}",
       body:
         "Confirm your email address for {{brand}}.\n\n" +
-        "Open this link:\n{{url}}\n\n" +
+        "Click this button:\n{{url}}\n\n" +
         "The link expires in {{expiresMinutes}} minutes. " +
         "Opening the link verifies your email and signs you in.",
     },
