@@ -3,6 +3,7 @@ import { LogIn, Play } from "lucide-react";
 import { api, getToken, setToken, type ConnectInput, type ModuleKey } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
 import EconomicNewsPage from "./market/EconomicNewsPage";
+import { HandPicks } from "./market/HandPicks";
 import SessionAnalysisPage from "./market/SessionAnalysisPage";
 import SessionAnalysisHistoryPage from "./market/SessionAnalysisHistoryPage";
 import SignalsPage from "./signals/SignalsPage";
@@ -266,7 +267,10 @@ export default function App() {
 
   const viewModule = (MODULE_VIEWS as readonly string[]).includes(view)
     ? (view as ModuleKey)
-    : view === "analysis-news" || view === "session-analysis" || view === "session-analysis-history"
+    : view === "analysis-news" ||
+        view === "analysis-handpicks" ||
+        view === "session-analysis" ||
+        view === "session-analysis-history"
       ? "analysis"
       : null;
   const viewAccess = viewModule
@@ -466,6 +470,8 @@ export default function App() {
           />
         ) : view === "analysis-news" ? (
           <EconomicNewsPage isAdmin={isAdmin} />
+        ) : view === "analysis-handpicks" ? (
+          <HandPicks isAdmin={isAdmin} />
         ) : view === "session-analysis" ? (
           <SessionAnalysisPage
             isAdmin={isAdmin}

@@ -6,7 +6,6 @@ import { FadeRise } from "../components/motion";
 import { Button, Card } from "../components/ui";
 import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
 import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
-import { HandPicks } from "./HandPicks";
 import { MarketDetail } from "./MarketDetail";
 import { MarketSettingsSheet } from "./MarketSettingsSheet";
 import { SortableGrid } from "./SortableGrid";
@@ -624,7 +623,6 @@ export default function AnalysisPage({
           Oscillator, ROC, Bull/Bear Power, SMA/EMA 5-200). Read from your cTrader account. Not financial advice.
         </p>
 
-        <HandPicks isAdmin={isAdmin} />
       </div>
 
       {detail && (

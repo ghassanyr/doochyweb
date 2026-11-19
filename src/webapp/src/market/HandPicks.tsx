@@ -1,4 +1,4 @@
-// Hand Picks: admin-authored market cards shown under Analysis.
+// Hand Picks: admin-authored market cards shown on their own Analysis page.
 //
 // The cards mirror Session Analysis (symbol, target, pattern, levels and notes)
 // but every field is written by an admin. Reads are public with Analysis; the
@@ -6,7 +6,7 @@
 // enforces the same rule.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { AlertCircle, Pencil, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 
 import {
   handPicksApi,
@@ -17,6 +17,10 @@ import {
 import { AnimatedModal, ConfirmModal } from "../components/Modal";
 import { Button, Card, Flash, Skeleton, inputCls } from "../components/ui";
 import { LevelIcon, MetaRow } from "./SessionAnalysisShared";
+
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const MAX_IMAGE_KB = 500;
+const MAX_IMAGE_BYTES = MAX_IMAGE_KB * 1024;
 
 interface FormValues {
   symbol: string;
@@ -30,7 +34,7 @@ interface FormValues {
   levelType: "" | HandPickLevelType;
   levelValue: string;
   levelNote: string;
-  chartLink: string;
+  imageUrl: string;
 }
 
 function emptyForm(): FormValues {
@@ -46,26 +50,31 @@ function emptyForm(): FormValues {
     levelType: "",
     levelValue: "",
     levelNote: "",
-    chartLink: "",
+    imageUrl: "",
   };
 }
 
-function chartshotUrl(value: string): string | null {
-  const source = value.trim();
-  if (!source) return null;
-  const html = source.match(/<img\b[^>]*\bsrc\s*=\s*["']?([^"'\s>]+)["']?[^>]*>/i);
-  const candidate = (html?.[1] ?? source).trim();
-  const image = candidate.match(/^https:\/\/img\.chartshots\.net\/([A-Za-z0-9_-]{6,64})\.png(?:\?.*)?$/i);
-  if (image) return `https://img.chartshots.net/${image[1]}.png`;
-  const shot = candidate.match(
-    /^https:\/\/(?:chartshots\.spotware\.com|ctrader\.chartshots\.net)\/c\/([A-Za-z0-9_-]{6,64})(?:\?.*)?$/i
-  );
-  return shot ? `https://img.chartshots.net/${shot[1]}.png` : null;
-}
-
-function chartshotPageUrl(url: string): string {
-  const id = url.match(/\/([A-Za-z0-9_-]{6,64})\.png$/)?.[1];
-  return id ? `https://chartshots.spotware.com/c/${id}` : url;
+function readImageFile(
+  file: File | undefined,
+  onValue: (value: string) => void,
+  onError: (message: string | null) => void
+) {
+  if (!file) return;
+  onError(null);
+  if (!IMAGE_TYPES.includes(file.type)) {
+    onError("Image must be a PNG, JPEG, WebP or GIF.");
+    return;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    onError(`Image must be ${MAX_IMAGE_KB} KB or smaller.`);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result === "string") onValue(reader.result);
+  };
+  reader.onerror = () => onError("Could not read that image.");
+  reader.readAsDataURL(file);
 }
 
 function formFromPick(pick: HandPick): FormValues {
@@ -81,11 +90,11 @@ function formFromPick(pick: HandPick): FormValues {
     levelType: pick.levelType ?? "",
     levelValue: pick.levelValue ?? "",
     levelNote: pick.levelNote ?? "",
-    chartLink: pick.chartUrl ? chartshotPageUrl(pick.chartUrl) : "",
+    imageUrl: pick.chartUrl ?? "",
   };
 }
 
-function inputFromForm(form: FormValues, chartUrl: string | null): HandPickInput {
+function inputFromForm(form: FormValues): HandPickInput {
   const nullable = (value: string): string | null => {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
@@ -105,7 +114,7 @@ function inputFromForm(form: FormValues, chartUrl: string | null): HandPickInput
     levelType: form.levelType || null,
     levelValue: nullable(form.levelValue),
     levelNote: nullable(form.levelNote),
-    chartUrl,
+    chartUrl: form.imageUrl.trim() || null,
   };
 }
 
@@ -118,6 +127,7 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
   const [editing, setEditing] = useState<HandPick | null>(null);
   const [pendingDelete, setPendingDelete] = useState<HandPick | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<HandPick | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,10 +184,6 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
       throw err;
     }
   }
-
-  // Public readers should not see an empty section or a red error block at the
-  // bottom of Analysis. Admins always see the section so they can add a pick.
-  if (!isAdmin && picks.length === 0) return null;
 
   return (
     <section className="space-y-3 pt-2">
@@ -244,6 +250,7 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
               pick={pick}
               isAdmin={isAdmin}
               onEdit={openEdit}
+              onView={setViewing}
               onDelete={(entry) => {
                 setDeleteError(null);
                 setPendingDelete(entry);
@@ -286,6 +293,21 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
           setDeleteError(null);
         }}
       />
+
+      <AnimatedModal
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        size="lg"
+        title={`${viewing?.symbol ?? "Hand pick"} image`}
+      >
+        {viewing?.chartUrl && (
+          <img
+            src={viewing.chartUrl}
+            alt={`${viewing.symbol} hand pick image`}
+            className="max-h-[70vh] w-full object-contain"
+          />
+        )}
+      </AnimatedModal>
     </section>
   );
 }
@@ -294,11 +316,13 @@ function HandPickCard({
   pick,
   isAdmin,
   onEdit,
+  onView,
   onDelete,
 }: {
   pick: HandPick;
   isAdmin: boolean;
   onEdit: (pick: HandPick) => void;
+  onView: (pick: HandPick) => void;
   onDelete: (pick: HandPick) => void;
 }) {
   return (
@@ -321,20 +345,20 @@ function HandPickCard({
       </div>
 
       {pick.chartUrl && (
-        <a
-          href={chartshotPageUrl(pick.chartUrl)}
-          target="_blank"
-          rel="noreferrer"
-          className="block border-b border-hairline bg-canvas/50"
-          title="Open chartshot"
+        <button
+          type="button"
+          onClick={() => onView(pick)}
+          className="block w-full border-b border-hairline bg-canvas/50 transition hover:bg-soft"
+          aria-label={`View ${pick.symbol} image`}
+          title="View image"
         >
           <img
             src={pick.chartUrl}
-            alt={`${pick.symbol} chartshot`}
+            alt={`${pick.symbol} hand pick image`}
             className="w-full object-contain"
             loading="lazy"
           />
-        </a>
+        </button>
       )}
 
       <div className="flex flex-1 flex-col gap-3 p-4">
@@ -414,54 +438,12 @@ function HandPickFormModal({
 }) {
   const [form, setForm] = useState<FormValues>(emptyForm);
   const [error, setError] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const importedLink = useRef<string>("");
 
   useEffect(() => {
     if (!open) return;
     setForm(pick ? formFromPick(pick) : emptyForm());
-    importedLink.current = pick?.chartUrl ? chartshotUrl(pick.chartUrl) ?? "" : "";
     setError(null);
   }, [open, pick]);
-
-  useEffect(() => {
-    if (!open) return;
-    const link = form.chartLink.trim();
-    const url = chartshotUrl(link);
-    if (!url) {
-      importedLink.current = "";
-      return;
-    }
-    if (importedLink.current === url) return;
-    let active = true;
-    const timer = setTimeout(() => {
-      setImporting(true);
-      handPicksApi
-        .chartshot(link)
-        .then((info) => {
-          if (!active) return;
-          importedLink.current = url;
-          setForm((current) => ({
-            ...current,
-            symbol: info.symbol ?? current.symbol,
-            interval: info.interval ?? current.interval,
-            identifiedAt: info.identifiedAt ?? current.identifiedAt,
-          }));
-          setError(null);
-        })
-        .catch((err: unknown) => {
-          if (!active) return;
-          setError(err instanceof Error ? err.message : "Could not read the chartshot link.");
-        })
-        .finally(() => {
-          if (active) setImporting(false);
-        });
-    }, 350);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [open, form.chartLink]);
 
   function update<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -470,12 +452,11 @@ function HandPickFormModal({
   async function save() {
     setError(null);
     try {
-      const chartUrl = chartshotUrl(form.chartLink);
-      if (form.chartLink.trim() && !chartUrl) {
-        setError("Paste a valid cTrader chartshot link.");
+      if (!form.imageUrl.trim()) {
+        setError("Upload or paste an image.");
         return;
       }
-      const input = inputFromForm(form, chartUrl);
+      const input = inputFromForm(form);
       const result = pick
         ? await handPicksApi.update(pick.id, input)
         : await handPicksApi.create(input);
@@ -493,22 +474,30 @@ function HandPickFormModal({
       size="lg"
       title={pick ? "Edit hand pick" : "New hand pick"}
     >
-      <div className="space-y-3">
-        <Field
-          label="Chartshot Link"
-          value={form.chartLink}
-          onChange={(value) => update("chartLink", value)}
-          placeholder="https://chartshots.spotware.com/c/6aff343d0d547"
-          hint={
-            importing
-              ? "Reading chartshot..."
-              : "Paste the cTrader chartshot link. Symbol, interval and time fill in automatically."
-          }
+      <div
+        className="space-y-3"
+        onPaste={(event) => {
+          const item = Array.from(event.clipboardData.items).find((entry) =>
+            entry.type.startsWith("image/")
+          );
+          const file = item?.getAsFile();
+          if (!file) return;
+          event.preventDefault();
+          readImageFile(file, (value) => update("imageUrl", value), setError);
+        }}
+      >
+        <ImageField
+          label="Upload or paste image"
+          required
+          value={form.imageUrl}
+          onChange={(value) => update("imageUrl", value)}
+          onError={setError}
         />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field
             label="Symbol"
+            required
             value={form.symbol}
             onChange={(value) => update("symbol", value)}
             placeholder="BTCUSD"
@@ -566,7 +555,7 @@ function HandPickFormModal({
             value={form.levelValue}
             onChange={(value) => update("levelValue", value)}
             placeholder="64251.6914"
-            disabled={!!form.levelType}
+            disabled
           />
         </div>
 
@@ -603,13 +592,73 @@ function HandPickFormModal({
           <Button
             variant="primary"
             onClickAsync={save}
-            disabled={!form.symbol.trim() || importing}
+            disabled={!form.imageUrl.trim() || !form.symbol.trim()}
           >
             {pick ? "Save changes" : "Add pick"}
           </Button>
         </div>
       </div>
     </AnimatedModal>
+  );
+}
+
+function ImageField({
+  label,
+  value,
+  onChange,
+  onError,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onError: (message: string | null) => void;
+  required?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-medium text-fg-muted">
+        {label}
+        {required && <span className="ml-0.5 text-danger">*</span>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-hairline bg-canvas/50 px-3 py-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept={IMAGE_TYPES.join(",")}
+          className="hidden"
+          onChange={(event) => {
+            readImageFile(event.target.files?.[0], onChange, onError);
+            event.target.value = "";
+          }}
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<Upload className="h-3.5 w-3.5" />}
+          onClick={() => inputRef.current?.click()}
+        >
+          Upload image
+        </Button>
+        <span className="text-[11px] text-fg-faint">Or press Ctrl+V to paste an image.</span>
+        {value && (
+          <Button size="sm" variant="ghost" onClick={() => onChange("")}>
+            Clear
+          </Button>
+        )}
+      </div>
+      {value && (
+        <img
+          src={value}
+          alt="Selected hand pick image"
+          className="max-h-48 w-full rounded-lg border border-hairline object-contain"
+        />
+      )}
+      <span className="block text-[11px] text-fg-faint">
+        PNG, JPEG, WebP or GIF up to {MAX_IMAGE_KB} KB.
+      </span>
+    </div>
   );
 }
 
@@ -622,6 +671,7 @@ function Field({
   textarea = false,
   maxLength,
   disabled = false,
+  required = false,
 }: {
   label: string;
   value: string;
@@ -631,11 +681,15 @@ function Field({
   textarea?: boolean;
   maxLength?: number;
   disabled?: boolean;
+  required?: boolean;
 }) {
   const classes = `${inputCls} disabled:cursor-not-allowed disabled:bg-soft disabled:text-fg-faint disabled:opacity-60`;
   return (
     <label className="block space-y-1">
-      <span className="text-xs font-medium text-fg-muted">{label}</span>
+      <span className="text-xs font-medium text-fg-muted">
+        {label}
+        {required && <span className="ml-0.5 text-danger">*</span>}
+      </span>
       {textarea ? (
         <textarea
           className={`${classes} min-h-[88px] resize-y`}

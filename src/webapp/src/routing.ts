@@ -9,6 +9,7 @@ export type ViewKey =
   | "trading"
   | "analysis"
   | "analysis-news"
+  | "analysis-handpicks"
   | "session-analysis"
   | "session-analysis-history"
   | "signals"
@@ -36,6 +37,7 @@ export const VIEW_KEYS: readonly ViewKey[] = [
   "trading",
   "analysis",
   "analysis-news",
+  "analysis-handpicks",
   "session-analysis",
   "session-analysis-history",
   "signals",
@@ -70,6 +72,7 @@ export function pathForView(view: ViewKey): string {
   if (view === "admin-settings") return "/admin/settings";
   if (view === "admin-integrations") return "/admin/integrations";
   if (view === "analysis-news") return "/analysis/news";
+  if (view === "analysis-handpicks") return "/analysis/handpicks";
   if (view === "session-analysis-history") return "/session-analysis/history";
   if (view === "risk") return "/risk-disclosure";
   return `/${view}`;
@@ -86,6 +89,7 @@ export function viewFromPath(pathname: string): ViewKey | null {
   if (path === "/admin/settings") return "admin-settings";
   if (path === "/admin/integrations") return "admin-integrations";
   if (path === "/analysis/news") return "analysis-news";
+  if (path === "/analysis/handpicks") return "analysis-handpicks";
   if (path === "/session-analysis/history") return "session-analysis-history";
   if (path === "/risk-disclosure") return "risk";
   const key = path.slice(1);

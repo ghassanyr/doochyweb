@@ -12,7 +12,6 @@ import {
   createHandPick,
   deleteHandPick,
   listHandPicks,
-  loadChartshotMetadata,
   updateHandPick,
 } from "./store";
 
@@ -26,17 +25,6 @@ function failure(res: Response, err: unknown, fallback: string): void {
   const message = err instanceof Error ? err.message : fallback;
   res.status(500).json({ error: message });
 }
-
-handPicksRouter.get("/chartshot", adminRequired, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const metadata = await loadChartshotMetadata(
-      typeof req.query.url === "string" ? req.query.url : ""
-    );
-    res.json(metadata);
-  } catch (err) {
-    failure(res, err, "failed to read chartshot");
-  }
-});
 
 handPicksRouter.get("/", async (_req: Request, res: Response): Promise<void> => {
   try {

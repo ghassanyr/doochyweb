@@ -3,10 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   HandPickInputError,
-  chartshotId,
-  chartshotUrl,
   cleanHandPickInput,
-  parseChartshotMetadata,
   publicHandPick,
 } from "../src/server/handPicks/store";
 
@@ -64,48 +61,30 @@ describe("hand pick input", () => {
     assert.deepEqual(cleanHandPickInput({ symbol: "BTCUSD", supporting: "one line" }).supporting, []);
   });
 
-  test("extracts a safe image URL from chartshot HTML", () => {
-    const input = cleanHandPickInput({
-      symbol: "NZDCHF",
-      chartHtml: "<img src='https://img.chartshots.net/6aff343d0d547.png'>",
-    });
-    assert.equal(input.chartUrl, "https://img.chartshots.net/6aff343d0d547.png");
+  test("accepts an uploaded image data URL", () => {
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const input = cleanHandPickInput({ symbol: "NZDCHF", chartUrl: dataUrl });
+    assert.equal(input.chartUrl, dataUrl);
   });
 
-  test("accepts a chartshot page URL and rejects other images", () => {
+  test("accepts an https image URL and rejects unsafe values", () => {
     assert.equal(
-      chartshotUrl("https://ctrader.chartshots.net/c/6aff343d0d547"),
-      "https://img.chartshots.net/6aff343d0d547.png"
+      cleanHandPickInput({ symbol: "NZDCHF", chartUrl: "https://example.com/chart.png" }).chartUrl,
+      "https://example.com/chart.png"
     );
-    assert.equal(chartshotUrl("<img src='https://example.com/chart.png'>"), null);
     assert.throws(
-      () => cleanHandPickInput({ symbol: "NZDCHF", chartHtml: "<img src='https://example.com/x.png'>" }),
+      () => cleanHandPickInput({ symbol: "NZDCHF", chartUrl: "javascript:alert(1)" }),
+      HandPickInputError
+    );
+    assert.throws(
+      () => cleanHandPickInput({ symbol: "NZDCHF", chartUrl: "data:text/html;base64,PHNjcmlwdD4=" }),
       HandPickInputError
     );
   });
-});
 
-describe("chartshot metadata", () => {
-  test("extracts the chart id from a link or image html", () => {
-    assert.equal(chartshotId("https://chartshots.spotware.com/c/6aff343d0d547"), "6aff343d0d547");
-    assert.equal(chartshotId("<img src='https://img.chartshots.net/6aff343d0d547.png'>"), "6aff343d0d547");
-    assert.equal(chartshotId("https://example.com/c/6aff343d0d547"), null);
-  });
-
-  test("reads symbol interval time and image html from a chartshot page", () => {
-    const html = `<html><body>
-      <h1 class="h2 my-0">Chartshot: NZDCHF, h4</h1>
-      <span>17:39:09 (UTC+00:00) on Nov 19th, 2026</span>
-      <img src="https://img.chartshots.net/6aff343d0d547.png" alt="Screenshot image">
-    </body></html>`;
-    assert.deepEqual(parseChartshotMetadata(html, "6aff343d0d547"), {
-      id: "6aff343d0d547",
-      chartUrl: "https://img.chartshots.net/6aff343d0d547.png",
-      chartHtml: "<img src='https://img.chartshots.net/6aff343d0d547.png'>",
-      symbol: "NZDCHF",
-      interval: "4 hour",
-      identifiedAt: "17:39:09 (UTC+00:00) on Nov 19th, 2026",
-    });
+  test("rejects an oversized image data URL", () => {
+    const dataUrl = `data:image/png;base64,${"a".repeat(700_000)}`;
+    assert.throws(() => cleanHandPickInput({ symbol: "NZDCHF", chartUrl: dataUrl }), HandPickInputError);
   });
 });
 
@@ -153,10 +132,13 @@ describe("public hand pick", () => {
     assert.equal(pick.levelType, null);
   });
 
-  test("keeps only valid chartshot URLs", () => {
-    const valid = publicHandPick({ symbol: "NZDCHF", chartUrl: "https://img.chartshots.net/6aff343d0d547.png" });
-    const invalid = publicHandPick({ symbol: "NZDCHF", chartUrl: "https://example.com/x.png" });
-    assert.equal(valid.chartUrl, "https://img.chartshots.net/6aff343d0d547.png");
+  test("keeps only valid image URLs", () => {
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const valid = publicHandPick({ symbol: "NZDCHF", chartUrl: dataUrl });
+    const legacy = publicHandPick({ symbol: "NZDCHF", chartUrl: "https://img.chartshots.net/6aff343d0d547.png" });
+    const invalid = publicHandPick({ symbol: "NZDCHF", chartUrl: "javascript:alert(1)" });
+    assert.equal(valid.chartUrl, dataUrl);
+    assert.equal(legacy.chartUrl, "https://img.chartshots.net/6aff343d0d547.png");
     assert.equal(invalid.chartUrl, null);
   });
 });
