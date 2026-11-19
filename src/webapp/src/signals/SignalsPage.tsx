@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Plus, Search } from "lucide-react";
+import { ArrowDownToLine, Bell, Plus, Search } from "lucide-react";
 
 import { marketApi, signalsApi, telegramApi, type TelegramStatus } from "../api";
 import { AnimatedModal } from "../components/Modal";
@@ -14,13 +14,14 @@ import TelegramNotifications from "../telegram/TelegramNotifications";
 import { detectedTimeZone, timeZoneLabel } from "../time";
 import { DeleteSignalModal } from "./DeleteSignalModal";
 import { InvalidateModal } from "./InvalidateModal";
+import { OpenOrderPickerModal } from "./OpenOrderPickerModal";
 import { PostUpdateModal } from "./PostUpdateModal";
 import PerformancePanel from "./PerformancePanel";
 import { SignalCard, SignalCardSkeleton } from "./SignalCard";
 import { SignalDetailModal } from "./SignalDetailModal";
 import { SignalFormModal } from "./SignalFormModal";
 import { signalShareText } from "./signalFormat";
-import type { PricePoint, Signal, SignalListResponse, SignalStats } from "./types";
+import type { PricePoint, Signal, SignalDraft, SignalListResponse, SignalStats } from "./types";
 
 const PAGE = 25;
 const POLL_MS = 30_000;
@@ -64,6 +65,8 @@ export default function SignalsPage({
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Signal | null>(null);
+  const [initialDraft, setInitialDraft] = useState<SignalDraft | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [updateTarget, setUpdateTarget] = useState<Signal | null>(null);
   const [invalidateTarget, setInvalidateTarget] = useState<Signal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Signal | null>(null);
@@ -208,6 +211,31 @@ export default function SignalsPage({
     void load();
   };
 
+  const openManual = useCallback(() => {
+    setEditing(null);
+    setInitialDraft(null);
+    setFormOpen(true);
+  }, []);
+
+  const openEdit = useCallback((signal: Signal) => {
+    setEditing(signal);
+    setInitialDraft(null);
+    setFormOpen(true);
+  }, []);
+
+  const closeForm = useCallback(() => {
+    setFormOpen(false);
+    setEditing(null);
+    setInitialDraft(null);
+  }, []);
+
+  const pickDraft = useCallback((draft: SignalDraft) => {
+    setEditing(null);
+    setInitialDraft(draft);
+    setPickerOpen(false);
+    setFormOpen(true);
+  }, []);
+
   const counts = data?.counts;
   const rows = data?.signals ?? [];
   const pages = Math.ceil((data?.total ?? 0) / PAGE);
@@ -275,17 +303,24 @@ export default function SignalsPage({
                 ))}
               </div>
               {canManageSignals && (
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={<Plus className="h-3.5 w-3.5" />}
-                  onClick={() => {
-                    setEditing(null);
-                    setFormOpen(true);
-                  }}
-                >
-                  New signal
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<ArrowDownToLine className="h-3.5 w-3.5" />}
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    From open orders
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    icon={<Plus className="h-3.5 w-3.5" />}
+                    onClick={openManual}
+                  >
+                    New signal
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -338,10 +373,7 @@ export default function SignalsPage({
                 price={prices[signal.symbol] ?? null}
                 canManage={canManageSignals}
                 onOpen={openDetail}
-                onEdit={(s) => {
-                  setEditing(s);
-                  setFormOpen(true);
-                }}
+                onEdit={openEdit}
                 onPostUpdate={setUpdateTarget}
                 onInvalidate={setInvalidateTarget}
                 onRestore={(s) => {
@@ -385,17 +417,26 @@ export default function SignalsPage({
       </div>
 
       {canManageSignals && (
-        <SignalFormModal
-          open={formOpen}
-          signal={editing}
-          catalog={catalog}
-          timeframes={timeframes}
-          onClose={() => {
-            setFormOpen(false);
-            setEditing(null);
-          }}
-          onSaved={saved}
-        />
+        <>
+          <SignalFormModal
+            open={formOpen}
+            signal={editing}
+            initial={initialDraft}
+            catalog={catalog}
+            timeframes={timeframes}
+            onClose={closeForm}
+            onSaved={saved}
+          />
+          <OpenOrderPickerModal
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            onPick={pickDraft}
+            onManual={() => {
+              setPickerOpen(false);
+              openManual();
+            }}
+          />
+        </>
       )}
 
       <PostUpdateModal signal={updateTarget} onClose={() => setUpdateTarget(null)} onSaved={saved} />

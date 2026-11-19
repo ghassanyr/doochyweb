@@ -29,6 +29,7 @@ import {
   signalShareText,
   statusTimestamp,
 } from "../src/webapp/src/signals/signalFormat";
+import { draftFromOrder, draftFromPosition } from "../src/webapp/src/signals/openTrades";
 import type { Signal } from "../src/webapp/src/signals/types";
 
 const base: Signal = {
@@ -534,5 +535,59 @@ describe("signal presentation", () => {
     for (const [preset, expected] of cases) {
       assert.equal(expiryIsoForPreset(preset, now), expected);
     }
+  });
+});
+
+describe("signal drafts from open trades", () => {
+  test("maps a filled buy position to a buy draft", () => {
+    assert.deepEqual(
+      draftFromPosition({
+        symbol: "XAUUSD",
+        side: "BUY",
+        entryPrice: 2400,
+        stopLoss: 2380,
+        takeProfit: 2450,
+      }),
+      {
+        symbol: "XAUUSD",
+        direction: "buy",
+        entry: 2400,
+        entryMax: null,
+        target: 2450,
+        stop: 2380,
+      }
+    );
+  });
+
+  test("maps a pending sell order to a sell draft", () => {
+    assert.deepEqual(
+      draftFromOrder({
+        symbol: "EURUSD",
+        side: "SELL",
+        price: 1.1,
+        stopLoss: 1.105,
+        takeProfit: 1.09,
+      }),
+      {
+        symbol: "EURUSD",
+        direction: "sell",
+        entry: 1.1,
+        entryMax: null,
+        target: 1.09,
+        stop: 1.105,
+      }
+    );
+  });
+
+  test("leaves missing stop and target for the admin to fill", () => {
+    const draft = draftFromOrder({
+      symbol: "GBPUSD",
+      side: "BUY",
+      price: 1.27,
+      stopLoss: null,
+      takeProfit: null,
+    });
+    assert.equal(draft.stop, null);
+    assert.equal(draft.target, null);
   });
 });
