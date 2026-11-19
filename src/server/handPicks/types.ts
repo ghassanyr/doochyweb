@@ -28,3 +28,13 @@ export interface HandPick extends HandPickInput {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Metadata read from a cTrader chartshot page. */
+export interface HandPickChartshot {
+  id: string;
+  chartUrl: string;
+  chartHtml: string;
+  symbol: string | null;
+  interval: string | null;
+  identifiedAt: string | null;
+}

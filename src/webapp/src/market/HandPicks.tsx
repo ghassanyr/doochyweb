@@ -5,7 +5,7 @@
 // create, edit and delete controls only render for an admin and the server
 // enforces the same rule.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 
 import {
@@ -30,7 +30,7 @@ interface FormValues {
   levelType: "" | HandPickLevelType;
   levelValue: string;
   levelNote: string;
-  chartHtml: string;
+  chartLink: string;
 }
 
 function emptyForm(): FormValues {
@@ -46,7 +46,7 @@ function emptyForm(): FormValues {
     levelType: "",
     levelValue: "",
     levelNote: "",
-    chartHtml: "",
+    chartLink: "",
   };
 }
 
@@ -81,7 +81,7 @@ function formFromPick(pick: HandPick): FormValues {
     levelType: pick.levelType ?? "",
     levelValue: pick.levelValue ?? "",
     levelNote: pick.levelNote ?? "",
-    chartHtml: pick.chartUrl ? `<img src="${pick.chartUrl}">` : "",
+    chartLink: pick.chartUrl ? chartshotPageUrl(pick.chartUrl) : "",
   };
 }
 
@@ -414,12 +414,54 @@ function HandPickFormModal({
 }) {
   const [form, setForm] = useState<FormValues>(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importedLink = useRef<string>("");
 
   useEffect(() => {
     if (!open) return;
     setForm(pick ? formFromPick(pick) : emptyForm());
+    importedLink.current = pick?.chartUrl ? chartshotUrl(pick.chartUrl) ?? "" : "";
     setError(null);
   }, [open, pick]);
+
+  useEffect(() => {
+    if (!open) return;
+    const link = form.chartLink.trim();
+    const url = chartshotUrl(link);
+    if (!url) {
+      importedLink.current = "";
+      return;
+    }
+    if (importedLink.current === url) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      setImporting(true);
+      handPicksApi
+        .chartshot(link)
+        .then((info) => {
+          if (!active) return;
+          importedLink.current = url;
+          setForm((current) => ({
+            ...current,
+            symbol: info.symbol ?? current.symbol,
+            interval: info.interval ?? current.interval,
+            identifiedAt: info.identifiedAt ?? current.identifiedAt,
+          }));
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          if (!active) return;
+          setError(err instanceof Error ? err.message : "Could not read the chartshot link.");
+        })
+        .finally(() => {
+          if (active) setImporting(false);
+        });
+    }, 350);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [open, form.chartLink]);
 
   function update<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -428,9 +470,9 @@ function HandPickFormModal({
   async function save() {
     setError(null);
     try {
-      const chartUrl = chartshotUrl(form.chartHtml);
-      if (form.chartHtml.trim() && !chartUrl) {
-        setError("Paste a valid cTrader chartshot HTML code.");
+      const chartUrl = chartshotUrl(form.chartLink);
+      if (form.chartLink.trim() && !chartUrl) {
+        setError("Paste a valid cTrader chartshot link.");
         return;
       }
       const input = inputFromForm(form, chartUrl);
@@ -450,9 +492,20 @@ function HandPickFormModal({
       onClose={onClose}
       size="lg"
       title={pick ? "Edit hand pick" : "New hand pick"}
-      subtitle="Shown in the Hand Picks section on Analysis as soon as it is saved."
     >
       <div className="space-y-3">
+        <Field
+          label="Chartshot Link"
+          value={form.chartLink}
+          onChange={(value) => update("chartLink", value)}
+          placeholder="https://chartshots.spotware.com/c/6aff343d0d547"
+          hint={
+            importing
+              ? "Reading chartshot..."
+              : "Paste the cTrader chartshot link. Symbol, interval and time fill in automatically."
+          }
+        />
+
         <div className="grid gap-3 sm:grid-cols-2">
           <Field
             label="Symbol"
@@ -489,7 +542,7 @@ function HandPickFormModal({
             label="Identified"
             value={form.identifiedAt}
             onChange={(value) => update("identifiedAt", value)}
-            placeholder="17-Nov-06:00"
+            placeholder="17:39:09 (UTC+00:00) on Nov 19th, 2026"
           />
         </div>
 
@@ -513,6 +566,7 @@ function HandPickFormModal({
             value={form.levelValue}
             onChange={(value) => update("levelValue", value)}
             placeholder="64251.6914"
+            disabled={!!form.levelType}
           />
         </div>
 
@@ -521,15 +575,6 @@ function HandPickFormModal({
           value={form.levelNote}
           onChange={(value) => update("levelNote", value)}
           placeholder="Latest turning point"
-        />
-
-        <Field
-          label="Chartshot HTML"
-          value={form.chartHtml}
-          onChange={(value) => update("chartHtml", value)}
-          placeholder="<img src='https://img.chartshots.net/6aff343d0d547.png'>"
-          hint="Paste the HTML code from cTrader. Only cTrader chartshot images are shown."
-          textarea
         />
 
         <Field
@@ -558,7 +603,7 @@ function HandPickFormModal({
           <Button
             variant="primary"
             onClickAsync={save}
-            disabled={!form.symbol.trim()}
+            disabled={!form.symbol.trim() || importing}
           >
             {pick ? "Save changes" : "Add pick"}
           </Button>
@@ -576,6 +621,7 @@ function Field({
   hint,
   textarea = false,
   maxLength,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -584,25 +630,29 @@ function Field({
   hint?: string;
   textarea?: boolean;
   maxLength?: number;
+  disabled?: boolean;
 }) {
+  const classes = `${inputCls} disabled:cursor-not-allowed disabled:bg-soft disabled:text-fg-faint disabled:opacity-60`;
   return (
     <label className="block space-y-1">
       <span className="text-xs font-medium text-fg-muted">{label}</span>
       {textarea ? (
         <textarea
-          className={`${inputCls} min-h-[88px] resize-y`}
+          className={`${classes} min-h-[88px] resize-y`}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           maxLength={maxLength}
+          disabled={disabled}
         />
       ) : (
         <input
-          className={inputCls}
+          className={classes}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           maxLength={maxLength}
+          disabled={disabled}
         />
       )}
       {hint && <span className="block text-[11px] text-fg-faint">{hint}</span>}

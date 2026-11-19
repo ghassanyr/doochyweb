@@ -3,8 +3,10 @@ import { describe, test } from "node:test";
 
 import {
   HandPickInputError,
+  chartshotId,
   chartshotUrl,
   cleanHandPickInput,
+  parseChartshotMetadata,
   publicHandPick,
 } from "../src/server/handPicks/store";
 
@@ -80,6 +82,30 @@ describe("hand pick input", () => {
       () => cleanHandPickInput({ symbol: "NZDCHF", chartHtml: "<img src='https://example.com/x.png'>" }),
       HandPickInputError
     );
+  });
+});
+
+describe("chartshot metadata", () => {
+  test("extracts the chart id from a link or image html", () => {
+    assert.equal(chartshotId("https://chartshots.spotware.com/c/6aff343d0d547"), "6aff343d0d547");
+    assert.equal(chartshotId("<img src='https://img.chartshots.net/6aff343d0d547.png'>"), "6aff343d0d547");
+    assert.equal(chartshotId("https://example.com/c/6aff343d0d547"), null);
+  });
+
+  test("reads symbol interval time and image html from a chartshot page", () => {
+    const html = `<html><body>
+      <h1 class="h2 my-0">Chartshot: NZDCHF, h4</h1>
+      <span>17:39:09 (UTC+00:00) on Nov 19th, 2026</span>
+      <img src="https://img.chartshots.net/6aff343d0d547.png" alt="Screenshot image">
+    </body></html>`;
+    assert.deepEqual(parseChartshotMetadata(html, "6aff343d0d547"), {
+      id: "6aff343d0d547",
+      chartUrl: "https://img.chartshots.net/6aff343d0d547.png",
+      chartHtml: "<img src='https://img.chartshots.net/6aff343d0d547.png'>",
+      symbol: "NZDCHF",
+      interval: "4 hour",
+      identifiedAt: "17:39:09 (UTC+00:00) on Nov 19th, 2026",
+    });
   });
 });
 

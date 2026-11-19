@@ -6,7 +6,12 @@
 
 import mongoose from "mongoose";
 
-import type { HandPick, HandPickInput, HandPickLevelType } from "./types";
+import type {
+  HandPick,
+  HandPickChartshot,
+  HandPickInput,
+  HandPickLevelType,
+} from "./types";
 
 const pickSchema = new mongoose.Schema(
   {
@@ -50,7 +55,7 @@ function levelType(value: unknown): HandPickLevelType | null {
   return value === "support" || value === "resistance" ? value : null;
 }
 
-export function chartshotUrl(value: unknown): string | null {
+export function chartshotId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const source = value.trim();
   if (!source) return null;
@@ -59,14 +64,83 @@ export function chartshotUrl(value: unknown): string | null {
   const image = candidate.match(
     new RegExp(`^https://img\\.chartshots\\.net/(${CHART_ID})\\.png(?:\\?.*)?$`, "i")
   );
-  if (image) return `https://img.chartshots.net/${image[1]}.png`;
+  if (image) return image[1];
   const shot = candidate.match(
     new RegExp(
       `^https://(?:chartshots\\.spotware\\.com|ctrader\\.chartshots\\.net)/c/(${CHART_ID})(?:\\?.*)?$`,
       "i"
     )
   );
-  return shot ? `https://img.chartshots.net/${shot[1]}.png` : null;
+  return shot ? shot[1] : null;
+}
+
+export function chartshotUrl(value: unknown): string | null {
+  const id = chartshotId(value);
+  return id ? `https://img.chartshots.net/${id}.png` : null;
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'");
+}
+
+function chartshotInterval(value: string): string | null {
+  const decoded = decodeHtml(value).trim();
+  const normalized = decoded.toLowerCase().replace(/\s+/g, "");
+  const known: Record<string, string> = {
+    m1: "1 minute",
+    m5: "5 minute",
+    m15: "15 minute",
+    m30: "30 minute",
+    h1: "1 hour",
+    h2: "2 hour",
+    h3: "3 hour",
+    h4: "4 hour",
+    h6: "6 hour",
+    h8: "8 hour",
+    h12: "12 hour",
+    d1: "1 day",
+    w1: "1 week",
+    mn1: "1 month",
+  };
+  if (known[normalized]) return known[normalized];
+  const match = normalized.match(/^(\d+)(m|h|d|w)$/);
+  if (!match) return decoded || null;
+  const unit = match[2] === "m" ? "minute" : match[2] === "h" ? "hour" : match[2] === "d" ? "day" : "week";
+  return `${match[1]} ${unit}${match[1] === "1" ? "" : "s"}`;
+}
+
+export function parseChartshotMetadata(html: string, id: string): HandPickChartshot {
+  const heading = html.match(/<h1\b[^>]*>\s*Chartshot:\s*([^,<]+?)\s*,\s*([^<]+?)\s*<\/h1>/i);
+  const time = html.match(
+    /<span\b[^>]*>\s*(\d{1,2}:\d{2}:\d{2}\s*\([^)]+\)\s*on\s*[^<]+?)\s*<\/span>/i
+  );
+  const chartUrl = `https://img.chartshots.net/${id}.png`;
+  return {
+    id,
+    chartUrl,
+    chartHtml: `<img src='${chartUrl}'>`,
+    symbol: heading ? decodeHtml(heading[1]).trim() || null : null,
+    interval: heading ? chartshotInterval(heading[2]) : null,
+    identifiedAt: time ? decodeHtml(time[1]).replace(/\s+/g, " ").trim() : null,
+  };
+}
+
+export async function loadChartshotMetadata(value: unknown): Promise<HandPickChartshot> {
+  const id = chartshotId(value);
+  if (!id) throw new HandPickInputError("Paste a valid cTrader chartshot link.");
+  const response = await fetch(`https://chartshots.spotware.com/c/${id}`, {
+    signal: AbortSignal.timeout(10_000),
+    headers: { "user-agent": "DoochyWeb/1.0" },
+  });
+  if (!response.ok) throw new Error("The chartshot link could not be read.");
+  return parseChartshotMetadata(await response.text(), id);
 }
 
 /**

@@ -1947,8 +1947,22 @@ export interface HandPick extends HandPickInput {
   updatedAt: string;
 }
 
+export interface HandPickChartshot {
+  id: string;
+  chartUrl: string;
+  chartHtml: string;
+  symbol: string | null;
+  interval: string | null;
+  identifiedAt: string | null;
+}
+
 export const handPicksApi = {
   list: () => request<{ picks: HandPick[] }>("/api/hand-picks"),
+
+  chartshot: (url: string) =>
+    request<HandPickChartshot>(
+      `/api/hand-picks/chartshot?url=${encodeURIComponent(url)}`
+    ),
 
   create: (input: HandPickInput) =>
     request<{ pick: HandPick }>("/api/hand-picks", { method: "POST", body: input }),

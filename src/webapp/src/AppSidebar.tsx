@@ -71,8 +71,8 @@ const ADMIN_SUBNAV: { view: ViewKey; label: string }[] = [
 
 const ANALYSIS_SUBNAV: { view: ViewKey; label: string }[] = [
   { view: "analysis", label: "Overview" },
+  { view: "session-analysis", label: "Session analysis" },
   { view: "analysis-news", label: "News" },
-  { view: "session-analysis", label: "Session Analysis" },
 ];
 
 export interface AppSidebarProps {
