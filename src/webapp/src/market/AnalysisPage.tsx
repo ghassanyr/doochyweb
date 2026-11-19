@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, AlertTriangle, FileText, LogIn, Newspaper, RefreshCw, Settings2 } from "lucide-react";
 
-import { marketApi, type MarketWatchlist, type WatchlistMode } from "../api";
+import { economicNewsApi, marketApi, type MarketWatchlist, type WatchlistMode } from "../api";
 import { FadeRise } from "../components/motion";
 import { Button, Card } from "../components/ui";
 import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
@@ -52,6 +52,7 @@ export default function AnalysisPage({
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("all");
   const [mode, setMode] = useState<WatchlistMode>("site");
   const [limit, setLimit] = useState(10);
+  const [newsAlert, setNewsAlert] = useState(false);
 
   const [detail, setDetail] = useState<{ symbol: string; timeframe: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -199,6 +200,31 @@ export default function AnalysisPage({
       .catch(() => {});
     return () => {
       alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const checkNews = () => {
+      economicNewsApi
+        .all()
+        .then((result) => {
+          if (!alive) return;
+          const now = Date.now();
+          setNewsAlert(
+            result.events.some((event) => {
+              const startsAt = new Date(event.startsAt).getTime();
+              return Number.isFinite(startsAt) && startsAt >= now - 30 * 60_000;
+            })
+          );
+        })
+        .catch(() => {});
+    };
+    void checkNews();
+    const poll = window.setInterval(checkNews, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(poll);
     };
   }, []);
 
@@ -462,14 +488,24 @@ export default function AnalysisPage({
             </div>
 
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Newspaper className="h-3.5 w-3.5" />}
-                onClick={onOpenNews}
-              >
-                News
-              </Button>
+              <div className="relative inline-flex">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Newspaper className="h-3.5 w-3.5" />}
+                  onClick={onOpenNews}
+                  aria-label={newsAlert ? "News, high impact event available" : "News"}
+                >
+                  News
+                </Button>
+                {newsAlert && (
+                  <span
+                    className="pointer-events-none absolute -right-1 -top-1 h-2.5 w-2.5 animate-pulse rounded-full bg-danger ring-2 ring-canvas"
+                    title="High impact news"
+                    aria-hidden="true"
+                  />
+                )}
+              </div>
               <Button
                 size="sm"
                 variant="secondary"

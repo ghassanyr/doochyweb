@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { conditionMet, validateAlertInput } from "../src/server/alerts/validate";
-import { buildAlertTriggeredMessage } from "../src/server/telegram/messages";
+import { appendAlertNote, buildAlertTriggeredMessage } from "../src/server/telegram/messages";
 import type { AlertView } from "../src/server/alerts/types";
 
 function alert(overrides: Partial<AlertView> = {}): AlertView {
@@ -111,5 +111,20 @@ describe("buildAlertTriggeredMessage", () => {
 
   test("contains no em dash", () => {
     assert.equal(buildAlertTriggeredMessage(alert()).includes("\u2014"), false);
+  });
+});
+
+describe("appendAlertNote", () => {
+  test("adds an escaped note to templated messages", () => {
+    const text = appendAlertNote(
+      "Alert triggered EURUSD",
+      alert({ note: "<b>range break</b>" })
+    );
+    assert.ok(text.includes("Note: &lt;b&gt;range break&lt;/b&gt;"));
+    assert.ok(!text.includes("<b>"));
+  });
+
+  test("leaves a message unchanged when there is no note", () => {
+    assert.equal(appendAlertNote("Alert triggered EURUSD", alert()), "Alert triggered EURUSD");
   });
 });

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   HandPickInputError,
+  chartshotUrl,
   cleanHandPickInput,
   publicHandPick,
 } from "../src/server/handPicks/store";
@@ -60,6 +61,26 @@ describe("hand pick input", () => {
   test("ignores a supporting value that is not an array", () => {
     assert.deepEqual(cleanHandPickInput({ symbol: "BTCUSD", supporting: "one line" }).supporting, []);
   });
+
+  test("extracts a safe image URL from chartshot HTML", () => {
+    const input = cleanHandPickInput({
+      symbol: "NZDCHF",
+      chartHtml: "<img src='https://img.chartshots.net/6aff343d0d547.png'>",
+    });
+    assert.equal(input.chartUrl, "https://img.chartshots.net/6aff343d0d547.png");
+  });
+
+  test("accepts a chartshot page URL and rejects other images", () => {
+    assert.equal(
+      chartshotUrl("https://ctrader.chartshots.net/c/6aff343d0d547"),
+      "https://img.chartshots.net/6aff343d0d547.png"
+    );
+    assert.equal(chartshotUrl("<img src='https://example.com/chart.png'>"), null);
+    assert.throws(
+      () => cleanHandPickInput({ symbol: "NZDCHF", chartHtml: "<img src='https://example.com/x.png'>" }),
+      HandPickInputError
+    );
+  });
 });
 
 describe("public hand pick", () => {
@@ -95,6 +116,7 @@ describe("public hand pick", () => {
       levelType: "support",
       levelValue: "64251.6914",
       levelNote: null,
+      chartUrl: null,
       createdAt: "2026-11-18T09:30:00.000Z",
       updatedAt: "2026-11-18T09:30:00.000Z",
     });
@@ -103,5 +125,12 @@ describe("public hand pick", () => {
   test("drops an unknown level type", () => {
     const pick = publicHandPick({ symbol: "BTCUSD", levelType: "pivot" });
     assert.equal(pick.levelType, null);
+  });
+
+  test("keeps only valid chartshot URLs", () => {
+    const valid = publicHandPick({ symbol: "NZDCHF", chartUrl: "https://img.chartshots.net/6aff343d0d547.png" });
+    const invalid = publicHandPick({ symbol: "NZDCHF", chartUrl: "https://example.com/x.png" });
+    assert.equal(valid.chartUrl, "https://img.chartshots.net/6aff343d0d547.png");
+    assert.equal(invalid.chartUrl, null);
   });
 });

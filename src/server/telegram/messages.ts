@@ -157,6 +157,12 @@ export function buildAlertTriggeredMessage(alert: AlertView): string {
   return lines.join("\n");
 }
 
+export function appendAlertNote(message: string, alert: AlertView): string {
+  const note = truncate(alert.note ?? "", 200);
+  if (!note) return message;
+  return `${message}\nNote: ${escapeHtml(note)}`;
+}
+
 export function buildTestMessage(brandName = DEFAULT_BRANDING.name): string {
   return `✅ <b>${escapeHtml(brandName)} test</b>\nTelegram notifications are working.`;
 }

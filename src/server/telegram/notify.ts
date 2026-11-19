@@ -14,6 +14,7 @@ import { TelegramApiError, sendMessage } from "./client";
 import { loadTelegramConfig, type TelegramConfig } from "./config";
 import {
   alertTemplateVars,
+  appendAlertNote,
   buildAlertTriggeredMessage,
   buildPublishedMessage,
   buildTestMessage,
@@ -124,13 +125,16 @@ export async function enqueueAlertTriggered(
   if (!link || !(link as any).notificationsEnabled) return 0;
 
   const settings = await getSiteSettings();
-  const template = settings.templates.telegram.alertTriggered;
-  const alertText = template.trim()
+  const template = settings.templates.telegram.alertTriggered.trim();
+  let alertText = template
     ? renderTelegramTemplate(template, {
         ...alertTemplateVars(alert),
         brand: config.brandName,
       })
     : buildAlertTriggeredMessage(alert);
+  if (template && !/\{\{\s*note\s*\}\}/.test(template)) {
+    alertText = appendAlertNote(alertText, alert);
+  }
   const result = await TelegramDelivery.updateOne(
     { signalId: null, event: `alert:${alert.id}`, chatId: link.chatId },
     {

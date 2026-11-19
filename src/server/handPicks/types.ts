@@ -19,6 +19,7 @@ export interface HandPickInput {
   levelType: HandPickLevelType | null;
   levelValue: string | null;
   levelNote: string | null;
+  chartUrl: string | null;
 }
 
 /** What the browser receives. */

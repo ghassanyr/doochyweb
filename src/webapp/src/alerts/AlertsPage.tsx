@@ -7,7 +7,7 @@
 // creating an alert starts from a symbol the site already follows.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BellRing, Pause, Play, Plus, Search, Trash2 } from "lucide-react";
+import { BellRing, Check, Pause, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
 
 import { alertsApi, marketApi, signalsApi, type AlertCounts, type AlertView } from "../api";
 import { FadeRise } from "../components/motion";
@@ -29,6 +29,9 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
 
   const [symbol, setSymbol] = useState("");
   const [condition, setCondition] = useState<"above" | "below">("above");
@@ -180,6 +183,48 @@ export default function AlertsPage() {
       }
     },
     [load]
+  );
+
+  const startNoteEdit = useCallback((alert: AlertView) => {
+    setEditingNoteId(alert.id);
+    setNoteDraft(alert.note ?? "");
+    setNotice(null);
+  }, []);
+
+  const cancelNoteEdit = useCallback(() => {
+    setEditingNoteId(null);
+    setNoteDraft("");
+  }, []);
+
+  const saveNote = useCallback(
+    async (alert: AlertView) => {
+      if (savingNoteId) return;
+      const next = noteDraft.trim();
+      if (next === (alert.note ?? "")) {
+        cancelNoteEdit();
+        return;
+      }
+      setSavingNoteId(alert.id);
+      try {
+        await alertsApi.update(alert.id, {
+          symbol: alert.symbol,
+          condition: alert.condition,
+          level: alert.level,
+          note: next,
+          status: alert.status,
+        });
+        setAlerts((current) =>
+          current.map((item) => (item.id === alert.id ? { ...item, note: next } : item))
+        );
+        cancelNoteEdit();
+        setNotice({ tone: "success", text: "Note saved." });
+      } catch {
+        setNotice({ tone: "danger", text: "Could not save that note." });
+      } finally {
+        setSavingNoteId(null);
+      }
+    },
+    [cancelNoteEdit, noteDraft, savingNoteId]
   );
 
   const remove = useCallback(
@@ -411,7 +456,59 @@ export default function AlertsPage() {
                           <span className="ml-1 text-fg-faint">@ {alert.triggeredPrice}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-fg-muted">{alert.note || "-"}</td>
+                      <td className="px-3 py-2 text-fg-muted">
+                        {editingNoteId === alert.id ? (
+                          <div className="flex min-w-[180px] items-center gap-1">
+                            <input
+                              autoFocus
+                              className={inputCls + " py-1 text-[11px]"}
+                              value={noteDraft}
+                              maxLength={500}
+                              aria-label={`Note for ${alert.symbol} alert`}
+                              onChange={(event) => setNoteDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  void saveNote(alert);
+                                } else if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelNoteEdit();
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void saveNote(alert)}
+                              disabled={savingNoteId === alert.id}
+                              aria-label={`Save note for ${alert.symbol} alert`}
+                              title="Save note"
+                              className="rounded-md p-1 text-fg-faint transition hover:bg-surface-hover hover:text-accent"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelNoteEdit}
+                              aria-label={`Cancel note edit for ${alert.symbol} alert`}
+                              title="Cancel"
+                              className="rounded-md p-1 text-fg-faint transition hover:bg-surface-hover hover:text-fg"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startNoteEdit(alert)}
+                            aria-label={`Edit note for ${alert.symbol} alert`}
+                            title="Click to edit note"
+                            className="flex max-w-[240px] items-center gap-1.5 text-left transition hover:text-fg"
+                          >
+                            <span className="truncate">{alert.note || "Add note"}</span>
+                            <Pencil className="h-3 w-3 shrink-0 text-fg-faint" />
+                          </button>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-1">
                           <button

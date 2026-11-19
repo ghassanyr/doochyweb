@@ -21,6 +21,7 @@ const pickSchema = new mongoose.Schema(
     levelType: { type: String, default: null },
     levelValue: { type: String, default: null },
     levelNote: { type: String, default: null },
+    chartUrl: { type: String, default: null },
   },
   { timestamps: true }
 );
@@ -37,6 +38,7 @@ const MAX_REASON = 2000;
 const MAX_NOTE = 300;
 const MAX_SUPPORTING_LINES = 20;
 const MAX_SUPPORTING_LINE = 400;
+const CHART_ID = "[A-Za-z0-9_-]{6,64}";
 
 function text(value: unknown, limit: number): string | null {
   if (typeof value !== "string") return null;
@@ -46,6 +48,25 @@ function text(value: unknown, limit: number): string | null {
 
 function levelType(value: unknown): HandPickLevelType | null {
   return value === "support" || value === "resistance" ? value : null;
+}
+
+export function chartshotUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const source = value.trim();
+  if (!source) return null;
+  const html = source.match(/<img\b[^>]*\bsrc\s*=\s*["']?([^"'\s>]+)["']?[^>]*>/i);
+  const candidate = (html?.[1] ?? source).trim();
+  const image = candidate.match(
+    new RegExp(`^https://img\\.chartshots\\.net/(${CHART_ID})\\.png(?:\\?.*)?$`, "i")
+  );
+  if (image) return `https://img.chartshots.net/${image[1]}.png`;
+  const shot = candidate.match(
+    new RegExp(
+      `^https://(?:chartshots\\.spotware\\.com|ctrader\\.chartshots\\.net)/c/(${CHART_ID})(?:\\?.*)?$`,
+      "i"
+    )
+  );
+  return shot ? `https://img.chartshots.net/${shot[1]}.png` : null;
 }
 
 /**
@@ -66,6 +87,12 @@ export function cleanHandPickInput(body: unknown): HandPickInput {
         .slice(0, MAX_SUPPORTING_LINES)
     : [];
 
+  const chartSource = value.chartHtml ?? value.chartUrl;
+  const chartUrlValue = chartshotUrl(chartSource);
+  if (typeof chartSource === "string" && chartSource.trim() && !chartUrlValue) {
+    throw new HandPickInputError("Chartshot HTML must point to a cTrader chartshot image.");
+  }
+
   return {
     symbol,
     pattern: text(value.pattern, MAX_FIELD),
@@ -78,6 +105,7 @@ export function cleanHandPickInput(body: unknown): HandPickInput {
     levelType: levelType(value.levelType),
     levelValue: text(value.levelValue, MAX_FIELD),
     levelNote: text(value.levelNote, MAX_NOTE),
+    chartUrl: chartUrlValue,
   };
 }
 
@@ -106,6 +134,7 @@ export function publicHandPick(doc: any): HandPick {
         : null,
     levelValue: typeof doc?.levelValue === "string" ? doc.levelValue : null,
     levelNote: typeof doc?.levelNote === "string" ? doc.levelNote : null,
+    chartUrl: chartshotUrl(doc?.chartUrl) ?? null,
     createdAt: iso(doc?.createdAt),
     updatedAt: iso(doc?.updatedAt),
   };

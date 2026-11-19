@@ -30,6 +30,7 @@ interface FormValues {
   levelType: "" | HandPickLevelType;
   levelValue: string;
   levelNote: string;
+  chartHtml: string;
 }
 
 function emptyForm(): FormValues {
@@ -45,7 +46,26 @@ function emptyForm(): FormValues {
     levelType: "",
     levelValue: "",
     levelNote: "",
+    chartHtml: "",
   };
+}
+
+function chartshotUrl(value: string): string | null {
+  const source = value.trim();
+  if (!source) return null;
+  const html = source.match(/<img\b[^>]*\bsrc\s*=\s*["']?([^"'\s>]+)["']?[^>]*>/i);
+  const candidate = (html?.[1] ?? source).trim();
+  const image = candidate.match(/^https:\/\/img\.chartshots\.net\/([A-Za-z0-9_-]{6,64})\.png(?:\?.*)?$/i);
+  if (image) return `https://img.chartshots.net/${image[1]}.png`;
+  const shot = candidate.match(
+    /^https:\/\/(?:chartshots\.spotware\.com|ctrader\.chartshots\.net)\/c\/([A-Za-z0-9_-]{6,64})(?:\?.*)?$/i
+  );
+  return shot ? `https://img.chartshots.net/${shot[1]}.png` : null;
+}
+
+function chartshotPageUrl(url: string): string {
+  const id = url.match(/\/([A-Za-z0-9_-]{6,64})\.png$/)?.[1];
+  return id ? `https://chartshots.spotware.com/c/${id}` : url;
 }
 
 function formFromPick(pick: HandPick): FormValues {
@@ -61,10 +81,11 @@ function formFromPick(pick: HandPick): FormValues {
     levelType: pick.levelType ?? "",
     levelValue: pick.levelValue ?? "",
     levelNote: pick.levelNote ?? "",
+    chartHtml: pick.chartUrl ? `<img src="${pick.chartUrl}">` : "",
   };
 }
 
-function inputFromForm(form: FormValues): HandPickInput {
+function inputFromForm(form: FormValues, chartUrl: string | null): HandPickInput {
   const nullable = (value: string): string | null => {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
@@ -84,6 +105,7 @@ function inputFromForm(form: FormValues): HandPickInput {
     levelType: form.levelType || null,
     levelValue: nullable(form.levelValue),
     levelNote: nullable(form.levelNote),
+    chartUrl,
   };
 }
 
@@ -298,6 +320,23 @@ function HandPickCard({
         )}
       </div>
 
+      {pick.chartUrl && (
+        <a
+          href={chartshotPageUrl(pick.chartUrl)}
+          target="_blank"
+          rel="noreferrer"
+          className="block border-b border-hairline bg-canvas/50"
+          title="Open chartshot"
+        >
+          <img
+            src={pick.chartUrl}
+            alt={`${pick.symbol} chartshot`}
+            className="w-full object-contain"
+            loading="lazy"
+          />
+        </a>
+      )}
+
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div>
           <MetaRow label="Target Period" value={pick.targetPeriod} />
@@ -389,7 +428,12 @@ function HandPickFormModal({
   async function save() {
     setError(null);
     try {
-      const input = inputFromForm(form);
+      const chartUrl = chartshotUrl(form.chartHtml);
+      if (form.chartHtml.trim() && !chartUrl) {
+        setError("Paste a valid cTrader chartshot HTML code.");
+        return;
+      }
+      const input = inputFromForm(form, chartUrl);
       const result = pick
         ? await handPicksApi.update(pick.id, input)
         : await handPicksApi.create(input);
@@ -477,6 +521,15 @@ function HandPickFormModal({
           value={form.levelNote}
           onChange={(value) => update("levelNote", value)}
           placeholder="Latest turning point"
+        />
+
+        <Field
+          label="Chartshot HTML"
+          value={form.chartHtml}
+          onChange={(value) => update("chartHtml", value)}
+          placeholder="<img src='https://img.chartshots.net/6aff343d0d547.png'>"
+          hint="Paste the HTML code from cTrader. Only cTrader chartshot images are shown."
+          textarea
         />
 
         <Field
