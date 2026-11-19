@@ -159,7 +159,8 @@ export const DEFAULT_TEMPLATES: TemplateSettings = {
       body:
         "Confirm your email address for {{brand}}.\n\n" +
         "Open this link:\n{{url}}\n\n" +
-        "The link expires in {{expiresMinutes}} minutes.",
+        "The link expires in {{expiresMinutes}} minutes. " +
+        "Opening the link verifies your email and signs you in.",
     },
     adminInvite: {
       subject: "You are invited to {{brand}}",

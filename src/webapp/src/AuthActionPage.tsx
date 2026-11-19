@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, KeyRound, MailCheck } from "lucide-react";
 
 import { api, ApiError } from "./api";
@@ -38,6 +38,26 @@ export default function AuthActionPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const autoVerifyStarted = useRef(false);
+
+  // Verification links should complete the job when opened. The ref keeps
+  // StrictMode's double effect from spending the single-use token twice.
+  useEffect(() => {
+    if (view !== "verify-email" || !token || autoVerifyStarted.current) return;
+    autoVerifyStarted.current = true;
+    setBusy(true);
+    setError(null);
+    void api
+      .verifyEmail(token)
+      .then((res) => {
+        setDone("Email verified. Signing you in...");
+        onAuthed(res.token);
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : "Request failed");
+        setBusy(false);
+      });
+  }, [view, token, onAuthed]);
 
   const title =
     view === "forgot-password"
@@ -75,8 +95,9 @@ export default function AuthActionPage({
         setPassword("");
         setConfirm("");
       } else if (view === "verify-email") {
-        await api.verifyEmail(token);
-        setDone("Email verified. You can sign in now.");
+        const res = await api.verifyEmail(token);
+        setDone("Email verified. Signing you in...");
+        onAuthed(res.token);
       } else {
         const res = await api.acceptInvite(token, password, acceptedTerms);
         onAuthed(res.token);

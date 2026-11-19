@@ -1684,7 +1684,7 @@ export const api = {
     }),
 
   verifyEmail: (token: string) =>
-    request<{ ok: boolean }>("/api/auth/verify-email", {
+    request<{ ok: boolean; token: string }>("/api/auth/verify-email", {
       method: "POST",
       body: { token },
     }),

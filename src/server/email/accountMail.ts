@@ -5,7 +5,7 @@ import type { Request } from "express";
 
 import { createAuthToken, revokeAuthTokens } from "../authTokens";
 import { User } from "../db";
-import { DEFAULT_BRANDING } from "../settings/defaults";
+import { DEFAULT_BRANDING, DEFAULT_THEME } from "../settings/defaults";
 import { getSiteSettings } from "../settings/store";
 import { publicBaseUrlFor } from "../settings/siteUrl";
 import { sendEmail } from "./transport";
@@ -14,12 +14,31 @@ import {
   passwordResetEmail,
   renderEmailTemplate,
   verifyEmailEmail,
+  DARK_EMAIL_THEME,
   type EmailContent,
+  type EmailTheme,
 } from "./templates";
 import type { SiteSettings } from "../settings/types";
 
 export const ACCOUNT_TOKEN_TTL_MINUTES = 45;
 const TTL_MS = ACCOUNT_TOKEN_TTL_MINUTES * 60_000;
+
+// Verification mail always uses a dark shell. A site in dark mode supplies its
+// own palette, a site in light mode falls back to the compiled dark palette.
+function verificationTheme(theme: SiteSettings["theme"]): EmailTheme {
+  const source = theme.mode === "dark" ? theme : DEFAULT_THEME;
+  return {
+    canvas: source.canvas || DARK_EMAIL_THEME.canvas,
+    surface: source.surface || DARK_EMAIL_THEME.surface,
+    border: source.borderStrong || DARK_EMAIL_THEME.border,
+    text: source.text || DARK_EMAIL_THEME.text,
+    muted: source.ratingNeutral || DARK_EMAIL_THEME.muted,
+    accent: source.accent || DARK_EMAIL_THEME.accent,
+    accentFg: source.accentFg || DARK_EMAIL_THEME.accentFg,
+    radius: source.radius,
+    dark: true,
+  };
+}
 
 export class AccountEmailLinkError extends Error {
   constructor() {
@@ -89,6 +108,7 @@ export async function sendVerification(userId: string, req: Request): Promise<vo
   const to = typeof user?.email === "string" ? user.email.trim() : "";
   if (!to) throw new Error("This account has no email address.");
   const { base, brand, settings } = await context(req);
+  const theme = verificationTheme(settings.theme);
   const token = await createAuthToken(userId, "email_verification", TTL_MS);
   const url = link(base, "/verify-email", token);
   try {
@@ -96,13 +116,17 @@ export async function sendVerification(userId: string, req: Request): Promise<vo
     await deliver(
       to,
       custom.body.trim()
-        ? renderEmailTemplate(custom, {
-            brand,
-            url,
-            username: String(user.username ?? ""),
-            expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
-          })
-        : verifyEmailEmail({ brand, url, expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES })
+        ? renderEmailTemplate(
+            custom,
+            {
+              brand,
+              url,
+              username: String(user.username ?? ""),
+              expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES,
+            },
+            theme
+          )
+        : verifyEmailEmail({ brand, url, expiresMinutes: ACCOUNT_TOKEN_TTL_MINUTES }, theme)
     );
   } catch (err) {
     await revokeAuthTokens(userId, "email_verification").catch(() => {});

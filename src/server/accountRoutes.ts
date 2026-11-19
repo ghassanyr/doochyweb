@@ -158,7 +158,13 @@ accountAuthRouter.post("/verify-email", async (req: Request, res: Response) => {
       return;
     }
     await revokeAuthTokens(userId, "email_verification");
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      token: signToken(
+        userId,
+        typeof user.tokenVersion === "number" ? user.tokenVersion : 0
+      ),
+    });
   } catch (err) {
     fail(res, err, "failed to verify email");
   }
