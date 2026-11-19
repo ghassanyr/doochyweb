@@ -446,6 +446,7 @@ export default function App() {
           />
         ) : view === "session-analysis-history" ? (
           <SessionAnalysisHistoryPage
+            isAdmin={isAdmin}
             onOpenCurrent={() => handleViewChange("session-analysis")}
           />
         ) : view === "signals" ? (

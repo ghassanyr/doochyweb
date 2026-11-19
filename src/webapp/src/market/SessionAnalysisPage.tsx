@@ -17,12 +17,15 @@ import {
 } from "../api";
 import { FadeRise } from "../components/motion";
 import { Button, Card, Flash } from "../components/ui";
+import { PublishSignalModal } from "../signals/PublishSignalModal";
+import type { SignalDraft } from "../signals/types";
 import {
   SessionBadge,
   SessionChartDefs,
   SessionChartModal,
   SessionLoadingGrid,
   SessionMarkets,
+  sessionSignalDraft,
 } from "./SessionAnalysisShared";
 
 export default function SessionAnalysisPage({
@@ -37,6 +40,8 @@ export default function SessionAnalysisPage({
   const [error, setError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<SessionSyncResult | null>(null);
   const [chart, setChart] = useState<SessionMarket | null>(null);
+  const [signalDraft, setSignalDraft] = useState<SignalDraft | null>(null);
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +59,12 @@ export default function SessionAnalysisPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!publishNotice) return;
+    const id = window.setTimeout(() => setPublishNotice(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [publishNotice]);
 
   async function sync() {
     setSyncResult(null);
@@ -124,6 +135,8 @@ export default function SessionAnalysisPage({
           </Flash>
         )}
 
+        {publishNotice && <Flash tone="success">{publishNotice}</Flash>}
+
         {error && (
           <Card flat className="border-danger/30 bg-danger-soft p-3 text-sm text-danger">
             <AlertCircle className="mr-2 inline h-4 w-4 align-[-3px]" />
@@ -146,7 +159,13 @@ export default function SessionAnalysisPage({
             </div>
           </Card>
         ) : (
-          <SessionMarkets markets={day.markets} onOpenChart={setChart} />
+          <SessionMarkets
+            markets={day.markets}
+            onOpenChart={setChart}
+            onCreateSignal={
+              isAdmin ? (market) => setSignalDraft(sessionSignalDraft(market)) : undefined
+            }
+          />
         )}
 
         {day && day.markets.length > 0 && (
@@ -157,6 +176,11 @@ export default function SessionAnalysisPage({
       </div>
 
       <SessionChartModal chart={chart} onClose={() => setChart(null)} />
+      <PublishSignalModal
+        draft={signalDraft}
+        onClose={() => setSignalDraft(null)}
+        onSaved={(signal) => setPublishNotice(`Signal published for ${signal.symbol}.`)}
+      />
     </FadeRise>
   );
 }

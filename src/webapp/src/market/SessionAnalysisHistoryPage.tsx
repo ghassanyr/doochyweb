@@ -14,7 +14,9 @@ import {
   type SessionMarket,
 } from "../api";
 import { FadeRise } from "../components/motion";
-import { Button, Card } from "../components/ui";
+import { Button, Card, Flash } from "../components/ui";
+import { PublishSignalModal } from "../signals/PublishSignalModal";
+import type { SignalDraft } from "../signals/types";
 import {
   SessionBadge,
   SessionChartDefs,
@@ -22,11 +24,14 @@ import {
   SessionLoadingGrid,
   SessionMarkets,
   sessionOptionLabel,
+  sessionSignalDraft,
 } from "./SessionAnalysisShared";
 
 export default function SessionAnalysisHistoryPage({
+  isAdmin,
   onOpenCurrent,
 }: {
+  isAdmin: boolean;
   onOpenCurrent: () => void;
 }) {
   const [days, setDays] = useState<SessionDaySummary[]>([]);
@@ -35,6 +40,8 @@ export default function SessionAnalysisHistoryPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<SessionMarket | null>(null);
+  const [signalDraft, setSignalDraft] = useState<SignalDraft | null>(null);
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
 
   const loadDetail = useCallback(async (sessionKey: string) => {
     setLoading(true);
@@ -80,6 +87,12 @@ export default function SessionAnalysisHistoryPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!publishNotice) return;
+    const id = window.setTimeout(() => setPublishNotice(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [publishNotice]);
 
   function choose(sessionKey: string) {
     setSelected(sessionKey);
@@ -147,6 +160,8 @@ export default function SessionAnalysisHistoryPage({
           </Card>
         )}
 
+        {publishNotice && <Flash tone="success">{publishNotice}</Flash>}
+
         {loading && !day ? (
           <SessionLoadingGrid />
         ) : days.length === 0 ? (
@@ -174,7 +189,13 @@ export default function SessionAnalysisHistoryPage({
             </div>
           </Card>
         ) : (
-          <SessionMarkets markets={day.markets} onOpenChart={setChart} />
+          <SessionMarkets
+            markets={day.markets}
+            onOpenChart={setChart}
+            onCreateSignal={
+              isAdmin ? (market) => setSignalDraft(sessionSignalDraft(market)) : undefined
+            }
+          />
         )}
 
         {day && day.markets.length > 0 && (
@@ -185,6 +206,11 @@ export default function SessionAnalysisHistoryPage({
       </div>
 
       <SessionChartModal chart={chart} onClose={() => setChart(null)} />
+      <PublishSignalModal
+        draft={signalDraft}
+        onClose={() => setSignalDraft(null)}
+        onSaved={(signal) => setPublishNotice(`Signal published for ${signal.symbol}.`)}
+      />
     </FadeRise>
   );
 }

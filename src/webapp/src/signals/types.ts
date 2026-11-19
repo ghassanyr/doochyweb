@@ -3,8 +3,8 @@
 
 export type SignalDirection = "buy" | "sell";
 
-// Prefill for a new signal created from a broker position or pending order.
-// Timeframe, expiry and note are intentionally left to the admin.
+// Prefill for a new signal created from a broker position, order or analysis card.
+// Timeframe and expiry are intentionally left to the admin.
 export interface SignalDraft {
   symbol: string;
   direction: SignalDirection;
@@ -13,6 +13,7 @@ export interface SignalDraft {
   entryMax?: number | null;
   target: number | null;
   stop: number | null;
+  note?: string;
 }
 
 export type SignalStatus = "active" | "invalidated" | "expired" | "target_hit" | "stopped_out";

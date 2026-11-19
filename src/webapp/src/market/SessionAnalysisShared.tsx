@@ -3,11 +3,12 @@
 // Both pages show the same market cards and the same themed email charts, so the
 // card, chart filter and modal live here. Only the session selection differs.
 
-import { ArrowDownRight, ArrowUpRight, ImageOff, Maximize2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ImageOff, Maximize2, Plus } from "lucide-react";
 
 import type { SessionDaySummary, SessionMarket } from "../api";
 import { AnimatedModal } from "../components/Modal";
-import { Card, Skeleton } from "../components/ui";
+import { Button, Card, Skeleton } from "../components/ui";
+import type { SignalDirection, SignalDraft } from "../signals/types";
 import { useSiteConfig } from "../siteConfig";
 
 // The email charts ship on a #042820 background. The page always tints them to
@@ -97,6 +98,47 @@ export function sessionOptionLabel(entry: SessionDaySummary): string {
   return `${entry.sessionName} - ${stamp} (${entry.marketCount})`;
 }
 
+function numericLevel(value: string | null): number | null {
+  if (!value) return null;
+  const match = value.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const number = Number(match[0]);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function signalDirection(market: SessionMarket): SignalDirection {
+  const text = `${market.reason ?? ""} ${market.supporting.join(" ")} ${market.levelNote ?? ""}`.toLowerCase();
+  if (/broke (?:through|below|down) (?:the )?support|breakdown|bearish|sell|short/.test(text)) {
+    return "sell";
+  }
+  if (/broke (?:through|above) (?:the )?resistance|breakout|bullish|buy|long/.test(text)) {
+    return "buy";
+  }
+  return market.levelType === "resistance" ? "sell" : "buy";
+}
+
+export function sessionSignalDraft(market: SessionMarket): SignalDraft {
+  const detail = [market.reason, ...market.supporting, market.levelNote]
+    .filter((line): line is string => Boolean(line?.trim()))
+    .join(" ");
+  const heading = [
+    "Session analysis signal",
+    market.pattern,
+    market.targetPeriod,
+    market.identifiedAt,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  return {
+    symbol: market.symbol,
+    direction: signalDirection(market),
+    entry: numericLevel(market.levelValue),
+    target: numericLevel(market.targetLevel),
+    stop: null,
+    note: [heading, detail].filter(Boolean).join("\n").slice(0, 2000),
+  };
+}
+
 export function LevelIcon({ type }: { type: SessionMarket["levelType"] }) {
   if (type === "support") {
     return <ArrowDownRight className="h-3.5 w-3.5 text-emerald-500" />;
@@ -121,9 +163,11 @@ export function MetaRow({ label, value }: { label: string; value: string | null 
 export function SessionCard({
   market,
   onOpenChart,
+  onCreateSignal,
 }: {
   market: SessionMarket;
   onOpenChart: (market: SessionMarket) => void;
+  onCreateSignal?: (market: SessionMarket) => void;
 }) {
   return (
     <Card className="flex flex-col overflow-hidden">
@@ -210,6 +254,19 @@ export function SessionCard({
           </div>
         )}
       </div>
+
+      {onCreateSignal && (
+        <div className="border-t border-hairline p-4 pt-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => onCreateSignal(market)}
+          >
+            Create signal
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -247,14 +304,21 @@ export function SessionLoadingGrid({ count = 6 }: { count?: number }) {
 export function SessionMarkets({
   markets,
   onOpenChart,
+  onCreateSignal,
 }: {
   markets: SessionMarket[];
   onOpenChart: (market: SessionMarket) => void;
+  onCreateSignal?: (market: SessionMarket) => void;
 }) {
   return (
     <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
       {markets.map((market) => (
-        <SessionCard key={market.symbol} market={market} onOpenChart={onOpenChart} />
+        <SessionCard
+          key={market.symbol}
+          market={market}
+          onOpenChart={onOpenChart}
+          onCreateSignal={onCreateSignal}
+        />
       ))}
     </div>
   );

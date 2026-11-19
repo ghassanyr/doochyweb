@@ -68,7 +68,7 @@ export function SignalFormModal({
     setTarget3(signal?.target3 != null ? String(signal.target3) : "");
     setStop(draft?.stop != null ? String(draft.stop) : "");
     setTimeframe(signal?.timeframe ?? "");
-    setNote(signal?.note ?? "");
+    setNote(signal?.note ?? draft?.note ?? "");
     const defaultPreset = EXPIRY_PRESETS.find(
       (preset) => preset.ms === tradingDefaults.signalExpiryHours * 60 * 60_000
     );
