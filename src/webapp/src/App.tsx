@@ -423,22 +423,42 @@ export default function App() {
           isAdmin ? (
             <AdminPage currentUsername={me?.username} onNavigate={handleViewChange} />
           ) : (
-            <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
+            <AnalysisPage
+              signedIn={signedIn}
+              isAdmin={isAdmin}
+              onSignIn={openLogin}
+              onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+            />
           )
         ) : view === "admin-settings" ? (
           isAdmin ? (
             <AdminSettingsPage onNavigate={handleViewChange} />
           ) : (
-            <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
+            <AnalysisPage
+              signedIn={signedIn}
+              isAdmin={isAdmin}
+              onSignIn={openLogin}
+              onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+            />
           )
         ) : view === "admin-integrations" ? (
           isAdmin ? (
             <AdminIntegrationsPage onNavigate={handleViewChange} />
           ) : (
-            <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
+            <AnalysisPage
+              signedIn={signedIn}
+              isAdmin={isAdmin}
+              onSignIn={openLogin}
+              onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+            />
           )
         ) : view === "analysis" ? (
-          <AnalysisPage signedIn={signedIn} isAdmin={isAdmin} onSignIn={openLogin} />
+          <AnalysisPage
+            signedIn={signedIn}
+            isAdmin={isAdmin}
+            onSignIn={openLogin}
+            onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+          />
         ) : view === "session-analysis" ? (
           <SessionAnalysisPage
             isAdmin={isAdmin}

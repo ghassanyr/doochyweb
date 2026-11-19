@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, LogIn, RefreshCw, Settings2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, FileText, LogIn, RefreshCw, Settings2 } from "lucide-react";
 
 import { marketApi, type MarketWatchlist, type WatchlistMode } from "../api";
 import { FadeRise } from "../components/motion";
-import { Card } from "../components/ui";
+import { Button, Card } from "../components/ui";
 import { ASSET_FILTERS, assetClass, type AssetFilter } from "./assetClass";
 import { MarketCard, MarketCardError, MarketCardSkeleton } from "./MarketCard";
 import { HandPicks } from "./HandPicks";
@@ -21,6 +21,7 @@ export default function AnalysisPage({
   signedIn,
   isAdmin,
   onSignIn,
+  onOpenSessionAnalysis,
 }: {
   /** Signed-in members can force a broker read and keep a personal watchlist. */
   signedIn: boolean;
@@ -28,6 +29,8 @@ export default function AnalysisPage({
   isAdmin: boolean;
   /** Opens the sign-in dialog for the anonymous watchlist prompt. */
   onSignIn?: () => void;
+  /** Opens the Session Analysis page. */
+  onOpenSessionAnalysis: () => void;
 }) {
   const { content: siteContent } = useSiteConfig();
   const [config, setConfig] = useState<{
@@ -456,11 +459,21 @@ export default function AnalysisPage({
               })}
             </div>
 
-            {canEdit && (
-              <div className="ml-auto w-full sm:w-72">
-                <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
-              </div>
-            )}
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<FileText className="h-3.5 w-3.5" />}
+                onClick={onOpenSessionAnalysis}
+              >
+                Session Analysis
+              </Button>
+              {canEdit && (
+                <div className="w-full sm:w-72">
+                  <SymbolSearch catalog={config?.catalog ?? []} onAdd={(s) => void addSymbol(s)} />
+                </div>
+              )}
+            </div>
           </div>
         </Card>
 
