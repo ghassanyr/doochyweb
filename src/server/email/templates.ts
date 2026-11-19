@@ -146,14 +146,14 @@ export function verifyEmailEmail(
     subject: `Verify your email for ${input.brand}`,
     text:
       `Confirm your email address for ${input.brand}.\n\n` +
-      `Open this link:\n${input.url}\n\n` +
+      `Click this button:\n${input.url}\n\n` +
       `The link expires in ${input.expiresMinutes} minutes.\n\n` +
       `Opening the link verifies your email and signs you in.`,
     html: layout(
       input.brand,
       "Verify your email",
       `Confirm your email address for ${input.brand}.`,
-      "Verify and sign in",
+      "Verify email",
       input.url,
       `This link expires in ${input.expiresMinutes} minutes. Opening it signs you in.`,
       theme
@@ -199,15 +199,39 @@ export function renderTemplate(template: string, vars: TemplateVars): string {
   });
 }
 
-function textLayout(brand: string, body: string, theme: EmailTheme = LIGHT_EMAIL_THEME): string {
+export interface EmailAction {
+  label: string;
+  url: string;
+}
+
+function textLayout(
+  brand: string,
+  body: string,
+  theme: EmailTheme = LIGHT_EMAIL_THEME,
+  action?: EmailAction
+): string {
   const t = themeValues(theme);
+  const buttonRadius = Math.max(4, t.radius - 2);
   const colorScheme = t.dark
     ? '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">'
     : "";
   const safeBrand = escapeHtml(brand);
+  const safeActionUrl = action ? escapeHtml(action.url) : "";
+  const safeActionLabel = action ? escapeHtml(action.label) : "";
+  const button = action
+    ? `<a href="${safeActionUrl}" bgcolor="${t.accent}" style="display:inline-block;padding:12px 18px;background-color:${t.accent};color:${t.accentFg};text-decoration:none;border-radius:${buttonRadius}px;font-weight:700">${safeActionLabel}</a>`
+    : "";
   const paragraphs = escapeHtml(body)
     .split(/\n{2,}/)
-    .map((part) => `<p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:${t.text}">${part.replace(/\n/g, "<br>")}</p>`)
+    .map((part) => {
+      if (action && part.includes(safeActionUrl)) {
+        const lines = part
+          .split(/\n/)
+          .map((line) => (line.trim() === safeActionUrl ? button : line));
+        return `<p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:${t.text}">${lines.join("<br>")}</p>`;
+      }
+      return `<p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:${t.text}">${part.replace(/\n/g, "<br>")}</p>`;
+    })
     .join("");
   return `<!doctype html>
 <html><head>${colorScheme}</head><body bgcolor="${t.canvas}" style="margin:0;padding:24px;background-color:${t.canvas};font-family:Arial,Helvetica,sans-serif;color:${t.text}">
@@ -228,13 +252,15 @@ function textLayout(brand: string, body: string, theme: EmailTheme = LIGHT_EMAIL
 export function renderEmailTemplate(
   template: { subject: string; body: string },
   vars: TemplateVars,
-  theme: EmailTheme = LIGHT_EMAIL_THEME
+  theme: EmailTheme = LIGHT_EMAIL_THEME,
+  action?: EmailAction
 ): EmailContent {
   const brand = String(vars.brand ?? "");
-  const text = renderTemplate(template.body, vars).trim();
+  const rendered = renderTemplate(template.body, vars).trim();
+  const text = action ? rendered.replace(/Open this link:/g, "Click this button:") : rendered;
   return {
     subject: renderTemplate(template.subject, vars).trim(),
     text,
-    html: textLayout(brand, text, theme),
+    html: textLayout(brand, text, theme, action),
   };
 }

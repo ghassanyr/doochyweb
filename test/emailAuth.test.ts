@@ -146,8 +146,10 @@ describe("email templates", () => {
     assert.match(verify.html, /background-color:#0a0e14/);
     assert.match(verify.html, /background-color:#141c28/);
     assert.match(verify.html, /content="dark"/);
-    assert.match(verify.html, /Verify and sign in/);
+    assert.match(verify.html, /Verify email<\/a>/);
+    assert.match(verify.text, /Click this button:/);
     assert.match(verify.text, /signs you in/);
+    assert.doesNotMatch(verify.text, /Open this link:/);
     assert.doesNotMatch(verify.html, /#f1f5f9/);
   });
 
@@ -162,6 +164,25 @@ describe("email templates", () => {
     assert.match(custom.html, /background-color:#0a0e14/);
     assert.match(custom.html, /color:#abcdef/);
     assert.match(custom.html, /content="dark"/);
+  });
+
+  test("stored verification copy gains a button and updated wording", () => {
+    const url = "https://example.test/verify-email?token=abc";
+    const custom = renderEmailTemplate(
+      {
+        subject: "Verify your email for {{brand}}",
+        body: "Confirm your email address for {{brand}}.\n\nOpen this link:\n{{url}}\n\nExpires in {{expiresMinutes}} minutes.",
+      },
+      { brand: "Doochy", url, expiresMinutes: 45 },
+      DARK_EMAIL_THEME,
+      { label: "Verify email", url }
+    );
+
+    assert.match(custom.text, /Click this button:/);
+    assert.doesNotMatch(custom.text, /Open this link:/);
+    assert.match(custom.html, />Verify email<\/a>/);
+    assert.match(custom.html, /href="https:\/\/example\.test\/verify-email\?token=abc"/);
+    assert.doesNotMatch(custom.html, /Open this link:/);
   });
 });
 
