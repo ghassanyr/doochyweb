@@ -13,6 +13,7 @@ import {
   validateSmtpSetup,
 } from "../src/server/integrations/smtpSetup";
 import type { IntegrationFieldState } from "../src/server/integrations/types";
+import { sendVerificationToExistingUsers } from "../src/server/email/accountMail";
 import {
   asSmtpValues,
   fromAddress,
@@ -246,5 +247,71 @@ describe("SMTP setup", () => {
   test("does not accept a host or from address as complete by mistake", () => {
     assert.throws(() => asSmtpValues({ port: 587, fromEmail: "a@b.test" }));
     assert.throws(() => asSmtpValues({ host: "smtp.example.test", port: 587 }));
+  });
+});
+
+describe("existing user verification emails", () => {
+  test("sends to every existing unverified user", async () => {
+    const sent: string[] = [];
+    const result = await sendVerificationToExistingUsers({} as any, {
+      emailConfigured: async () => true,
+      findUnverifiedUsers: async () => ["user-1", "user-2"],
+      sendVerification: async (userId) => {
+        sent.push(userId);
+      },
+      logError: () => {},
+    });
+
+    assert.deepEqual(sent, ["user-1", "user-2"]);
+    assert.deepEqual(result, {
+      eligible: 2,
+      sent: 2,
+      failed: 0,
+      skippedNotConfigured: false,
+    });
+  });
+
+  test("skips the backfill when email delivery is not configured", async () => {
+    let queried = false;
+    const result = await sendVerificationToExistingUsers({} as any, {
+      emailConfigured: async () => false,
+      findUnverifiedUsers: async () => {
+        queried = true;
+        return ["user-1"];
+      },
+      logError: () => {},
+    });
+
+    assert.equal(queried, false);
+    assert.deepEqual(result, {
+      eligible: 0,
+      sent: 0,
+      failed: 0,
+      skippedNotConfigured: true,
+    });
+  });
+
+  test("counts a failed send without stopping the remaining users", async () => {
+    const errors: string[] = [];
+    const sent: string[] = [];
+    const result = await sendVerificationToExistingUsers({} as any, {
+      emailConfigured: async () => true,
+      findUnverifiedUsers: async () => ["user-1", "user-2", "user-3"],
+      sendVerification: async (userId) => {
+        if (userId === "user-2") throw new Error("mailbox rejected");
+        sent.push(userId);
+      },
+      logError: (message) => errors.push(message),
+    });
+
+    assert.deepEqual(sent, ["user-1", "user-3"]);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /user-2/);
+    assert.deepEqual(result, {
+      eligible: 3,
+      sent: 2,
+      failed: 1,
+      skippedNotConfigured: false,
+    });
   });
 });

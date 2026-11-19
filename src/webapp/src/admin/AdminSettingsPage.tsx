@@ -53,6 +53,7 @@ import {
   type TemplateSettings,
   type ThemeSettings,
   type TradingDefaultsSettings,
+  type VerificationEmailResult,
   type WebhookSettings,
 } from "../api";
 import { FadeRise } from "../components/motion";
@@ -406,6 +407,8 @@ export default function AdminSettingsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
+  const [sendingVerificationEmails, setSendingVerificationEmails] = useState(false);
   const [webhookTest, setWebhookTest] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   // Re-apply the live theme (including the visitor's mode preference) when the
@@ -559,6 +562,33 @@ export default function AdminSettingsPage({
     setError(null);
   }
 
+  function verificationMessage(result: VerificationEmailResult): string {
+    if (result.skippedNotConfigured) {
+      return "Email verification is on, but SMTP is not configured, so no verification emails were sent.";
+    }
+    if (result.eligible === 0) {
+      return "Email verification is on. No existing unverified accounts needed a link.";
+    }
+    return `Sent ${result.sent} verification email${result.sent === 1 ? "" : "s"} to existing accounts${
+      result.failed ? `; ${result.failed} failed` : ""
+    }.`;
+  }
+
+  async function sendVerificationEmails() {
+    if (sendingVerificationEmails) return;
+    setSendingVerificationEmails(true);
+    setVerificationNotice(null);
+    setError(null);
+    try {
+      const { verificationEmails } = await adminApi.sendVerificationEmails();
+      setVerificationNotice(verificationMessage(verificationEmails));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send verification emails");
+    } finally {
+      setSendingVerificationEmails(false);
+    }
+  }
+
   async function save() {
     if (
       !site ||
@@ -584,8 +614,9 @@ export default function AdminSettingsPage({
     }
     setError(null);
     setSaved(false);
+    setVerificationNotice(null);
     try {
-      const { settings } = await adminApi.saveSettings({
+      const { settings, verificationEmails } = await adminApi.saveSettings({
         site,
         branding,
         theme,
@@ -635,6 +666,9 @@ export default function AdminSettingsPage({
           requireEmailVerification: settings.registration.requireEmailVerification,
         },
       });
+      if (verificationEmails) {
+        setVerificationNotice(verificationMessage(verificationEmails));
+      }
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save site settings");
@@ -828,6 +862,18 @@ export default function AdminSettingsPage({
             Saved. Visitors see the changes on their next load.
           </Flash>
         )}
+        {verificationNotice && (
+          <Flash
+            tone={
+              verificationNotice.includes("failed") ||
+              verificationNotice.includes("not configured")
+                ? "warning"
+                : "success"
+            }
+          >
+            {verificationNotice}
+          </Flash>
+        )}
         {invalidColors.length > 0 && (
           <Flash tone="danger">
             <span className="inline-flex items-center gap-1.5">
@@ -917,9 +963,22 @@ export default function AdminSettingsPage({
             label="Require new users to verify their email"
           />
           <p className="text-[11px] text-fg-faint">
-            Requires SMTP under Integrations. Existing accounts are treated as verified, so
-            turning this on never locks them out.
+            Requires SMTP under Integrations. Verified accounts stay verified; accounts already
+            marked unverified receive a link when this is turned on.
           </p>
+          {loaded?.registration.requireEmailVerification && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={sendVerificationEmails}
+              disabled={sendingVerificationEmails}
+            >
+              <Mail className="h-4 w-4" />
+              {sendingVerificationEmails
+                ? "Sending..."
+                : "Send verification emails to unverified users"}
+            </Button>
+          )}
         </Card>
 
         <Card className="space-y-4 p-4">

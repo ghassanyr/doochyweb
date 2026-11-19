@@ -1536,6 +1536,13 @@ export interface AdminIntegrationsResponse {
   imapPresets: ImapPreset[];
 }
 
+export interface VerificationEmailResult {
+  eligible: number;
+  sent: number;
+  failed: number;
+  skippedNotConfigured: boolean;
+}
+
 export const configApi = {
   get: () => request<SiteConfig>("/api/config"),
 };
@@ -1597,6 +1604,12 @@ export const adminApi = {
       method: "POST",
     }),
 
+  sendVerificationEmails: () =>
+    request<{ verificationEmails: VerificationEmailResult }>(
+      "/api/admin/settings/send-verification-emails",
+      { method: "POST" }
+    ),
+
   saveSettings: (patch: {
     site?: Partial<SiteAddressSettings>;
     branding?: Partial<BrandingSettings>;
@@ -1617,10 +1630,13 @@ export const adminApi = {
     templates?: Partial<TemplateSettings>;
     webhooks?: Partial<WebhookSettings>;
   }) =>
-    request<{ settings: SiteSettings }>("/api/admin/settings", {
-      method: "PUT",
-      body: patch,
-    }),
+    request<{ settings: SiteSettings; verificationEmails: VerificationEmailResult | null }>(
+      "/api/admin/settings",
+      {
+        method: "PUT",
+        body: patch,
+      }
+    ),
 
   integrations: () => request<AdminIntegrationsResponse>("/api/admin/integrations"),
 

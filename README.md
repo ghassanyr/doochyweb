@@ -101,7 +101,7 @@ SMTP, cTrader, Telegram and optional read-only MT5 are configured in the admin p
 
 Doochy uses generic SMTP through Nodemailer, with no vendor SDK or hardcoded provider. Mailgun, Postmark, Amazon SES, Google Workspace and self-hosted relays all work. For Mailgun, use `smtp.mailgun.org` (US), `smtp.eu.mailgun.org` (EU), port 587, STARTTLS, your SMTP username and SMTP password. The provider must authorize the From address/domain (SPF, DKIM, DMARC).
 
-SMTP enables password reset, optional email verification and admin invites. Verification is off by default and can be enabled under **Admin → Site settings → Registration**; existing accounts are treated as verified. Verification mail uses the dark site palette and signs the user in when the link is opened. Signed-in users can add or change their email under **Settings**, and the current password is required. The admin **Test** button sends a real email to the signed-in admin.
+SMTP enables password reset, optional email verification and admin invites. Verification is off by default and can be enabled under **Admin → Site settings → Registration**; existing verified accounts are left alone, while accounts already marked unverified receive a verification link when the setting is turned on. Admins can resend those links from the same card. Verification mail uses the dark site palette and signs the user in when the link is opened. Signed-in users can add or change their email under **Settings**, and the current password is required. The admin **Test** button sends a real email to the signed-in admin.
 
 Telegram uses long polling only, so it needs no inbound route or webhook.
 

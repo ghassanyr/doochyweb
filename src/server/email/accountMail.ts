@@ -5,10 +5,11 @@ import type { Request } from "express";
 
 import { createAuthToken, revokeAuthTokens } from "../authTokens";
 import { User } from "../db";
+import { DEMO_USERNAME } from "../demo/store";
 import { DEFAULT_BRANDING, DEFAULT_THEME } from "../settings/defaults";
 import { getSiteSettings } from "../settings/store";
 import { publicBaseUrlFor } from "../settings/siteUrl";
-import { sendEmail } from "./transport";
+import { emailConfigured, sendEmail } from "./transport";
 import {
   adminInviteEmail,
   passwordResetEmail,
@@ -132,6 +133,68 @@ export async function sendVerification(userId: string, req: Request): Promise<vo
     await revokeAuthTokens(userId, "email_verification").catch(() => {});
     throw err;
   }
+}
+
+export interface ExistingVerificationResult {
+  eligible: number;
+  sent: number;
+  failed: number;
+  skippedNotConfigured: boolean;
+}
+
+export interface ExistingVerificationDeps {
+  emailConfigured?: () => Promise<boolean>;
+  findUnverifiedUsers?: () => Promise<string[]>;
+  sendVerification?: (userId: string, req: Request) => Promise<void>;
+  logError?: (message: string) => void;
+}
+
+async function defaultUnverifiedUserIds(): Promise<string[]> {
+  const rows: any[] = await User.find({
+    emailVerified: false,
+    status: { $ne: "pending" },
+    accountType: { $ne: "demo" },
+    username: { $ne: DEMO_USERNAME },
+  })
+    .lean()
+    .exec();
+  return rows
+    .filter((row) => typeof row?.email === "string" && row.email.trim())
+    .map((row) => String(row._id));
+}
+
+/**
+ * When an admin turns verification on, accounts already marked unverified need
+ * a link even though they did not go through the signup path. Verified legacy
+ * accounts are left alone, and pending invites keep using their invite email.
+ */
+export async function sendVerificationToExistingUsers(
+  req: Request,
+  deps: ExistingVerificationDeps = {}
+): Promise<ExistingVerificationResult> {
+  if (!(await (deps.emailConfigured ?? emailConfigured)())) {
+    return { eligible: 0, sent: 0, failed: 0, skippedNotConfigured: true };
+  }
+
+  const userIds = await (deps.findUnverifiedUsers ?? defaultUnverifiedUserIds)();
+  const send = deps.sendVerification ?? sendVerification;
+  const log = deps.logError ?? ((message: string) => console.error(message));
+  let sent = 0;
+  let failed = 0;
+  for (const userId of userIds) {
+    try {
+      await send(userId, req);
+      sent += 1;
+    } catch (err) {
+      failed += 1;
+      log(
+        `[email] verification for existing user ${userId} failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  }
+  return { eligible: userIds.length, sent, failed, skippedNotConfigured: false };
 }
 
 export async function sendAdminInvite(userId: string, req: Request): Promise<void> {

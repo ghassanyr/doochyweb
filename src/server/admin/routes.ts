@@ -19,7 +19,11 @@ import { sendWebhook } from "../webhooks";
 import fs from "node:fs";
 import path from "node:path";
 import { integrationAdminRouter } from "./integrations";
-import { sendAdminInvite } from "../email/accountMail";
+import {
+  sendAdminInvite,
+  sendVerificationToExistingUsers,
+  type ExistingVerificationResult,
+} from "../email/accountMail";
 import { emailConfigured } from "../email/transport";
 import {
   createUser,
@@ -411,6 +415,7 @@ adminRouter.get("/settings", adminRequired, async (_req, res) => {
 
 adminRouter.put("/settings", adminRequired, async (req: AuthedRequest, res) => {
   try {
+    const previous = await getSiteSettings();
     const settings = await saveSiteSettings(
       {
         site: req.body?.site,
@@ -434,7 +439,27 @@ adminRouter.put("/settings", adminRequired, async (req: AuthedRequest, res) => {
       },
       req.username ?? req.userId ?? "admin"
     );
-    res.json({ settings });
+    let verificationEmails: ExistingVerificationResult | null = null;
+    if (
+      !previous.registration.requireEmailVerification &&
+      settings.registration.requireEmailVerification
+    ) {
+      try {
+        verificationEmails = await sendVerificationToExistingUsers(req);
+      } catch (err) {
+        console.error(
+          "[email] existing verification backfill failed:",
+          err instanceof Error ? err.message : String(err)
+        );
+        verificationEmails = {
+          eligible: 0,
+          sent: 0,
+          failed: 1,
+          skippedNotConfigured: false,
+        };
+      }
+    }
+    res.json({ settings, verificationEmails });
   } catch (err: any) {
     if (err instanceof SettingsValidationError) {
       res.status(400).json({ error: err.message });
@@ -443,3 +468,25 @@ adminRouter.put("/settings", adminRequired, async (req: AuthedRequest, res) => {
     res.status(500).json({ error: err?.message ?? "failed to save site settings" });
   }
 });
+
+adminRouter.post(
+  "/settings/send-verification-emails",
+  adminRequired,
+  async (req: AuthedRequest, res) => {
+    try {
+      const settings = await getSiteSettings();
+      if (!settings.registration.requireEmailVerification) {
+        res.status(400).json({ error: "Turn on email verification first." });
+        return;
+      }
+      const verificationEmails = await sendVerificationToExistingUsers(req);
+      res.json({ verificationEmails });
+    } catch (err: any) {
+      console.error(
+        "[email] manual verification backfill failed:",
+        err instanceof Error ? err.message : String(err)
+      );
+      res.status(500).json({ error: err?.message ?? "failed to send verification emails" });
+    }
+  }
+);
