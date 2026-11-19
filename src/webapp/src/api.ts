@@ -1866,15 +1866,45 @@ export interface SessionLatestResponse {
   days: SessionDaySummary[];
 }
 
+export interface SessionSyncNewsResult {
+  emails: number;
+  events: number;
+  upcoming: number;
+}
+
 export interface SessionSyncResult {
   ok: boolean;
   configured: boolean;
   imported: boolean;
   sessionKey: string | null;
   markets: number;
+  news?: SessionSyncNewsResult;
   message: string;
   checkedAt: string;
 }
+
+export interface EconomicNewsEvent {
+  eventKey: string;
+  country: string;
+  startsAt: string;
+  title: string;
+  subject: string;
+  generatedAt: string | null;
+  receivedAt: string | null;
+  lastSeenAt: string;
+}
+
+export interface EconomicNewsResponse {
+  events: EconomicNewsEvent[];
+  latestReceivedAt: string | null;
+}
+
+export const economicNewsApi = {
+  all: () => request<EconomicNewsResponse>("/api/economic-news"),
+
+  sync: () =>
+    request<SessionSyncResult>("/api/economic-news/sync", { method: "POST" }),
+};
 
 export const sessionAnalysisApi = {
   latest: () => request<SessionLatestResponse>("/api/session-analysis/latest"),

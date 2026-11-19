@@ -15,7 +15,9 @@ import {
   type ParsedMail,
 } from "mailparser";
 
-import { asImapValues, imapClient } from "../integrations/imapSetup";
+import { isEconomicNewsSubject, parseEconomicNews } from "../economicNews/parse";
+import { saveEconomicNews } from "../economicNews/store";
+import { asImapValues, imapClient, type ImapValues } from "../integrations/imapSetup";
 import { resolveIntegration } from "../integrations/store";
 import {
   htmlToText,
@@ -55,6 +57,7 @@ function result(partial: Partial<SessionSyncResult> & { message: string }): Sess
     imported: false,
     sessionKey: null,
     markets: 0,
+    news: { emails: 0, events: 0, upcoming: 0 },
     checkedAt: nowIso(),
     ...partial,
   };
@@ -240,23 +243,39 @@ function senderHaystack(message: ParsedMail): string {
 }
 
 /** Exported for the mailbox tests; not part of the public server API. */
+export function matchesSender(chain: ParsedMail[], senderFilter: string): boolean {
+  const sender = senderFilter.toLowerCase();
+  return !sender || chain.some((message) => senderHaystack(message).includes(sender));
+}
+
+export function matchesSubject(chain: ParsedMail[], subjectFilter: string): boolean {
+  const subject = subjectFilter.toLowerCase();
+  return (
+    !subject ||
+    chain.some((message) => (message.subject ?? "").toLowerCase().includes(subject))
+  );
+}
+
 export function matchesFilters(
   chain: ParsedMail[],
   senderFilter: string,
   subjectFilter: string
 ): boolean {
-  const sender = senderFilter.toLowerCase();
-  const subject = subjectFilter.toLowerCase();
-  if (sender && !chain.some((message) => senderHaystack(message).includes(sender))) {
-    return false;
-  }
-  if (
-    subject &&
-    !chain.some((message) => (message.subject ?? "").toLowerCase().includes(subject))
-  ) {
-    return false;
-  }
-  return true;
+  return matchesSender(chain, senderFilter) && matchesSubject(chain, subjectFilter);
+}
+
+function isNewsChain(chain: ParsedMail[], newsSubjectFilter: string): boolean {
+  return chain.some((message) => isEconomicNewsSubject(message.subject, newsSubjectFilter));
+}
+
+export function classifyInboxChain(
+  chain: ParsedMail[],
+  values: Pick<ImapValues, "senderFilter" | "subjectFilter" | "newsSubjectFilter">
+): { news: boolean; session: boolean } {
+  if (!matchesSender(chain, values.senderFilter)) return { news: false, session: false };
+  const news = isNewsChain(chain, values.newsSubjectFilter);
+  if (news) return { news: true, session: false };
+  return { news: false, session: matchesSubject(chain, values.subjectFilter) };
 }
 
 function isEmbeddedMessage(attachment: Attachment): boolean {
@@ -298,6 +317,18 @@ function buildSession(message: ParsedMail): ParsedSession {
     html: typeof message.html === "string" ? message.html : null,
     text: message.text,
   });
+}
+
+function buildNews(chain: ParsedMail[]) {
+  for (const message of chain) {
+    const news = parseEconomicNews({
+      subject: message.subject,
+      html: typeof message.html === "string" ? message.html : null,
+      text: message.text,
+    });
+    if (news.events.length > 0) return news;
+  }
+  return null;
 }
 
 function withCharts(
@@ -387,6 +418,14 @@ async function runSync(): Promise<SessionSyncResult> {
       let matched = 0;
       let newest: { from: string; subject: string } | null = null;
       let firstChain: ParsedMail[] | null = null;
+      let sessionDone = false;
+      let sessionImported = false;
+      let sessionKey: string | null = null;
+      let sessionMarkets = 0;
+      let sessionName = "";
+      const now = Date.now();
+      const news = { emails: 0, events: 0, upcoming: 0 };
+
       for (const source of candidates) {
         let parsed: ParsedMail;
         try {
@@ -403,12 +442,32 @@ async function runSync(): Promise<SessionSyncResult> {
         }
 
         const chain = await forwardChain(parsed);
-        if (!matchesFilters(chain, values.senderFilter, values.subjectFilter)) continue;
+        const { news: newsMatch, session: sessionMatch } = classifyInboxChain(chain, values);
+        if (!newsMatch && !sessionMatch) continue;
         if (!firstChain) firstChain = chain;
         matched++;
 
-        // Prefer the message that actually carries the market cards. An outer
-        // forward usually only has the subject and no analysis text.
+        if (newsMatch) {
+          const parsedNews = buildNews(chain);
+          if (parsedNews && parsedNews.events.length > 0) {
+            const sourceMessage =
+              chain.find((message) =>
+                isEconomicNewsSubject(message.subject, values.newsSubjectFilter)
+              ) ?? chain[0]!;
+            await saveEconomicNews(parsedNews.events, {
+              subject: sourceMessage.subject ?? "",
+              generatedAt: parsedNews.generatedAt,
+              receivedAt: sourceMessage.date?.toISOString() ?? null,
+            });
+            news.emails += 1;
+            news.events += parsedNews.events.length;
+            news.upcoming += parsedNews.events.filter(
+              (event) => new Date(event.startsAt).getTime() > now
+            ).length;
+          }
+        }
+
+        if (!sessionMatch || sessionDone) continue;
         let analysis: { message: ParsedMail; session: ParsedSession } | null = null;
         for (const message of chain) {
           const session = buildSession(message);
@@ -419,28 +478,15 @@ async function runSync(): Promise<SessionSyncResult> {
         }
         if (!analysis) continue;
         const { message, session } = analysis;
+        sessionDone = true;
+        sessionKey = session.sessionKey;
+        sessionMarkets = session.markets.length;
+        sessionName = session.sessionName;
 
-        if (await sessionIsComplete(session.sessionKey)) {
-          return result({
-            ok: true,
-            configured: true,
-            imported: false,
-            sessionKey: session.sessionKey,
-            markets: session.markets.length,
-            message: `${session.sessionName} is already up to date.`,
-          });
-        }
-
+        if (await sessionIsComplete(session.sessionKey)) continue;
         const images = await collectChainImages(chain, message);
         await saveSession(session, withCharts(session.markets, images));
-        return result({
-          ok: true,
-          configured: true,
-          imported: true,
-          sessionKey: session.sessionKey,
-          markets: session.markets.length,
-          message: `Imported ${session.markets.length} market${session.markets.length === 1 ? "" : "s"} for the ${session.sessionName}.`,
-        });
+        sessionImported = true;
       }
 
       const newestDetail = newest
@@ -449,16 +495,30 @@ async function runSync(): Promise<SessionSyncResult> {
       const chainDetail = firstChain
         ? ` ${describeChain(firstChain)} Preview: "${previewBody(firstChain[0]!)}"`
         : "";
+      let sessionMessage: string;
+      if (sessionDone && sessionKey) {
+        sessionMessage = sessionImported
+          ? `Imported ${sessionMarkets} market${sessionMarkets === 1 ? "" : "s"} for the ${sessionName}.`
+          : `${sessionName} is already up to date.`;
+      } else if (candidates.length === 0) {
+        sessionMessage = `No messages in ${values.folder} from the last ${LOOKBACK_DAYS} days.`;
+      } else if (matched === 0) {
+        sessionMessage = `Read ${candidates.length} message${candidates.length === 1 ? "" : "s"}, but none matched the sender or subject filter.${newestDetail}`;
+      } else {
+        sessionMessage = `Matched ${matched} message${matched === 1 ? "" : "s"}, but none contained a market card.${newestDetail}${chainDetail}`;
+      }
+      const newsMessage =
+        news.events > 0
+          ? ` Updated ${news.events} economic news event${news.events === 1 ? "" : "s"} (${news.upcoming} upcoming) from ${news.emails} message${news.emails === 1 ? "" : "s"}.`
+          : " No economic news events were found.";
       return result({
         ok: true,
         configured: true,
-        imported: false,
-        message:
-          candidates.length === 0
-            ? `No messages in ${values.folder} from the last ${LOOKBACK_DAYS} days.`
-            : matched === 0
-              ? `Read ${candidates.length} message${candidates.length === 1 ? "" : "s"}, but none matched the sender or subject filter.${newestDetail}`
-              : `Matched ${matched} message${matched === 1 ? "" : "s"}, but none contained a market card.${newestDetail}${chainDetail}`,
+        imported: sessionImported,
+        sessionKey,
+        markets: sessionMarkets,
+        news,
+        message: `${sessionMessage}${newsMessage}`,
       });
     } finally {
       lock.release();

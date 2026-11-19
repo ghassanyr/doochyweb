@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { LogIn, Play } from "lucide-react";
 import { api, getToken, setToken, type ConnectInput, type ModuleKey } from "./api";
 import AnalysisPage from "./market/AnalysisPage";
+import EconomicNewsPage from "./market/EconomicNewsPage";
 import SessionAnalysisPage from "./market/SessionAnalysisPage";
 import SessionAnalysisHistoryPage from "./market/SessionAnalysisHistoryPage";
 import SignalsPage from "./signals/SignalsPage";
@@ -265,7 +266,7 @@ export default function App() {
 
   const viewModule = (MODULE_VIEWS as readonly string[]).includes(view)
     ? (view as ModuleKey)
-    : view === "session-analysis" || view === "session-analysis-history"
+    : view === "analysis-news" || view === "session-analysis" || view === "session-analysis-history"
       ? "analysis"
       : null;
   const viewAccess = viewModule
@@ -428,6 +429,7 @@ export default function App() {
               isAdmin={isAdmin}
               onSignIn={openLogin}
               onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+              onOpenNews={() => handleViewChange("analysis-news")}
             />
           )
         ) : view === "admin-settings" ? (
@@ -439,6 +441,7 @@ export default function App() {
               isAdmin={isAdmin}
               onSignIn={openLogin}
               onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+              onOpenNews={() => handleViewChange("analysis-news")}
             />
           )
         ) : view === "admin-integrations" ? (
@@ -450,6 +453,7 @@ export default function App() {
               isAdmin={isAdmin}
               onSignIn={openLogin}
               onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+              onOpenNews={() => handleViewChange("analysis-news")}
             />
           )
         ) : view === "analysis" ? (
@@ -458,7 +462,10 @@ export default function App() {
             isAdmin={isAdmin}
             onSignIn={openLogin}
             onOpenSessionAnalysis={() => handleViewChange("session-analysis")}
+            onOpenNews={() => handleViewChange("analysis-news")}
           />
+        ) : view === "analysis-news" ? (
+          <EconomicNewsPage isAdmin={isAdmin} />
         ) : view === "session-analysis" ? (
           <SessionAnalysisPage
             isAdmin={isAdmin}

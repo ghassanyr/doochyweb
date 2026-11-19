@@ -71,6 +71,7 @@ const ADMIN_SUBNAV: { view: ViewKey; label: string }[] = [
 
 const ANALYSIS_SUBNAV: { view: ViewKey; label: string }[] = [
   { view: "analysis", label: "Overview" },
+  { view: "analysis-news", label: "News" },
   { view: "session-analysis", label: "Session Analysis" },
 ];
 
@@ -129,6 +130,7 @@ export function AppSidebar({
     view === "admin" || view === "admin-settings" || view === "admin-integrations";
   const analysisActive =
     view === "analysis" ||
+    view === "analysis-news" ||
     view === "session-analysis" ||
     view === "session-analysis-history";
   const analysisSubActive = (item: ViewKey) =>

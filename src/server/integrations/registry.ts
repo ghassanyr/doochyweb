@@ -300,7 +300,7 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
     provider: "imap",
     label: "Inbox (IMAP)",
     description:
-      "Reads the dedicated mailbox that receives the daily AI market analysis. The server polls it, copies the market cards and their charts into Session Analysis, and never exposes the mailbox password.",
+      "Reads the dedicated mailbox that receives the daily AI market analysis and economic news updates. One poll copies market cards and charts into Session Analysis and upcoming events into Economic News, without exposing the mailbox password.",
     fields: [
       {
         key: "host",
@@ -377,7 +377,17 @@ export const INTEGRATION_DEFS: Record<IntegrationProvider, IntegrationProviderDe
         kind: "text",
         maxLength: 200,
         placeholder: "Leave empty for any subject",
-        hint: "Optional. Only import messages whose subject contains this text. Leave empty to fetch every message.",
+        hint: "Optional. Only import market analysis messages whose subject contains this text.",
+      },
+      {
+        key: "newsSubjectFilter",
+        label: "News subject filter",
+        kind: "text",
+        env: "IMAP_NEWS_SUBJECT_FILTER",
+        defaultValue: "High Impact Economic News",
+        maxLength: 200,
+        placeholder: "High Impact Economic News",
+        hint: "Subject text for economic news emails in the same mailbox. The default matches High Impact Economic News.",
       },
       {
         key: "pollMinutes",

@@ -72,6 +72,12 @@ export interface SessionLatestResponse {
   days: SessionDaySummary[];
 }
 
+export interface SessionSyncNewsResult {
+  emails: number;
+  events: number;
+  upcoming: number;
+}
+
 export interface SessionSyncResult {
   ok: boolean;
   /** False when the IMAP integration is missing, disabled or unusable. */
@@ -79,6 +85,7 @@ export interface SessionSyncResult {
   imported: boolean;
   sessionKey: string | null;
   markets: number;
+  news?: SessionSyncNewsResult;
   message: string;
   checkedAt: string;
 }

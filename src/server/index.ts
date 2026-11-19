@@ -34,6 +34,7 @@ import {
 import { clampHistoryDays, fetchOrderHistory } from "./ctrader/history";
 import { amendPositionSLTP, cancelOrder, closePosition, modifyOrder, placeOrder, previewOrder, TicketInput } from "./ctrader/execute";
 import { marketRouter } from "./market/routes";
+import { economicNewsRouter } from "./economicNews/routes";
 import {
   sessionAnalysisChartRouter,
   sessionAnalysisRouter,
@@ -817,6 +818,12 @@ app.use(
   maintenanceGate,
   moduleGate("analysis"),
   sessionAnalysisRouter
+);
+app.use(
+  "/api/economic-news",
+  maintenanceGate,
+  moduleGate("analysis"),
+  economicNewsRouter
 );
 // Hand Picks are curated by an admin but shown inside Analysis, so reads follow
 // the Analysis access rule and writes add the admin guard themselves.

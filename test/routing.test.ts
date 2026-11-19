@@ -78,6 +78,19 @@ describe("path routing", () => {
     });
   });
 
+  test("economic news is a nested analysis route", () => {
+    assert.equal(pathForView("analysis-news"), "/analysis/news");
+    assert.equal(viewFromPath("/analysis/news"), "analysis-news");
+    assert.deepEqual(resolveRoute({ pathname: "/analysis/news", search: "", hostname: D }), {
+      view: "analysis-news",
+      redirectTo: null,
+    });
+    assert.deepEqual(resolveRoute({ pathname: "/analysis/news/", search: "", hostname: D }), {
+      view: "analysis-news",
+      redirectTo: "/analysis/news",
+    });
+  });
+
   test("session history is a nested session analysis route", () => {
     assert.equal(pathForView("session-analysis-history"), "/session-analysis/history");
     assert.equal(viewFromPath("/session-analysis/history"), "session-analysis-history");

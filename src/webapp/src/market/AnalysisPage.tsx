@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, FileText, LogIn, RefreshCw, Settings2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, FileText, LogIn, Newspaper, RefreshCw, Settings2 } from "lucide-react";
 
 import { marketApi, type MarketWatchlist, type WatchlistMode } from "../api";
 import { FadeRise } from "../components/motion";
@@ -22,6 +22,7 @@ export default function AnalysisPage({
   isAdmin,
   onSignIn,
   onOpenSessionAnalysis,
+  onOpenNews,
 }: {
   /** Signed-in members can force a broker read and keep a personal watchlist. */
   signedIn: boolean;
@@ -31,6 +32,7 @@ export default function AnalysisPage({
   onSignIn?: () => void;
   /** Opens the Session Analysis page. */
   onOpenSessionAnalysis: () => void;
+  onOpenNews: () => void;
 }) {
   const { content: siteContent } = useSiteConfig();
   const [config, setConfig] = useState<{
@@ -460,6 +462,14 @@ export default function AnalysisPage({
             </div>
 
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Newspaper className="h-3.5 w-3.5" />}
+                onClick={onOpenNews}
+              >
+                News
+              </Button>
               <Button
                 size="sm"
                 variant="secondary"

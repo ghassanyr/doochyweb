@@ -22,6 +22,7 @@ export interface ImapValues {
   folder: string;
   senderFilter: string;
   subjectFilter: string;
+  newsSubjectFilter: string;
   pollMinutes: number;
   enabled: boolean;
 }
@@ -119,6 +120,7 @@ export function asImapValues(values: Record<string, unknown>): ImapValues {
     folder: text(values.folder) || "INBOX",
     senderFilter: text(values.senderFilter),
     subjectFilter: text(values.subjectFilter),
+    newsSubjectFilter: text(values.newsSubjectFilter),
     pollMinutes: Number(values.pollMinutes ?? 360),
     enabled: values.enabled !== false,
   };
