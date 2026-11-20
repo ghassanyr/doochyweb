@@ -1,4 +1,4 @@
-// Mongo-backed outbox for signal notifications.
+// Mongo-backed outbox for Telegram notifications.
 //
 // Publishing writes delivery rows and returns; a small in-process worker sends
 // them with retries. That keeps a Telegram outage or a PM2 restart from losing
@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 
 import type { AlertView } from "../alerts/types";
+import type { HandPick } from "../handPicks/types";
 import type { SignalView } from "../signals/types";
 import { TelegramApiError, sendMessage } from "./client";
 import { loadTelegramConfig, type TelegramConfig } from "./config";
@@ -16,8 +17,10 @@ import {
   alertTemplateVars,
   appendAlertNote,
   buildAlertTriggeredMessage,
+  buildHandPickMessage,
   buildPublishedMessage,
   buildTestMessage,
+  handPickButtonUrl,
   publishedTemplateVars,
   renderTelegramTemplate,
   signalButtonUrl,
@@ -157,6 +160,59 @@ export async function enqueueAlertTriggered(
   return result.upsertedCount ? 1 : 0;
 }
 
+export async function enqueueHandPickChanged(
+  pick: HandPick,
+  action: "created" | "updated",
+  now: Date = new Date()
+): Promise<number> {
+  let config: TelegramConfig;
+  try {
+    config = await loadTelegramConfig();
+  } catch (err) {
+    console.error(`[telegram] configuration could not be read: ${errorText(err)}`);
+    return 0;
+  }
+  if (!config.enabled || !mongoose.isValidObjectId(pick.id)) return 0;
+
+  const links = await TelegramLink.find({
+    notificationsEnabled: true,
+    handPickNotificationsEnabled: { $ne: false },
+  })
+    .select({ chatId: 1 })
+    .lean()
+    .exec();
+  if (!links.length) return 0;
+
+  const event = `handpick:${pick.id}:${action}:${pick.updatedAt}`;
+  const text = buildHandPickMessage(pick, action);
+  const buttonUrl = handPickButtonUrl(config.baseUrl);
+
+  let queued = 0;
+  for (const link of links) {
+    const result = await TelegramDelivery.updateOne(
+      { signalId: null, event, chatId: link.chatId },
+      {
+        $setOnInsert: {
+          signalId: null,
+          event,
+          chatId: link.chatId,
+          text,
+          buttonUrl,
+          status: "pending",
+          attempts: 0,
+          nextAttemptAt: now,
+          error: null,
+          createdAt: now,
+          sentAt: null,
+        },
+      },
+      { upsert: true }
+    ).exec();
+    if (result.upsertedCount) queued++;
+  }
+  return queued;
+}
+
 /** Queue a one-off test message. Each call gets its own event key. */
 export async function enqueueTest(chatId: string, now: Date = new Date()): Promise<void> {
   const config = await loadTelegramConfig();
@@ -228,14 +284,16 @@ export async function processOutboxOnce(now: Date = new Date()): Promise<OutboxR
     // publish was queued must not receive the alert. Test messages still go to
     // a linked chat even while notifications are paused.
     const link = await TelegramLink.findOne({ chatId: claimed.chatId })
-      .select({ notificationsEnabled: 1 })
+      .select({ notificationsEnabled: 1, handPickNotificationsEnabled: 1 })
       .lean()
       .exec();
     const event = String(claimed.event);
-    // Signal and alert deliveries honour the per-user notification pause; a
-    // test message is an explicit action and still goes through.
-    const respectsPause = event === "published" || event.startsWith("alert:");
-    if (!link || (respectsPause && !(link as any).notificationsEnabled)) {
+    // Signal, alert and hand pick deliveries honour the per-user notification
+    // pause; a test message is an explicit action and still goes through.
+    const isHandPick = event.startsWith("handpick:");
+    const respectsPause = event === "published" || event.startsWith("alert:") || isHandPick;
+    const handPickMuted = isHandPick && (link as any)?.handPickNotificationsEnabled === false;
+    if (!link || (respectsPause && !(link as any).notificationsEnabled) || handPickMuted) {
       await TelegramDelivery.updateOne(
         { _id: claimed._id },
         { $set: { status: "skipped", error: "chat unlinked or notifications disabled" } }

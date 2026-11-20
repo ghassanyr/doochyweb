@@ -481,6 +481,7 @@ export interface TelegramStatus {
   username: string | null;
   firstName: string | null;
   notificationsEnabled: boolean;
+  handPickNotificationsEnabled: boolean;
   linkedAt: string | null;
   lastError: string | null;
 }
@@ -499,10 +500,17 @@ export const telegramApi = {
 
   unlink: () => request<{ ok: boolean }>("/api/telegram/unlink", { method: "POST" }),
 
-  setPrefs: (notificationsEnabled: boolean) =>
-    request<{ ok: boolean; notificationsEnabled: boolean }>("/api/telegram/prefs", {
+  setPrefs: (prefs: {
+    notificationsEnabled?: boolean;
+    handPickNotificationsEnabled?: boolean;
+  }) =>
+    request<{
+      ok: boolean;
+      notificationsEnabled: boolean;
+      handPickNotificationsEnabled: boolean;
+    }>("/api/telegram/prefs", {
       method: "PATCH",
-      body: { notificationsEnabled },
+      body: prefs,
     }),
 
   test: () => request<{ ok: boolean }>("/api/telegram/test", { method: "POST" }),
@@ -1942,6 +1950,8 @@ export const sessionAnalysisApi = {
 
 export type HandPickLevelType = "support" | "resistance";
 
+export type HandPickOutcome = "went_as_expected";
+
 export interface HandPickInput {
   symbol: string;
   pattern: string | null;
@@ -1961,10 +1971,21 @@ export interface HandPick extends HandPickInput {
   id: string;
   createdAt: string;
   updatedAt: string;
+  outcome: HandPickOutcome | null;
+  outcomeAt: string | null;
+}
+
+export interface HandPickStats {
+  total: number;
+  expected: number;
+  pending: number;
+  hitRate: number | null;
 }
 
 export const handPicksApi = {
   list: () => request<{ picks: HandPick[] }>("/api/hand-picks"),
+
+  stats: () => request<HandPickStats>("/api/hand-picks/stats"),
 
   create: (input: HandPickInput) =>
     request<{ pick: HandPick }>("/api/hand-picks", { method: "POST", body: input }),

@@ -17,7 +17,7 @@ import {
   type TelegramLinkResponse,
   type TelegramStatus,
 } from "../api";
-import { Button, Card, Flash, buttonClass } from "../components/ui";
+import { Button, Card, Flash, Toggle, buttonClass } from "../components/ui";
 
 // The Telegram connect/manage card, shared by Settings and the Signals modal so
 // both surfaces stay identical. All state is local; the optional callback lets
@@ -123,11 +123,24 @@ export default function TelegramNotifications({
     setNotice(null);
     const next = !tg.notificationsEnabled;
     try {
-      await telegramApi.setPrefs(next);
+      await telegramApi.setPrefs({ notificationsEnabled: next });
       applyStatus({ ...tg, notificationsEnabled: next });
       setNotice(next ? "Notifications resumed." : "Notifications paused.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update notifications");
+    }
+  }
+
+  async function toggleHandPickNotifications(next: boolean) {
+    if (!tg?.linked) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await telegramApi.setPrefs({ handPickNotificationsEnabled: next });
+      applyStatus({ ...tg, handPickNotificationsEnabled: result.handPickNotificationsEnabled });
+      setNotice(next ? "Hand pick notifications on." : "Hand pick notifications off.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update hand pick notifications");
     }
   }
 
@@ -156,6 +169,7 @@ export default function TelegramNotifications({
           username: null,
           firstName: null,
           notificationsEnabled: false,
+          handPickNotificationsEnabled: false,
           linkedAt: null,
           lastError: null,
         });
@@ -249,6 +263,17 @@ export default function TelegramNotifications({
               Disconnect
             </Button>
           </div>
+          <div className="rounded-lg border border-hairline bg-canvas/50 px-3 py-2">
+            <Toggle
+              label="Hand pick notifications"
+              checked={tg.handPickNotificationsEnabled}
+              onToggle={toggleHandPickNotifications}
+              disabled={!tg.notificationsEnabled}
+            />
+            <p className="mt-1 text-[11px] text-fg-faint">
+              Message me when a hand pick is added or changed.
+            </p>
+          </div>
         </div>
       ) : link ? (
         <div className="space-y-3">
@@ -315,8 +340,8 @@ export default function TelegramNotifications({
         <h2 className="text-sm font-semibold tracking-tight text-fg">Telegram notifications</h2>
         <p className="text-sm text-fg-muted">
           Get a direct message from{" "}
-          {tg?.botUsername ? `@${tg.botUsername}` : "the Telegram bot"} when a new signal is
-          published.
+          {tg?.botUsername ? `@${tg.botUsername}` : "the Telegram bot"} when a new signal or hand
+          pick is published.
         </p>
       </div>
       {body}

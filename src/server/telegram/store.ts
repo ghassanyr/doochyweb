@@ -13,6 +13,7 @@ const linkSchema = new mongoose.Schema({
   username: { type: String, default: null },
   firstName: { type: String, default: null },
   notificationsEnabled: { type: Boolean, default: true },
+  handPickNotificationsEnabled: { type: Boolean, default: true },
   linkedAt: { type: Date, default: Date.now },
   lastSeenAt: { type: Date, default: Date.now },
   lastError: { type: String, default: null },
@@ -74,6 +75,7 @@ export interface TelegramLinkRecord {
   username: string | null;
   firstName: string | null;
   notificationsEnabled: boolean;
+  handPickNotificationsEnabled: boolean;
   linkedAt: string;
   lastError: string | null;
 }
@@ -92,6 +94,7 @@ export function toLinkView(doc: any): TelegramLinkRecord {
     username: doc.username ?? null,
     firstName: doc.firstName ?? null,
     notificationsEnabled: Boolean(doc.notificationsEnabled),
+    handPickNotificationsEnabled: doc.handPickNotificationsEnabled !== false,
     linkedAt: iso(doc.linkedAt) ?? new Date(0).toISOString(),
     lastError: doc.lastError ?? null,
   };
@@ -144,7 +147,11 @@ export async function linkChat(params: {
           lastError: null,
           lastErrorAt: null,
         },
-        $setOnInsert: { linkedAt: new Date(), notificationsEnabled: true },
+        $setOnInsert: {
+          linkedAt: new Date(),
+          notificationsEnabled: true,
+          handPickNotificationsEnabled: true,
+        },
       },
       { upsert: true, new: true }
     ).exec();
@@ -167,6 +174,18 @@ export async function setNotifications(userId: string, enabled: boolean): Promis
   const result = await TelegramLink.updateOne(
     { userId: new mongoose.Types.ObjectId(userId) },
     { $set: { notificationsEnabled: enabled } }
+  ).exec();
+  return result.matchedCount > 0;
+}
+
+export async function setHandPickNotifications(
+  userId: string,
+  enabled: boolean
+): Promise<boolean> {
+  if (!mongoose.isValidObjectId(userId)) return false;
+  const result = await TelegramLink.updateOne(
+    { userId: new mongoose.Types.ObjectId(userId) },
+    { $set: { handPickNotificationsEnabled: enabled } }
   ).exec();
   return result.matchedCount > 0;
 }

@@ -9,13 +9,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Pencil, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 
 import {
+  ApiError,
   handPicksApi,
+  telegramApi,
   type HandPick,
   type HandPickInput,
   type HandPickLevelType,
+  type HandPickStats,
+  type TelegramStatus,
 } from "../api";
 import { AnimatedModal, ConfirmModal } from "../components/Modal";
-import { Button, Card, Flash, Skeleton, inputCls } from "../components/ui";
+import { Badge, Button, Card, Flash, Skeleton, Toggle, inputCls } from "../components/ui";
 import { LevelIcon, MetaRow } from "./SessionAnalysisShared";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
@@ -120,6 +124,7 @@ function inputFromForm(form: FormValues): HandPickInput {
 
 export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
   const [picks, setPicks] = useState<HandPick[]>([]);
+  const [stats, setStats] = useState<HandPickStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -128,6 +133,9 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
   const [pendingDelete, setPendingDelete] = useState<HandPick | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<HandPick | null>(null);
+  const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
+  const [telegramBusy, setTelegramBusy] = useState(false);
+  const [telegramError, setTelegramError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,15 +150,73 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
     }
   }, []);
 
+  const loadStats = useCallback(async () => {
+    try {
+      setStats(await handPicksApi.stats());
+    } catch {
+      setStats(null);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadStats();
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          const [list, nextStats] = await Promise.all([handPicksApi.list(), handPicksApi.stats()]);
+          setPicks(list.picks);
+          setStats(nextStats);
+        } catch {
+          return;
+        }
+      })();
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [load, loadStats]);
 
   useEffect(() => {
     if (!flash) return;
     const timer = setTimeout(() => setFlash(null), 4000);
     return () => clearTimeout(timer);
   }, [flash]);
+
+  useEffect(() => {
+    let alive = true;
+    telegramApi
+      .status()
+      .then((status) => {
+        if (alive) setTelegram(status);
+      })
+      .catch((err) => {
+        if (!alive || (err instanceof ApiError && err.status === 401)) return;
+        setTelegramError(err instanceof Error ? err.message : "Could not load Telegram status.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function toggleHandPickNotifications(next: boolean) {
+    if (!telegram?.linked) return;
+    setTelegramBusy(true);
+    setTelegramError(null);
+    try {
+      const result = await telegramApi.setPrefs({ handPickNotificationsEnabled: next });
+      setTelegram((current) =>
+        current
+          ? { ...current, handPickNotificationsEnabled: result.handPickNotificationsEnabled }
+          : current
+      );
+      setFlash(next ? "Hand pick notifications on." : "Hand pick notifications off.");
+    } catch (err) {
+      setTelegramError(
+        err instanceof Error ? err.message : "Could not update hand pick notifications."
+      );
+    } finally {
+      setTelegramBusy(false);
+    }
+  }
 
   function openNew() {
     setEditing(null);
@@ -170,6 +236,7 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
         : [pick, ...current];
     });
     setFlash("Hand pick saved.");
+    void loadStats();
   }
 
   async function confirmDelete() {
@@ -179,6 +246,7 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
       await handPicksApi.remove(pendingDelete.id);
       setPicks((current) => current.filter((entry) => entry.id !== pendingDelete.id));
       setFlash("Hand pick deleted.");
+      void loadStats();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Could not delete the hand pick.");
       throw err;
@@ -199,14 +267,42 @@ export function HandPicks({ isAdmin }: { isAdmin: boolean }) {
             Setups picked by hand, with the reasoning behind each one.
           </p>
         </div>
-        {isAdmin && (
-          <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={openNew}>
-            Add pick
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {telegram && (
+            <div className="flex flex-col items-start gap-0.5">
+              <Toggle
+                label="Hand pick alerts"
+                checked={telegram.linked && telegram.handPickNotificationsEnabled}
+                onToggle={toggleHandPickNotifications}
+                disabled={
+                  !telegram.linked ||
+                  !telegram.enabled ||
+                  !telegram.notificationsEnabled ||
+                  telegramBusy
+                }
+              />
+              <span className="text-[11px] text-fg-faint">
+                {!telegram.linked
+                  ? "Link Telegram in Settings."
+                  : !telegram.notificationsEnabled
+                    ? "Telegram notifications are paused."
+                    : "Message me when a pick is added or changed."}
+              </span>
+            </div>
+          )}
+          {isAdmin && (
+            <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={openNew}>
+              Add pick
+            </Button>
+          )}
+        </div>
       </div>
 
       {flash && <Flash tone="success">{flash}</Flash>}
+
+      {stats && <HandPickStatsStrip stats={stats} />}
+
+      {telegramError && <p className="text-xs text-danger">{telegramError}</p>}
 
       {error && (
         <Card flat className="border-danger/30 bg-danger-soft p-3 text-sm text-danger">
@@ -337,11 +433,20 @@ function HandPickCard({
             {pick.targetLevel || "Not stated"}
           </p>
         </div>
-        {pick.pattern && (
-          <span className="shrink-0 rounded-full border border-accent/20 bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent">
-            {pick.pattern}
-          </span>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {pick.pattern && (
+            <span className="rounded-full border border-accent/20 bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent">
+              {pick.pattern}
+            </span>
+          )}
+          <Badge
+            tone={pick.outcome === "went_as_expected" ? "success" : "muted"}
+          >
+            <span title={pick.outcomeAt ?? undefined}>
+              {pick.outcome === "went_as_expected" ? "Went as expected" : "Awaiting target"}
+            </span>
+          </Badge>
+        </div>
       </div>
 
       {pick.chartUrl && (
@@ -555,7 +660,7 @@ function HandPickFormModal({
             value={form.levelValue}
             onChange={(value) => update("levelValue", value)}
             placeholder="64251.6914"
-            disabled
+            disabled={!form.levelType}
           />
         </div>
 
@@ -599,6 +704,31 @@ function HandPickFormModal({
         </div>
       </div>
     </AnimatedModal>
+  );
+}
+
+function HandPickStatsStrip({ stats }: { stats: HandPickStats }) {
+  const items = [
+    { label: "Total", value: stats.total },
+    { label: "Went as expected", value: stats.expected },
+    { label: "Awaiting target", value: stats.pending },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-hairline bg-soft/50 px-3 py-2">
+      {items.map((item) => (
+        <Badge key={item.label} tone={item.label === "Went as expected" ? "success" : "muted"}>
+          {item.label} <span className="tabular-nums opacity-70">{item.value}</span>
+        </Badge>
+      ))}
+      {stats.total > 0 && (
+        <span className="ml-auto text-[11px] text-fg-muted">
+          Hit rate{" "}
+          <span className="font-semibold text-fg">
+            {stats.hitRate == null ? "-" : `${Math.round(stats.hitRate * 100)}%`}
+          </span>
+        </span>
+      )}
+    </div>
   );
 }
 

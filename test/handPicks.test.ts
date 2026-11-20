@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { parseHandPickTarget, resolveHandPickTarget } from "../src/server/handPicks/outcome";
 import {
   HandPickInputError,
   cleanHandPickInput,
@@ -124,12 +125,28 @@ describe("public hand pick", () => {
       chartUrl: null,
       createdAt: "2026-11-18T09:30:00.000Z",
       updatedAt: "2026-11-18T09:30:00.000Z",
+      outcome: null,
+      outcomeAt: null,
     });
   });
 
   test("drops an unknown level type", () => {
     const pick = publicHandPick({ symbol: "BTCUSD", levelType: "pivot" });
     assert.equal(pick.levelType, null);
+  });
+
+  test("maps a resolved outcome and leaves legacy picks pending", () => {
+    const reachedAt = new Date("2026-11-20T10:00:00.000Z");
+    const resolved = publicHandPick({
+      symbol: "BTCUSD",
+      outcome: "went_as_expected",
+      outcomeAt: reachedAt,
+    });
+    const legacy = publicHandPick({ symbol: "BTCUSD" });
+    assert.equal(resolved.outcome, "went_as_expected");
+    assert.equal(resolved.outcomeAt, reachedAt.toISOString());
+    assert.equal(legacy.outcome, null);
+    assert.equal(legacy.outcomeAt, null);
   });
 
   test("keeps only valid image URLs", () => {
@@ -140,5 +157,31 @@ describe("public hand pick", () => {
     assert.equal(valid.chartUrl, dataUrl);
     assert.equal(legacy.chartUrl, "https://img.chartshots.net/6aff343d0d547.png");
     assert.equal(invalid.chartUrl, null);
+  });
+});
+
+describe("hand pick target resolution", () => {
+  function bar(time: number, high: number, low: number) {
+    const mid = (high + low) / 2;
+    return { time, open: mid, high, low, close: mid, volume: 0 };
+  }
+
+  test("parses numeric target levels", () => {
+    assert.equal(parseHandPickTarget(" 63,564.0977 "), 63564.0977);
+    assert.equal(parseHandPickTarget(0.585), 0.585);
+    assert.equal(parseHandPickTarget("around 100"), null);
+    assert.equal(parseHandPickTarget(null), null);
+  });
+
+  test("marks a target touched from either side", () => {
+    const bars = [bar(1_000, 2_450, 2_400)];
+    assert.equal(resolveHandPickTarget(bars, 2_440, 0), 1_000);
+    assert.equal(resolveHandPickTarget(bars, 2_410, 0), 1_000);
+  });
+
+  test("ignores misses and bars before the pick", () => {
+    const bars = [bar(1_000, 2_450, 2_400)];
+    assert.equal(resolveHandPickTarget(bars, 2_500, 0), null);
+    assert.equal(resolveHandPickTarget(bars, 2_440, 2_000), null);
   });
 });

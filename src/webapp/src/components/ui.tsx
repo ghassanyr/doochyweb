@@ -349,6 +349,7 @@ export function Toggle({
   ariaLabel,
   checked,
   onToggle,
+  disabled = false,
 }: {
   label: string;
   // When the visible label is empty (or the meaning is only in surrounding
@@ -356,6 +357,7 @@ export function Toggle({
   ariaLabel?: string;
   checked: boolean;
   onToggle: (next: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -363,7 +365,8 @@ export function Toggle({
       onClick={() => onToggle(!checked)}
       aria-pressed={checked}
       aria-label={ariaLabel || label || undefined}
-      className="flex items-center gap-2 text-left select-none"
+      disabled={disabled}
+      className="flex items-center gap-2 text-left select-none disabled:cursor-not-allowed disabled:opacity-50"
     >
       <span
         className={

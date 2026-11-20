@@ -6,6 +6,8 @@
 
 export type HandPickLevelType = "support" | "resistance";
 
+export type HandPickOutcome = "went_as_expected";
+
 /** The fields an admin can write. */
 export interface HandPickInput {
   symbol: string;
@@ -27,4 +29,13 @@ export interface HandPick extends HandPickInput {
   id: string;
   createdAt: string;
   updatedAt: string;
+  outcome: HandPickOutcome | null;
+  outcomeAt: string | null;
+}
+
+export interface HandPickStats {
+  total: number;
+  expected: number;
+  pending: number;
+  hitRate: number | null;
 }

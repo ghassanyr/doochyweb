@@ -10,6 +10,7 @@ import { enqueueTest } from "./notify";
 import {
   deleteLinkByUserId,
   findLinkByUserId,
+  setHandPickNotifications,
   setNotifications,
 } from "./store";
 
@@ -68,6 +69,7 @@ telegramRouter.get("/status", authRequired, async (req: AuthedRequest, res) => {
       username: link?.username ?? null,
       firstName: link?.firstName ?? null,
       notificationsEnabled: link?.notificationsEnabled ?? false,
+      handPickNotificationsEnabled: link?.handPickNotificationsEnabled ?? true,
       linkedAt: link?.linkedAt ?? null,
       lastError: link?.lastError ?? null,
     });
@@ -87,17 +89,33 @@ telegramRouter.post("/unlink", authRequired, async (req: AuthedRequest, res) => 
 
 telegramRouter.patch("/prefs", authRequired, async (req: AuthedRequest, res) => {
   const enabled = req.body?.notificationsEnabled;
-  if (typeof enabled !== "boolean") {
+  const handPicks = req.body?.handPickNotificationsEnabled;
+  if (enabled !== undefined && typeof enabled !== "boolean") {
     res.status(400).json({ error: "notificationsEnabled must be a boolean" });
     return;
   }
+  if (handPicks !== undefined && typeof handPicks !== "boolean") {
+    res.status(400).json({ error: "handPickNotificationsEnabled must be a boolean" });
+    return;
+  }
+  if (enabled === undefined && handPicks === undefined) {
+    res.status(400).json({ error: "no notification preference supplied" });
+    return;
+  }
   try {
-    const updated = await setNotifications(req.userId!, enabled);
-    if (!updated) {
+    const link = await findLinkByUserId(req.userId!);
+    if (!link) {
       res.status(404).json({ error: "Telegram is not linked" });
       return;
     }
-    res.json({ ok: true, notificationsEnabled: enabled });
+    if (typeof enabled === "boolean") await setNotifications(req.userId!, enabled);
+    if (typeof handPicks === "boolean") await setHandPickNotifications(req.userId!, handPicks);
+    res.json({
+      ok: true,
+      notificationsEnabled: typeof enabled === "boolean" ? enabled : link.notificationsEnabled,
+      handPickNotificationsEnabled:
+        typeof handPicks === "boolean" ? handPicks : link.handPickNotificationsEnabled,
+    });
   } catch (err) {
     fail(res, err, "could not update notifications");
   }

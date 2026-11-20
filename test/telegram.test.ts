@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import type { HandPick } from "../src/server/handPicks/types";
 import type { SignalView } from "../src/server/signals/types";
 import { parseCommand } from "../src/server/telegram/bot";
 import { telegramConfig, telegramConfigFromValues, telegramDeepLink } from "../src/server/telegram/config";
@@ -11,6 +12,7 @@ import {
   normalizeLinkCode,
 } from "../src/server/telegram/link";
 import {
+  buildHandPickMessage,
   buildInvalidCodeMessage,
   buildNotLinkedMessage,
   buildPublishedMessage,
@@ -19,9 +21,11 @@ import {
   escapeHtml,
   fmtPrice,
   formatUtc,
+  handPickButtonUrl,
   signalButtonUrl,
 } from "../src/server/telegram/messages";
 import { retryDelayMs } from "../src/server/telegram/notify";
+import { toLinkView } from "../src/server/telegram/store";
 
 const signal: SignalView = {
   id: "507f1f77bcf86cd799439011",
@@ -44,6 +48,26 @@ const signal: SignalView = {
   resolvedAt: null,
   resolution: null,
   updates: [],
+};
+
+const handPick: HandPick = {
+  id: "507f1f77bcf86cd799439012",
+  symbol: "NZDCHF<",
+  pattern: "Falling Wedge",
+  targetLevel: "0.5850",
+  targetPeriod: "2 days",
+  interval: "4 hour",
+  identifiedAt: "17:39:09 UTC",
+  reason: "Break & retest",
+  supporting: ["Trend holds", "Volume confirms"],
+  levelType: "support",
+  levelValue: "0.5820",
+  levelNote: null,
+  chartUrl: null,
+  createdAt: "2026-11-19T10:00:00.000Z",
+  updatedAt: "2026-11-19T10:00:00.000Z",
+  outcome: null,
+  outcomeAt: null,
 };
 
 describe("telegram config", () => {
@@ -128,6 +152,21 @@ describe("telegram config", () => {
       enabled: false,
     });
     assert.equal(config.enabled, false);
+  });
+});
+
+describe("telegram links", () => {
+  test("defaults the hand pick preference on legacy links", () => {
+    const link = toLinkView({
+      _id: "507f1f77bcf86cd799439010",
+      userId: "507f1f77bcf86cd799439011",
+      chatId: 123456789,
+      username: "tester",
+      firstName: "Tester",
+      linkedAt: new Date("2026-11-20T00:00:00.000Z"),
+      notificationsEnabled: true,
+    });
+    assert.equal(link.handPickNotificationsEnabled, true);
   });
 });
 
@@ -242,6 +281,40 @@ describe("telegram messages", () => {
     assert.ok(text.includes("X&lt;Y"));
     assert.ok(text.includes("a &amp; b &lt;script&gt;"));
     assert.ok(!text.includes("<script>"));
+  });
+
+  test("builds a hand pick message and escapes HTML", () => {
+    const text = buildHandPickMessage(handPick, "created");
+    assert.match(text, /Hand pick created/);
+    assert.match(text, /NZDCHF&lt;/);
+    assert.match(text, /Pattern: <code>Falling Wedge<\/code>/);
+    assert.match(text, /Target: <code>0\.5850<\/code>/);
+    assert.match(text, /Support: <code>0\.5820<\/code>/);
+    assert.match(text, /Break &amp; retest/);
+    assert.match(text, /Trend holds/);
+    assert.ok(!text.includes("<script>"));
+  });
+
+  test("omits empty hand pick fields and builds the button URL", () => {
+    const text = buildHandPickMessage(
+      {
+        ...handPick,
+        pattern: null,
+        targetLevel: null,
+        interval: null,
+        identifiedAt: null,
+        reason: null,
+        supporting: [],
+        levelType: null,
+        levelValue: null,
+      },
+      "updated"
+    );
+    assert.match(text, /Hand pick updated/);
+    assert.doesNotMatch(text, /Pattern:/);
+    assert.doesNotMatch(text, /Support:/);
+    assert.equal(handPickButtonUrl("https://doochy.net/"), "https://doochy.net/analysis/handpicks");
+    assert.equal(handPickButtonUrl(""), null);
   });
 
   test("omits optional fields cleanly", () => {

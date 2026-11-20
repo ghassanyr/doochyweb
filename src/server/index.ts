@@ -43,6 +43,7 @@ import {
   startSessionAnalysisScheduler,
   stopSessionAnalysisScheduler,
 } from "./sessionAnalysis/scheduler";
+import { startHandPickResolver } from "./handPicks/resolver";
 import { handPicksRouter } from "./handPicks/routes";
 import { signalsRouter } from "./signals/routes";
 import { startSignalResolver } from "./signals/resolver";
@@ -893,6 +894,7 @@ async function main() {
   startBreakoutScheduler();
   startScraperScheduler();
   startSignalResolver();
+  startHandPickResolver();
   startAlertRunner();
   startJournalSync();
   startPaperRunner();

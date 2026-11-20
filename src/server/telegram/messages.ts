@@ -6,6 +6,7 @@
 
 import { DEFAULT_BRANDING } from "../settings/defaults";
 import type { AlertView } from "../alerts/types";
+import type { HandPick } from "../handPicks/types";
 import type { SignalView } from "../signals/types";
 
 export function escapeHtml(value: string): string {
@@ -138,6 +139,34 @@ export function buildPublishedMessage(signal: SignalView): string {
 export function signalButtonUrl(baseUrl: string, signalId: string): string | null {
   const origin = baseUrl.trim().replace(/\/+$/, "");
   return origin ? `${origin}/signals?signal=${encodeURIComponent(signalId)}` : null;
+}
+
+export function handPickButtonUrl(baseUrl: string): string | null {
+  const origin = baseUrl.trim().replace(/\/+$/, "");
+  return origin ? `${origin}/analysis/handpicks` : null;
+}
+
+export function buildHandPickMessage(
+  pick: HandPick,
+  action: "created" | "updated"
+): string {
+  const lines = [
+    `\u2728 <b>Hand pick ${action}</b> \u00b7 ${escapeHtml(pick.symbol)}`,
+  ];
+  if (pick.pattern) lines.push(`Pattern: <code>${escapeHtml(pick.pattern)}</code>`);
+  if (pick.targetLevel) lines.push(`Target: <code>${escapeHtml(pick.targetLevel)}</code>`);
+  if (pick.interval) lines.push(`Interval: ${escapeHtml(pick.interval)}`);
+  if (pick.identifiedAt) lines.push(`Identified: ${escapeHtml(pick.identifiedAt)}`);
+  if (pick.levelType) {
+    const label = pick.levelType === "support" ? "Support" : "Resistance";
+    const value = pick.levelValue ? ` <code>${escapeHtml(pick.levelValue)}</code>` : "";
+    lines.push(`${label}:${value}`);
+  }
+  const reason = truncate(pick.reason ?? "", 280);
+  if (reason) lines.push(escapeHtml(reason));
+  const supporting = pick.supporting.slice(0, 3).map((line) => escapeHtml(truncate(line, 200)));
+  if (supporting.length) lines.push("", ...supporting.map((line) => `\u2022 ${line}`));
+  return lines.join("\n");
 }
 
 /** Personal price alert that just fired. */

@@ -6,7 +6,7 @@
 
 import mongoose from "mongoose";
 
-import type { HandPick, HandPickInput, HandPickLevelType } from "./types";
+import type { HandPick, HandPickInput, HandPickLevelType, HandPickStats } from "./types";
 
 const pickSchema = new mongoose.Schema(
   {
@@ -22,10 +22,13 @@ const pickSchema = new mongoose.Schema(
     levelValue: { type: String, default: null },
     levelNote: { type: String, default: null },
     chartUrl: { type: String, default: null },
+    outcome: { type: String, enum: ["went_as_expected", null], default: null },
+    outcomeAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 pickSchema.index({ createdAt: -1 });
+pickSchema.index({ outcome: 1 });
 
 export const HandPickModel = mongoose.model("HandPick", pickSchema);
 
@@ -133,6 +136,8 @@ export function publicHandPick(doc: any): HandPick {
     chartUrl: imageUrl(doc?.chartUrl),
     createdAt: iso(doc?.createdAt),
     updatedAt: iso(doc?.updatedAt),
+    outcome: doc?.outcome === "went_as_expected" ? "went_as_expected" : null,
+    outcomeAt: doc?.outcomeAt ? iso(doc.outcomeAt) : null,
   };
 }
 
@@ -158,6 +163,21 @@ export async function updateHandPick(
     .lean()
     .exec();
   return doc ? publicHandPick(doc) : null;
+}
+
+export async function handPickStats(): Promise<HandPickStats> {
+  const docs: any[] = await HandPickModel.find({})
+    .select({ outcome: 1 })
+    .lean()
+    .exec();
+  const total = docs.length;
+  const expected = docs.filter((doc) => doc.outcome === "went_as_expected").length;
+  return {
+    total,
+    expected,
+    pending: total - expected,
+    hitRate: total ? expected / total : null,
+  };
 }
 
 export async function deleteHandPick(id: string): Promise<boolean> {
