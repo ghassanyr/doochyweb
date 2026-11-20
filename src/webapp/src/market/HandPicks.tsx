@@ -5,12 +5,13 @@
 // create, edit and delete controls only render for an admin and the server
 // enforces the same rule.
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Pencil, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Pencil, Plus, Search, Sparkles, Trash2, Upload } from "lucide-react";
 
 import {
   ApiError,
   handPicksApi,
+  marketApi,
   telegramApi,
   type HandPick,
   type HandPickInput,
@@ -20,7 +21,9 @@ import {
 } from "../api";
 import { AnimatedModal, ConfirmModal } from "../components/Modal";
 import { Badge, Button, Card, Flash, Skeleton, Toggle, inputCls } from "../components/ui";
+import { filterHandPickSymbols, formatHandPickIdentified } from "./handPickForm";
 import { LevelIcon, MetaRow } from "./SessionAnalysisShared";
+import type { CatalogEntry } from "./types";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const MAX_IMAGE_KB = 500;
@@ -48,7 +51,7 @@ function emptyForm(): FormValues {
     targetLevel: "",
     targetPeriod: "",
     interval: "",
-    identifiedAt: "",
+    identifiedAt: formatHandPickIdentified(),
     reason: "",
     supportingText: "",
     levelType: "",
@@ -460,7 +463,7 @@ function HandPickCard({
           <img
             src={pick.chartUrl}
             alt={`${pick.symbol} hand pick image`}
-            className="w-full object-contain"
+            className="h-48 w-full object-cover"
             loading="lazy"
           />
         </button>
@@ -543,15 +546,79 @@ function HandPickFormModal({
 }) {
   const [form, setForm] = useState<FormValues>(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  const [symbolOpen, setSymbolOpen] = useState(false);
+  const [activeSymbol, setActiveSymbol] = useState(-1);
+  const symbolRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setForm(pick ? formFromPick(pick) : emptyForm());
     setError(null);
+    setSymbolOpen(false);
+    setActiveSymbol(-1);
   }, [open, pick]);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    marketApi
+      .config()
+      .then((config) => {
+        if (alive) setCatalog(config.catalog);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!symbolOpen) return;
+    function onDocDown(event: MouseEvent) {
+      if (!symbolRef.current?.contains(event.target as Node)) setSymbolOpen(false);
+    }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [symbolOpen]);
+
+  const symbolSuggestions = useMemo(
+    () => filterHandPickSymbols(catalog, form.symbol),
+    [catalog, form.symbol]
+  );
+
+  useEffect(() => {
+    setActiveSymbol(-1);
+  }, [form.symbol]);
 
   function update<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function chooseSymbol(symbol: string) {
+    update("symbol", symbol);
+    setSymbolOpen(false);
+    setActiveSymbol(-1);
+  }
+
+  function onSymbolKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      setSymbolOpen(false);
+      return;
+    }
+    if (!symbolOpen || symbolSuggestions.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSymbol((index) => (index + 1) % symbolSuggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSymbol((index) =>
+        index <= 0 ? symbolSuggestions.length - 1 : index - 1
+      );
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      chooseSymbol(symbolSuggestions[activeSymbol >= 0 ? activeSymbol : 0].symbol);
+    }
   }
 
   async function save() {
@@ -600,14 +667,67 @@ function HandPickFormModal({
         />
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            label="Symbol"
-            required
-            value={form.symbol}
-            onChange={(value) => update("symbol", value)}
-            placeholder="BTCUSD"
-            maxLength={60}
-          />
+          <label className="relative block">
+            <span className="text-xs font-medium text-fg-muted">
+              Symbol<span className="ml-0.5 text-danger">*</span>
+            </span>
+            <div ref={symbolRef}>
+              <Search className="pointer-events-none absolute left-3 top-[27px] h-3.5 w-3.5 text-fg-faint" />
+              <input
+                className={`${inputCls} py-1.5 pl-8`}
+                value={form.symbol}
+                onChange={(event) => {
+                  update("symbol", event.target.value);
+                  setSymbolOpen(true);
+                }}
+                onFocus={() => setSymbolOpen(true)}
+                onBlur={() => window.setTimeout(() => setSymbolOpen(false), 150)}
+                onKeyDown={onSymbolKeyDown}
+                role="combobox"
+                aria-expanded={symbolOpen && !!form.symbol.trim()}
+                aria-controls="hand-pick-symbol-suggestions"
+                aria-autocomplete="list"
+                aria-label="Symbol"
+                placeholder="BTCUSD"
+                maxLength={60}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {symbolOpen && !!form.symbol.trim() && (
+                <ul
+                  id="hand-pick-symbol-suggestions"
+                  role="listbox"
+                  className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 max-h-60 overflow-y-auto rounded-lg border border-hairline-strong bg-gradient-to-b from-surface-hover to-surface py-1 shadow-overlay"
+                >
+                  {symbolSuggestions.length === 0 ? (
+                    <li className="px-3 py-2 text-xs text-fg-muted">
+                      {catalog.length === 0 ? "No symbols in the catalog" : "No matching symbols"}
+                    </li>
+                  ) : (
+                    symbolSuggestions.map((entry, index) => (
+                      <li key={entry.symbol}>
+                        <button
+                          type="button"
+                          onMouseEnter={() => setActiveSymbol(index)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => chooseSymbol(entry.symbol)}
+                          className={
+                            "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition " +
+                            (index === activeSymbol
+                              ? "bg-accent-soft text-accent"
+                              : "text-fg hover:bg-surface-hover")
+                          }
+                        >
+                          <span className="font-semibold">{entry.symbol}</span>
+                          <span className="truncate text-[11px] text-fg-faint">{entry.name}</span>
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
+            </div>
+          </label>
           <Field
             label="Pattern"
             value={form.pattern}
@@ -637,6 +757,7 @@ function HandPickFormModal({
             value={form.identifiedAt}
             onChange={(value) => update("identifiedAt", value)}
             placeholder="17:39:09 (UTC+00:00) on Nov 19th, 2026"
+            hint="Filled with the current time, but editable."
           />
         </div>
 

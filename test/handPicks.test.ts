@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import {
+  filterHandPickSymbols,
+  formatHandPickIdentified,
+} from "../src/webapp/src/market/handPickForm";
+import type { CatalogEntry } from "../src/webapp/src/market/types";
 import { parseHandPickTarget, resolveHandPickTarget } from "../src/server/handPicks/outcome";
 import {
   HandPickInputError,
@@ -183,5 +188,52 @@ describe("hand pick target resolution", () => {
     const bars = [bar(1_000, 2_450, 2_400)];
     assert.equal(resolveHandPickTarget(bars, 2_500, 0), null);
     assert.equal(resolveHandPickTarget(bars, 2_440, 2_000), null);
+  });
+});
+
+describe("hand pick form helpers", () => {
+  test("formats the identified field from the current UTC time", () => {
+    assert.equal(
+      formatHandPickIdentified(new Date("2026-11-20T17:39:09.000Z")),
+      "17:39:09 (UTC+00:00) on Nov 20th, 2026"
+    );
+    assert.equal(
+      formatHandPickIdentified(new Date("2026-11-01T00:05:01.000Z")),
+      "00:05:01 (UTC+00:00) on Nov 1st, 2026"
+    );
+    assert.equal(
+      formatHandPickIdentified(new Date("2026-11-02T00:05:02.000Z")),
+      "00:05:02 (UTC+00:00) on Nov 2nd, 2026"
+    );
+    assert.equal(
+      formatHandPickIdentified(new Date("2026-11-03T00:05:03.000Z")),
+      "00:05:03 (UTC+00:00) on Nov 3rd, 2026"
+    );
+    assert.equal(
+      formatHandPickIdentified(new Date("2026-11-11T00:05:04.000Z")),
+      "00:05:04 (UTC+00:00) on Nov 11th, 2026"
+    );
+  });
+
+  test("filters symbol suggestions by symbol or name", () => {
+    const catalog: CatalogEntry[] = [
+      { symbol: "BTCUSD", name: "Bitcoin", type: "crypto" },
+      { symbol: "ETHUSD", name: "Ethereum", type: "crypto" },
+      { symbol: "EURUSD", name: "Euro US Dollar", type: "forex" },
+      { symbol: "XAUUSD", name: "Gold Spot", type: "commodity" },
+    ];
+    assert.deepEqual(
+      filterHandPickSymbols(catalog, "btc").map((entry) => entry.symbol),
+      ["BTCUSD"]
+    );
+    assert.deepEqual(
+      filterHandPickSymbols(catalog, "gold").map((entry) => entry.symbol),
+      ["XAUUSD"]
+    );
+    assert.deepEqual(
+      filterHandPickSymbols(catalog, "usd", 2).map((entry) => entry.symbol),
+      ["BTCUSD", "ETHUSD"]
+    );
+    assert.deepEqual(filterHandPickSymbols(catalog, "   "), []);
   });
 });
